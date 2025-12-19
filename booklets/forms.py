@@ -4,11 +4,38 @@ from __future__ import annotations
 from django import forms
 
 
+class MultiFileInput(forms.FileInput):
+    """
+    Widget que permite seleccionar múltiples ficheros.
+    """
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    """
+    Campo que acepta uno o varios ficheros.
+    Devuelve siempre una lista de UploadedFile.
+    """
+
+    def clean(self, data, initial=None):
+        # data puede ser UploadedFile o lista/tupla de UploadedFile
+        if data is None:
+            return []
+
+        # OJO: en Python 3.11, super() sin args dentro de list comprehensions puede fallar.
+        # Por eso llamamos explícitamente al método base.
+        if isinstance(data, (list, tuple)):
+            return [forms.FileField.clean(self, d, initial) for d in data]
+
+        return [forms.FileField.clean(self, data, initial)]
+
+
 class BookletForm(forms.Form):
-    input_pdf = forms.FileField(
-        label="Subir PDF",
+    input_pdf = MultipleFileField(
+        label="Subir PDF(s)",
         required=True,
-        help_text="Selecciona un PDF para procesar.",
+        help_text="Selecciona uno o varios PDFs (Ctrl/Shift) para procesar.",
+        widget=MultiFileInput(attrs={"multiple": True}),
     )
 
     max_pages_per_split = forms.IntegerField(
@@ -47,7 +74,5 @@ class BookletForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Estilado Bootstrap para el input file
         self.fields["input_pdf"].widget.attrs.update({"class": "form-control"})
 

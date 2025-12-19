@@ -5,10 +5,10 @@
 
 {% block content %}
   <div class="row">
-    <div class="col-lg-8">
+    <div class="col-lg-10 col-xl-9">
       <h1 class="h3 mb-3">Generar booklets</h1>
 
-      <div class="card shadow-sm">
+      <div class="card shadow-sm mb-4">
         <div class="card-body">
           <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
@@ -59,20 +59,45 @@
               <button class="btn btn-primary" type="submit">
                 Generar booklets
               </button>
-
-              {% if download_url %}
-                <a class="btn btn-success" href="{{ download_url }}">
-                  Descargar PDF final
-                </a>
-              {% endif %}
             </div>
           </form>
         </div>
       </div>
 
-      <p class="text-muted mt-3 mb-0">
-        Nota: si el PDF es muy grande, la generación puede tardar.
-      </p>
+      {% if results and results|length > 0 %}
+        <h2 class="h5 mb-3">Resultados</h2>
+
+        <div class="card shadow-sm">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table mb-0 align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th scope="col">Fichero</th>
+                    <th scope="col" style="width: 1%;">Descarga</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in results %}
+                    <tr>
+                      <td class="text-break">{{ r.original_name }}</td>
+                      <td class="text-nowrap">
+                        <a class="btn btn-sm btn-success" href="{{ r.download_url }}">
+                          Descargar
+                        </a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <p class="text-muted mt-2 mb-0">
+          Al generar de nuevo, esta lista se reemplaza por los nuevos resultados.
+        </p>
+      {% endif %}
     </div>
   </div>
 {% endblock %}
