@@ -129,20 +129,39 @@ MEDIA_URL = f"{APP_SUBPATH}/media/"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # ------------------------------------------------------------
-# Reverse proxy / HTTPS (nginx)
+# Reverse proxy / HTTPS (nginx + Cloudflare)
 # ------------------------------------------------------------
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# Redirigir a https si quieres (normalmente lo hace Cloudflare, pero lo dejo por env)
+SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "False").lower() == "true"
+
 # ------------------------------------------------------------
-# Seguridad básica (ajustable)
+# CSRF / Cookies (clave para 403 detrás de proxy)
 # ------------------------------------------------------------
 # Si ALLOWED_HOSTS="*" NO podemos construir CSRF_TRUSTED_ORIGINS con wildcard.
-# Déjalo vacío, o define explícitamente tus dominios por env si lo necesitas.
-if ALLOWED_HOSTS == ["*"]:
-    CSRF_TRUSTED_ORIGINS = []
+# Permitimos configurar explícitamente por env:
+#   DJANGO_CSRF_TRUSTED_ORIGINS="https://api-android18.hjbello.org,https://otro"
+raw_csrf = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
+
+if raw_csrf:
+    CSRF_TRUSTED_ORIGINS = [x.strip() for x in raw_csrf.split(",") if x.strip()]
 else:
-    CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS if h not in ("*",)]
+    if ALLOWED_HOSTS == ["*"]:
+        CSRF_TRUSTED_ORIGINS = []
+    else:
+        CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS if h not in ("*",)]
+
+# Cookies seguras en HTTPS detrás de proxy.
+# Si estás en dev http, puedes desactivarlo por env.
+COOKIE_SECURE = os.environ.get("DJANGO_COOKIE_SECURE", "True").lower() == "true"
+CSRF_COOKIE_SECURE = COOKIE_SECURE
+SESSION_COOKIE_SECURE = COOKIE_SECURE
+
+# SameSite recomendado para formularios normales (evita problemas)
+CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_SAMESITE", "Lax")
+SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_SAMESITE", "Lax")
 
 # ------------------------------------------------------------
 # Default PK
