@@ -6,8 +6,8 @@ services:
     container_name: pdf_manager
     restart: unless-stopped
 
-    # Si lo vas a poner detrás de nginx, normalmente no necesitas publicar puerto.
-    # Para pruebas locales, puedes exponerlo:
+    # En local te vale (http://127.0.0.1:8010/...)
+    # En servidor detrás de nginx, también (nginx proxy_pass a este puerto)
     ports:
       - "8010:8000"
 
@@ -15,19 +15,37 @@ services:
       - ./data:/app/data
 
     environment:
-      # Django
-      DJANGO_SECRET_KEY: "change-me-to-a-long-random-string"
+      # ----------------------------------------------------
+      # Django (MUY PERMISIVO)
+      # ----------------------------------------------------
+      DJANGO_SECRET_KEY: "dev-unsafe-secret-key"
       DJANGO_DEBUG: "True"
+
+      # ✅ Permitir cualquier host (evita DisallowedHost)
       DJANGO_ALLOWED_HOSTS: "*"
 
-      # Subpath fijo del reverse proxy
+      # Subpath fijo
       APP_SUBPATH: "/pdf_manager"
 
       # Persistencia
       DJANGO_DB_PATH: "/app/data/db.sqlite3"
       DJANGO_MEDIA_ROOT: "/app/data/media"
 
-      # Gunicorn (si procesas PDFs grandes, sube timeout)
+      # ----------------------------------------------------
+      # Proxy / Cloudflare / HTTPS (MUY PERMISIVO)
+      # ----------------------------------------------------
+      # Para evitar 403 por CSRF al hacer POST detrás de proxy con https:
+      # - ponemos trusted origins explícito y además permitimos *si quieres
+      #   (con tu settings adaptado, esto se leerá tal cual).
+      DJANGO_CSRF_TRUSTED_ORIGINS: "https://api-android18.hjbello.org,https://*.hjbello.org,https://*"
+
+      # Cookies seguras: en local http puede molestar.
+      # Lo dejamos en False para que funcione igual en ambos.
+      DJANGO_COOKIE_SECURE: "False"
+      DJANGO_SECURE_SSL_REDIRECT: "False"
+
+      # Gunicorn
+      GUNICORN_BIND: "0.0.0.0:8000"
       GUNICORN_WORKERS: "2"
       GUNICORN_TIMEOUT: "300"
 
