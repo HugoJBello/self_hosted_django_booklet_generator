@@ -18,7 +18,7 @@ services:
       # Django
       DJANGO_SECRET_KEY: "change-me-to-a-long-random-string"
       DJANGO_DEBUG: "True"
-      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DJANGO_ALLOWED_HOSTS: "*"
 
       # Subpath fijo del reverse proxy
       APP_SUBPATH: "/pdf_manager"

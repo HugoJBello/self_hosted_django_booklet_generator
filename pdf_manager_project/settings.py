@@ -13,11 +13,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = [
-    h.strip()
-    for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-    if h.strip()
-]
+raw_hosts = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").strip()
+
+# Permitir cualquier host si DJANGO_ALLOWED_HOSTS="*"
+if raw_hosts == "*":
+    ALLOWED_HOSTS = ["*"]
+else:
+    ALLOWED_HOSTS = [h.strip() for h in raw_hosts.split(",") if h.strip()]
 
 # ------------------------------------------------------------
 # Subpath fijo (NO usar FORCE_SCRIPT_NAME)
@@ -135,9 +137,12 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # ------------------------------------------------------------
 # Seguridad básica (ajustable)
 # ------------------------------------------------------------
-CSRF_TRUSTED_ORIGINS = [
-    f"https://{h}" for h in ALLOWED_HOSTS if h not in ("*",)
-]
+# Si ALLOWED_HOSTS="*" NO podemos construir CSRF_TRUSTED_ORIGINS con wildcard.
+# Déjalo vacío, o define explícitamente tus dominios por env si lo necesitas.
+if ALLOWED_HOSTS == ["*"]:
+    CSRF_TRUSTED_ORIGINS = []
+else:
+    CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS if h not in ("*",)]
 
 # ------------------------------------------------------------
 # Default PK
