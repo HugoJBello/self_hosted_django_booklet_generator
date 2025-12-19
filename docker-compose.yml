@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  pdf_manager:
+    build: .
+    container_name: pdf_manager
+    restart: unless-stopped
+
+    # Si lo vas a poner detrás de nginx, normalmente no necesitas publicar puerto.
+    # Para pruebas locales, puedes exponerlo:
+    ports:
+      - "8010:8000"
+
+    volumes:
+      - ./data:/app/data
+
+    environment:
+      # Django
+      DJANGO_SECRET_KEY: "change-me-to-a-long-random-string"
+      DJANGO_DEBUG: "True"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+
+      # Subpath fijo del reverse proxy
+      APP_SUBPATH: "/pdf_manager"
+
+      # Persistencia
+      DJANGO_DB_PATH: "/app/data/db.sqlite3"
+      DJANGO_MEDIA_ROOT: "/app/data/media"
+
+      # Gunicorn (si procesas PDFs grandes, sube timeout)
+      GUNICORN_WORKERS: "2"
+      GUNICORN_TIMEOUT: "300"
+

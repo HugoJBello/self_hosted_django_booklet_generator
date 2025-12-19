@@ -1,0 +1,79 @@
+{# booklets/templates/booklets/booklets_form.html #}
+{% extends "base.html" %}
+
+{% block title %}Booklets · PDF Manager{% endblock %}
+
+{% block content %}
+  <div class="row">
+    <div class="col-lg-8">
+      <h1 class="h3 mb-3">Generar booklets</h1>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <div class="mb-3">
+              <label class="form-label">{{ form.input_pdf.label }}</label>
+              {{ form.input_pdf }}
+              {% if form.input_pdf.help_text %}
+                <div class="form-text">{{ form.input_pdf.help_text }}</div>
+              {% endif %}
+              {% for e in form.input_pdf.errors %}
+                <div class="text-danger small">{{ e }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">{{ form.max_pages_per_split.label }}</label>
+                {{ form.max_pages_per_split }}
+                {% for e in form.max_pages_per_split.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">{{ form.same_page_parity.label }}</label>
+                {{ form.same_page_parity }}
+                {% for e in form.same_page_parity.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">{{ form.margin.label }}</label>
+                {{ form.margin }}
+                {% for e in form.margin.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="form-check mt-3">
+              {{ form.add_watermark }}
+              <label class="form-check-label">{{ form.add_watermark.label }}</label>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+              <button class="btn btn-primary" type="submit">
+                Generar booklets
+              </button>
+
+              {% if download_url %}
+                <a class="btn btn-success" href="{{ download_url }}">
+                  Descargar PDF final
+                </a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <p class="text-muted mt-3 mb-0">
+        Nota: si el PDF es muy grande, la generación puede tardar.
+      </p>
+    </div>
+  </div>
+{% endblock %}
+
