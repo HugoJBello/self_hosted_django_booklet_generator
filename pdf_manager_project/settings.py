@@ -39,10 +39,20 @@ INSTALLED_APPS = [
 
     # Static serving (como en tu otro proyecto)
     "whitenoise.runserver_nostatic",
-
+    "django_rq",
     # App principal
     "booklets",
+    "ocrpdf",
 ]
+
+RQ_QUEUES = {
+    "default": {
+        "HOST": os.environ.get("REDIS_HOST", "localhost"),
+        "PORT": int(os.environ.get("REDIS_PORT", "6379")),
+        "DB": int(os.environ.get("REDIS_DB", "0")),
+        "DEFAULT_TIMEOUT": 3600,  # OCRs largos
+    }
+}
 
 # ------------------------------------------------------------
 # Middleware

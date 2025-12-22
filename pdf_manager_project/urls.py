@@ -7,6 +7,7 @@ from django.conf.urls.static import static
 urlpatterns = [
     path("pdf_manager/admin/", admin.site.urls),
     path("pdf_manager/", include("booklets.urls")),
+    path("pdf_manager/", include("ocrpdf.urls")),
 ]
 
 # En dev: servir media

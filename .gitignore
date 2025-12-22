@@ -81,3 +81,9 @@ Thumbs.db
 .env
 .env.*
 
+
+data/
+!data/.gitkeep
+
+# Redis (estado interno)
+data/redis/

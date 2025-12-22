@@ -2,4 +2,7 @@ Django==5.2.9
 gunicorn==23.0.0
 whitenoise==6.7.0
 PyMuPDF==1.26.0
+django-rq==2.10.3
+rq==1.16.2
+redis==5.0.4
 

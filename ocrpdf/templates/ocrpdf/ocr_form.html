@@ -1,0 +1,160 @@
+{# ocrpdf/templates/ocrpdf/ocr_form.html #}
+{% extends "base.html" %}
+
+{% block title %}OCR · PDF Manager{% endblock %}
+
+{% block content %}
+  <div class="row">
+    <div class="col-lg-10 col-xl-9">
+      <h1 class="h3 mb-3">Generar PDF con OCR</h1>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <div class="mb-3">
+              <label class="form-label">{{ form.input_pdf.label }}</label>
+              {{ form.input_pdf }}
+              {% if form.input_pdf.help_text %}
+                <div class="form-text">{{ form.input_pdf.help_text }}</div>
+              {% endif %}
+              {% for e in form.input_pdf.errors %}
+                <div class="text-danger small">{{ e }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">{{ form.language.label }}</label>
+                {{ form.language }}
+                {% if form.language.help_text %}
+                  <div class="form-text">{{ form.language.help_text }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">{{ form.optimize.label }}</label>
+                {{ form.optimize }}
+              </div>
+            </div>
+
+            <div class="form-check mt-3">
+              {{ form.deskew }}
+              <label class="form-check-label">{{ form.deskew.label }}</label>
+            </div>
+            <div class="form-check mt-2">
+              {{ form.rotate_pages }}
+              <label class="form-check-label">{{ form.rotate_pages.label }}</label>
+            </div>
+            <div class="form-check mt-2">
+              {{ form.force_ocr }}
+              <label class="form-check-label">{{ form.force_ocr.label }}</label>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+              <button class="btn btn-primary" type="submit">Encolar OCR</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {% if jobs and jobs|length > 0 %}
+        <h2 class="h5 mb-3">Trabajos</h2>
+
+        <div class="card shadow-sm">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table mb-0 align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>Fichero</th>
+                    <th style="width: 1%;">Estado</th>
+                    <th style="width: 1%;">Descarga</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for j in jobs %}
+                    <tr data-job-id="{{ j.job_id }}" data-status-url="{{ j.status_url }}" data-download-url="{{ j.download_url }}">
+                      <td class="text-break">{{ j.original_name }}</td>
+                      <td class="text-nowrap">
+                        <span class="badge text-bg-secondary job-status">queued</span>
+                      </td>
+                      <td class="text-nowrap">
+                        <a class="btn btn-sm btn-success job-download d-none" href="{{ j.download_url }}">Descargar</a>
+                        <span class="text-muted small job-wait">—</span>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <script>
+          (function () {
+            const rows = Array.from(document.querySelectorAll("tr[data-job-id]"));
+
+            function setBadge(badge, status) {
+              badge.textContent = status;
+              badge.classList.remove("text-bg-secondary","text-bg-info","text-bg-success","text-bg-danger");
+              if (status === "queued") badge.classList.add("text-bg-secondary");
+              else if (status === "running") badge.classList.add("text-bg-info");
+              else if (status === "done") badge.classList.add("text-bg-success");
+              else if (status === "error") badge.classList.add("text-bg-danger");
+              else badge.classList.add("text-bg-secondary");
+            }
+
+            async function pollOnce() {
+              let anyPending = false;
+
+              for (const tr of rows) {
+                const statusUrl = tr.dataset.statusUrl;
+                const badge = tr.querySelector(".job-status");
+                const btn = tr.querySelector(".job-download");
+                const wait = tr.querySelector(".job-wait");
+
+                // si ya está done/error, no molestamos
+                const current = badge.textContent;
+                if (current === "done" || current === "error") continue;
+
+                try {
+                  const resp = await fetch(statusUrl, {cache: "no-store"});
+                  if (!resp.ok) throw new Error("status fetch failed");
+                  const data = await resp.json();
+
+                  setBadge(badge, data.status);
+
+                  if (data.status === "done") {
+                    btn.classList.remove("d-none");
+                    wait.classList.add("d-none");
+                  } else if (data.status === "error") {
+                    btn.classList.add("d-none");
+                    wait.classList.remove("d-none");
+                    wait.textContent = (data.error_message || "Error");
+                  } else {
+                    anyPending = true;
+                  }
+                } catch (e) {
+                  anyPending = true;
+                }
+              }
+
+              return anyPending;
+            }
+
+            async function loop() {
+              const pending = await pollOnce();
+              if (pending) {
+                setTimeout(loop, 2000); // cada 2s
+              }
+            }
+
+            loop();
+          })();
+        </script>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
+

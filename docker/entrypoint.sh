@@ -25,18 +25,42 @@ export APP_SUBPATH
 export DJANGO_DB_PATH
 export DJANGO_MEDIA_ROOT
 
+# Carpetas idempotentes (no rompe nada)
+mkdir -p /app/data \
+  /app/data/media \
+  /app/data/uploads \
+  /app/data/booklets_outputs \
+  /app/data/uploads_ocr \
+  /app/data/ocr_outputs
+
 echo ""
 echo "➡ PDF Manager arrancando"
 echo "   Subpath : ${APP_SUBPATH}"
-echo "   URL     : (detrás del proxy) ${APP_SUBPATH}/booklets/"
-echo "   Bind    : ${GUNICORN_BIND}"
+echo "   URL     : (detrás del proxy) ${APP_SUBPATH}/booklets/  |  ${APP_SUBPATH}/ocr/"
 echo ""
 
-# Migraciones + collectstatic
+# Migraciones + collectstatic (para web y worker)
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput || true
 
-# Lanzar gunicorn
+# ------------------------------------------------------------
+# MODO WORKER: /entrypoint.sh rqworker default
+# ------------------------------------------------------------
+if [ "${1:-}" = "rqworker" ]; then
+  QUEUE="${2:-default}"
+  echo "   Mode    : rqworker"
+  echo "   Queue   : ${QUEUE}"
+  echo ""
+  exec python manage.py rqworker "${QUEUE}"
+fi
+
+# ------------------------------------------------------------
+# MODO WEB (por defecto): gunicorn
+# ------------------------------------------------------------
+echo "   Mode    : web (gunicorn)"
+echo "   Bind    : ${GUNICORN_BIND}"
+echo ""
+
 exec gunicorn pdf_manager_project.wsgi:application \
   --bind "${GUNICORN_BIND}" \
   --workers "${GUNICORN_WORKERS}" \

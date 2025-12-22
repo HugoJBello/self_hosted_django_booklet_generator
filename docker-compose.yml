@@ -5,42 +5,27 @@ services:
     build: .
     container_name: pdf_manager
     restart: unless-stopped
-
-    # En local te vale (http://127.0.0.1:8010/...)
-    # En servidor detrás de nginx, también (nginx proxy_pass a este puerto)
     ports:
       - "8010:8000"
-
     volumes:
       - ./data:/app/data
-
     environment:
       # ----------------------------------------------------
       # Django (MUY PERMISIVO)
       # ----------------------------------------------------
       DJANGO_SECRET_KEY: "dev-unsafe-secret-key"
       DJANGO_DEBUG: "True"
-
-      # ✅ Permitir cualquier host (evita DisallowedHost)
       DJANGO_ALLOWED_HOSTS: "*"
 
-      # Subpath fijo
+      # Subpath fijo (si lo usas en settings)
       APP_SUBPATH: "/pdf_manager"
 
       # Persistencia
       DJANGO_DB_PATH: "/app/data/db.sqlite3"
       DJANGO_MEDIA_ROOT: "/app/data/media"
 
-      # ----------------------------------------------------
       # Proxy / Cloudflare / HTTPS (MUY PERMISIVO)
-      # ----------------------------------------------------
-      # Para evitar 403 por CSRF al hacer POST detrás de proxy con https:
-      # - ponemos trusted origins explícito y además permitimos *si quieres
-      #   (con tu settings adaptado, esto se leerá tal cual).
       DJANGO_CSRF_TRUSTED_ORIGINS: "https://api-android18.hjbello.org,https://*.hjbello.org,https://*"
-
-      # Cookies seguras: en local http puede molestar.
-      # Lo dejamos en False para que funcione igual en ambos.
       DJANGO_COOKIE_SECURE: "False"
       DJANGO_SECURE_SSL_REDIRECT: "False"
 
@@ -48,4 +33,50 @@ services:
       GUNICORN_BIND: "0.0.0.0:8000"
       GUNICORN_WORKERS: "2"
       GUNICORN_TIMEOUT: "300"
+
+      # ----------------------------------------------------
+      # RQ / Redis
+      # ----------------------------------------------------
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+
+    depends_on:
+      - redis
+
+  pdf_manager_worker:
+    build: .
+    container_name: pdf_manager_worker
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Mismos envs (para settings y rutas)
+      DJANGO_SECRET_KEY: "dev-unsafe-secret-key"
+      DJANGO_DEBUG: "True"
+      DJANGO_ALLOWED_HOSTS: "*"
+      APP_SUBPATH: "/pdf_manager"
+      DJANGO_DB_PATH: "/app/data/db.sqlite3"
+      DJANGO_MEDIA_ROOT: "/app/data/media"
+
+      # Redis
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+
+    depends_on:
+      - redis
+      - pdf_manager
+
+    # ✅ Importante: con ENTRYPOINT=/entrypoint.sh, esto pasa args al script
+    # y el script debe detectar "rqworker" y ejecutar "python manage.py rqworker default"
+    command: ["rqworker", "default"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: pdf_manager_redis
+    restart: unless-stopped
+    volumes:
+      - ./data/redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
 
