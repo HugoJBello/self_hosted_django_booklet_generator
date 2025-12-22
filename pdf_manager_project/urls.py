@@ -8,6 +8,7 @@ urlpatterns = [
     path("pdf_manager/admin/", admin.site.urls),
     path("pdf_manager/", include("booklets.urls")),
     path("pdf_manager/", include("ocrpdf.urls")),
+    path("pdf_manager/", include("joinpdf.urls")),
 ]
 
 # En dev: servir media

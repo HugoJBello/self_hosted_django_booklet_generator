@@ -1,0 +1,109 @@
+{# joinpdf/templates/joinpdf/join_form.html #}
+{% extends "base.html" %}
+
+{% block title %}Join PDF · PDF Manager{% endblock %}
+
+{% block content %}
+  <div class="row">
+    <div class="col-lg-10 col-xl-9">
+      <h1 class="h3 mb-3">Unir PDFs</h1>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="upload">
+
+            <div class="mb-3">
+              <label class="form-label">{{ upload_form.input_pdf.label }}</label>
+              {{ upload_form.input_pdf }}
+              {% if upload_form.input_pdf.help_text %}
+                <div class="form-text">{{ upload_form.input_pdf.help_text }}</div>
+              {% endif %}
+              {% for e in upload_form.input_pdf.errors %}
+                <div class="text-danger small">{{ e }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary" type="submit">Añadir a la lista</button>
+              <a class="btn btn-outline-secondary" href="{% url 'joinpdf:clear' %}">Limpiar lista</a>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <h2 class="h5 mb-2">Lista de PDFs</h2>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th scope="col" style="width: 1%;">#</th>
+                  <th scope="col">Fichero</th>
+                  <th scope="col" style="width: 1%;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if items and items|length > 0 %}
+                  {% for it in items %}
+                    <tr>
+                      <td class="text-muted">{{ forloop.counter }}</td>
+                      <td class="text-break">{{ it.name }}</td>
+                      <td class="text-nowrap">
+                        <a class="btn btn-sm btn-outline-danger" href="{% url 'joinpdf:remove' forloop.counter0 %}">
+                          Quitar
+                        </a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr>
+                    <td colspan="3" class="text-muted p-3">No hay PDFs aún. Sube alguno(s) arriba.</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="join">
+
+            <div class="form-check">
+              {{ run_form.preserve_parity }}
+              <label class="form-check-label">{{ run_form.preserve_parity.label }}</label>
+              <div class="form-text">
+                Si está activado, se inserta una página en blanco entre PDFs cuando haga falta para que cada nuevo PDF empiece en página impar (1-based).
+              </div>
+              {% for e in run_form.preserve_parity.errors %}
+                <div class="text-danger small">{{ e }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+              <button class="btn btn-success" type="submit" {% if not items or items|length == 0 %}disabled{% endif %}>
+                Join PDF
+              </button>
+
+              {% if result_download_url %}
+                <a class="btn btn-primary" href="{{ result_download_url }}">Descargar resultado</a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <p class="text-muted mt-3 mb-0">
+        Consejo: puedes subir PDFs en varias tandas; la lista se mantiene hasta que la limpies.
+      </p>
+    </div>
+  </div>
+{% endblock %}
+

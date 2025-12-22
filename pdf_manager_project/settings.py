@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # App principal
     "booklets",
     "ocrpdf",
+    "joinpdf",
 ]
 
 RQ_QUEUES = {

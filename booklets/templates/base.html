@@ -37,6 +37,16 @@
             OCR
           </a>
         </li>
+
+	<li class="nav-item">
+	  <a
+	    class="nav-link {% if request.resolver_match.app_name == 'joinpdf' %}active{% endif %}"
+	    href="{% url 'joinpdf:form' %}"
+	  >
+	    Join
+	  </a>
+	</li>
+
       </ul>
     </div>
   </div>
