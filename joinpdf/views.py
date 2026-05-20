@@ -46,6 +46,22 @@ def _save_items(request, items: list[dict[str, Any]]) -> None:
     request.session.modified = True
 
 
+def _apply_requested_order(items: list[dict[str, Any]], request) -> list[dict[str, Any]]:
+    order_values = request.POST.getlist("item_order")
+    if not order_values:
+        return items
+
+    try:
+        ordered_indexes = [int(value) for value in order_values]
+    except ValueError:
+        return items
+
+    if sorted(ordered_indexes) != list(range(len(items))):
+        return items
+
+    return [items[idx] for idx in ordered_indexes]
+
+
 def join_view(request):
     uploads_dir = os.path.join(settings.MEDIA_ROOT, "join_uploads")
     outputs_dir = os.path.join(settings.MEDIA_ROOT, "join_outputs")
@@ -112,6 +128,8 @@ def join_view(request):
                 return redirect("joinpdf:form")
 
             if run_form.is_valid():
+                items = _apply_requested_order(items, request)
+                _save_items(request, items)
                 preserve_parity = bool(run_form.cleaned_data.get("preserve_parity"))
 
                 input_paths = [it.get("path") for it in items if it.get("path")]
@@ -186,4 +204,3 @@ def join_download(request, job_id: str):
         filename=os.path.basename(pdf_path),
         content_type="application/pdf",
     )
-

@@ -4,24 +4,57 @@
 {% block title %}Join PDF · PDF Manager{% endblock %}
 
 {% block content %}
+  <style>
+    .upload-dropzone {
+      border: 2px dashed #6c757d;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      background: #f8f9fa;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+      cursor: pointer;
+    }
+
+    .upload-dropzone.is-dragover {
+      border-color: #0d6efd;
+      background: #eef5ff;
+    }
+
+    .file-config-card {
+      border: 1px solid #dee2e6;
+      border-radius: 1rem;
+      background: #fff;
+    }
+
+    .file-config-card.is-dragging {
+      opacity: 0.55;
+    }
+
+    .drag-handle {
+      cursor: grab;
+      user-select: none;
+      font-size: 1.1rem;
+    }
+  </style>
+
   <div class="row">
-    <div class="col-lg-10 col-xl-9">
+    <div class="col-xl-10">
       <h1 class="h3 mb-3">Unir PDFs</h1>
 
       <div class="card shadow-sm mb-4">
         <div class="card-body">
-          <form method="post" enctype="multipart/form-data">
+          <form method="post" enctype="multipart/form-data" id="join-upload-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="upload">
 
-            <div class="mb-3">
+            <div class="mb-4">
               <label class="form-label">{{ upload_form.input_pdf.label }}</label>
-              {{ upload_form.input_pdf }}
-              {% if upload_form.input_pdf.help_text %}
-                <div class="form-text">{{ upload_form.input_pdf.help_text }}</div>
-              {% endif %}
+              <div class="upload-dropzone" id="upload-dropzone">
+                <p class="fw-semibold mb-1">Arrastra aquí tus PDFs o haz clic para elegirlos</p>
+                <p class="text-muted mb-3 small">{{ upload_form.input_pdf.help_text }}</p>
+                {{ upload_form.input_pdf }}
+              </div>
               {% for e in upload_form.input_pdf.errors %}
-                <div class="text-danger small">{{ e }}</div>
+                <div class="text-danger small mt-2">{{ e }}</div>
               {% endfor %}
             </div>
 
@@ -33,77 +66,154 @@
         </div>
       </div>
 
-      <h2 class="h5 mb-2">Lista de PDFs</h2>
+      <form method="post" id="join-run-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="join">
 
-      <div class="card shadow-sm mb-4">
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table mb-0 align-middle">
-              <thead class="table-light">
-                <tr>
-                  <th scope="col" style="width: 1%;">#</th>
-                  <th scope="col">Fichero</th>
-                  <th scope="col" style="width: 1%;">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% if items and items|length > 0 %}
-                  {% for it in items %}
-                    <tr>
-                      <td class="text-muted">{{ forloop.counter }}</td>
-                      <td class="text-break">{{ it.name }}</td>
-                      <td class="text-nowrap">
-                        <a class="btn btn-sm btn-outline-danger" href="{% url 'joinpdf:remove' forloop.counter0 %}">
-                          Quitar
-                        </a>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                {% else %}
-                  <tr>
-                    <td colspan="3" class="text-muted p-3">No hay PDFs aún. Sube alguno(s) arriba.</td>
-                  </tr>
-                {% endif %}
-              </tbody>
-            </table>
-          </div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 mb-0">Lista de PDFs</h2>
+          <span class="text-muted small">Arrastra las tarjetas para reordenar</span>
         </div>
-      </div>
 
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="join">
-
-            <div class="form-check">
-              {{ run_form.preserve_parity }}
-              <label class="form-check-label">{{ run_form.preserve_parity.label }}</label>
-              <div class="form-text">
-                Si está activado, se inserta una página en blanco entre PDFs cuando haga falta para que cada nuevo PDF empiece en página impar (1-based).
+        <div id="join-items-list" class="d-grid gap-3 mb-4">
+          {% if items and items|length > 0 %}
+            {% for it in items %}
+              <div class="file-config-card p-3" draggable="true" data-index="{{ forloop.counter0 }}">
+                <input type="hidden" name="item_order" value="{{ forloop.counter0 }}">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                  <div class="d-flex align-items-start gap-3">
+                    <span class="drag-handle" title="Arrastrar para reordenar">↕</span>
+                    <div>
+                      <div class="fw-semibold">{{ forloop.counter }}. {{ it.name }}</div>
+                      <div class="text-muted small">Posición actual de unión</div>
+                    </div>
+                  </div>
+                  <a class="btn btn-sm btn-outline-danger" href="{% url 'joinpdf:remove' forloop.counter0 %}">Quitar</a>
+                </div>
               </div>
-              {% for e in run_form.preserve_parity.errors %}
-                <div class="text-danger small">{{ e }}</div>
-              {% endfor %}
+            {% endfor %}
+          {% else %}
+            <div class="file-config-card p-4 text-muted">No hay PDFs aún. Añade uno o varios arriba.</div>
+          {% endif %}
+        </div>
+
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <div class="border rounded-4 p-3">
+              <div class="form-check">
+                {{ run_form.preserve_parity }}
+                <label class="form-check-label" for="{{ run_form.preserve_parity.id_for_label }}">
+                  {{ run_form.preserve_parity.label }}
+                </label>
+                <div class="form-text mt-2">
+                  Si está activado, se inserta una página en blanco entre PDFs cuando haga falta para que cada nuevo PDF empiece en página impar.
+                </div>
+                {% for e in run_form.preserve_parity.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </div>
             </div>
 
             <div class="d-flex gap-2 mt-4">
               <button class="btn btn-success" type="submit" {% if not items or items|length == 0 %}disabled{% endif %}>
                 Join PDF
               </button>
-
               {% if result_download_url %}
                 <a class="btn btn-primary" href="{{ result_download_url }}">Descargar resultado</a>
               {% endif %}
             </div>
-          </form>
+          </div>
         </div>
-      </div>
+      </form>
 
       <p class="text-muted mt-3 mb-0">
         Consejo: puedes subir PDFs en varias tandas; la lista se mantiene hasta que la limpies.
       </p>
     </div>
   </div>
-{% endblock %}
 
+  <script>
+    (() => {
+      const uploadForm = document.getElementById("join-upload-form");
+      const fileInput = uploadForm.querySelector('input[type="file"][name="input_pdf"]');
+      const dropzone = document.getElementById("upload-dropzone");
+      const list = document.getElementById("join-items-list");
+
+      if (dropzone && fileInput) {
+        const addDragState = () => dropzone.classList.add("is-dragover");
+        const clearDragState = () => dropzone.classList.remove("is-dragover");
+
+        dropzone.addEventListener("click", (event) => {
+          if (event.target !== fileInput) {
+            fileInput.click();
+          }
+        });
+
+        ["dragenter", "dragover"].forEach((eventName) => {
+          dropzone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            addDragState();
+          });
+        });
+
+        ["dragleave", "drop"].forEach((eventName) => {
+          dropzone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            if (eventName === "drop" && event.dataTransfer?.files?.length) {
+              fileInput.files = event.dataTransfer.files;
+            }
+            clearDragState();
+          });
+        });
+      }
+
+      if (!list) {
+        return;
+      }
+
+      const updateOrderInputs = () => {
+        Array.from(list.querySelectorAll(".file-config-card[data-index]")).forEach((card, index) => {
+          const title = card.querySelector(".fw-semibold");
+          const hidden = card.querySelector('input[name="item_order"]');
+          const currentName = title.textContent.replace(/^\d+\.\s+/, "");
+          title.textContent = `${index + 1}. ${currentName}`;
+          hidden.value = card.dataset.index;
+        });
+      };
+
+      Array.from(list.querySelectorAll(".file-config-card[data-index]")).forEach((card) => {
+        card.addEventListener("dragstart", () => {
+          card.classList.add("is-dragging");
+        });
+
+        card.addEventListener("dragend", () => {
+          card.classList.remove("is-dragging");
+        });
+
+        card.addEventListener("dragover", (event) => {
+          event.preventDefault();
+        });
+
+        card.addEventListener("drop", (event) => {
+          event.preventDefault();
+          const draggingCard = list.querySelector(".file-config-card.is-dragging");
+          if (!draggingCard || draggingCard === card) {
+            return;
+          }
+
+          const cards = Array.from(list.querySelectorAll(".file-config-card[data-index]"));
+          const fromIndex = cards.indexOf(draggingCard);
+          const toIndex = cards.indexOf(card);
+
+          if (fromIndex < toIndex) {
+            list.insertBefore(draggingCard, card.nextSibling);
+          } else {
+            list.insertBefore(draggingCard, card);
+          }
+
+          updateOrderInputs();
+        });
+      });
+    })();
+  </script>
+{% endblock %}

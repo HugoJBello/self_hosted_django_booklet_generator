@@ -21,13 +21,18 @@ class JoinUploadForm(forms.Form):
     input_pdf = MultipleFileField(
         label="Subir PDF(s)",
         required=False,  # aquí permitimos POST de Join sin archivos
-        help_text="Puedes subir uno o varios PDFs (Ctrl/Shift). Se irán acumulando en la lista.",
+        help_text="Selecciona o arrastra uno o varios PDFs. Se irán acumulando en la lista.",
         widget=MultiFileInput(attrs={"multiple": True}),
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["input_pdf"].widget.attrs.update({"class": "form-control"})
+        self.fields["input_pdf"].widget.attrs.update(
+            {
+                "class": "form-control",
+                "accept": "application/pdf,.pdf",
+            }
+        )
 
 
 class JoinRunForm(forms.Form):
@@ -37,4 +42,3 @@ class JoinRunForm(forms.Form):
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
-
