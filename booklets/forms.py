@@ -34,8 +34,19 @@ class BookletForm(forms.Form):
     input_pdf = MultipleFileField(
         label="Subir PDF(s)",
         required=True,
-        help_text="Selecciona uno o varios PDFs (Ctrl/Shift) para procesar.",
+        help_text="Selecciona o arrastra uno o varios PDFs. Después podrás reordenarlos y configurar cada uno.",
         widget=MultiFileInput(attrs={"multiple": True}),
+    )
+
+    processing_mode = forms.ChoiceField(
+        label="Modo de generación",
+        required=True,
+        initial="separate",
+        choices=[
+            ("separate", "Generar booklets y ficheros separados"),
+            ("combined", "Juntar booklets para una única impresión"),
+        ],
+        widget=forms.RadioSelect,
     )
 
     max_pages_per_split = forms.IntegerField(
@@ -46,27 +57,8 @@ class BookletForm(forms.Form):
         widget=forms.NumberInput(attrs={"class": "form-control"}),
     )
 
-    same_page_parity = forms.ChoiceField(
-        label="Paridad de inicio (same_page_parity)",
-        required=True,
-        initial="true",
-        choices=[
-            ("true", "true (splits empiezan en impar 1-based / índice 0 par)"),
-            ("false", "false (añade página en blanco al principio)"),
-        ],
-        widget=forms.Select(attrs={"class": "form-select"}),
-    )
-
-    margin = forms.FloatField(
-        label="Margen externo (cm)",
-        required=True,
-        initial=1.0,
-        min_value=0.0,
-        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
-    )
-
-    add_watermark = forms.BooleanField(
-        label="Añadir marca de agua (*)",
+    preserve_file_parity = forms.BooleanField(
+        label="Respetar la paridad de inicio de cada fichero al unificarlos",
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
@@ -74,5 +66,9 @@ class BookletForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["input_pdf"].widget.attrs.update({"class": "form-control"})
-
+        self.fields["input_pdf"].widget.attrs.update(
+            {
+                "class": "form-control",
+                "accept": "application/pdf,.pdf",
+            }
+        )

@@ -4,61 +4,146 @@
 {% block title %}Booklets · PDF Manager{% endblock %}
 
 {% block content %}
+  <style>
+    .upload-dropzone {
+      border: 2px dashed #6c757d;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      background: #f8f9fa;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+      cursor: pointer;
+    }
+
+    .upload-dropzone.is-dragover {
+      border-color: #0d6efd;
+      background: #eef5ff;
+    }
+
+    .file-config-card {
+      border: 1px solid #dee2e6;
+      border-radius: 1rem;
+      background: #fff;
+    }
+
+    .file-config-card.is-dragging {
+      opacity: 0.55;
+    }
+
+    .drag-handle {
+      cursor: grab;
+      user-select: none;
+      font-size: 1.1rem;
+    }
+  </style>
+
   <div class="row">
-    <div class="col-lg-10 col-xl-9">
+    <div class="col-xl-10">
       <h1 class="h3 mb-3">Generar booklets</h1>
 
       <div class="card shadow-sm mb-4">
         <div class="card-body">
-          <form method="post" enctype="multipart/form-data">
+          <form method="post" enctype="multipart/form-data" id="booklet-form">
             {% csrf_token %}
 
-            <div class="mb-3">
+            <div class="mb-4">
               <label class="form-label">{{ form.input_pdf.label }}</label>
-              {{ form.input_pdf }}
-              {% if form.input_pdf.help_text %}
-                <div class="form-text">{{ form.input_pdf.help_text }}</div>
-              {% endif %}
+              <div class="upload-dropzone" id="upload-dropzone">
+                <p class="fw-semibold mb-1">Arrastra aquí tus PDFs o haz clic para elegirlos</p>
+                <p class="text-muted mb-3 small">{{ form.input_pdf.help_text }}</p>
+                {{ form.input_pdf }}
+              </div>
               {% for e in form.input_pdf.errors %}
-                <div class="text-danger small">{{ e }}</div>
+                <div class="text-danger small mt-2">{{ e }}</div>
               {% endfor %}
             </div>
 
-            <div class="row g-3">
-              <div class="col-md-4">
+            <div class="row g-4">
+              <div class="col-lg-6">
+                <label class="form-label d-block">{{ form.processing_mode.label }}</label>
+                <div class="border rounded-4 p-3 bg-light">
+                  {% for radio in form.processing_mode %}
+                    <div class="form-check mb-2">
+                      {{ radio.tag }}
+                      <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <div class="col-lg-3">
                 <label class="form-label">{{ form.max_pages_per_split.label }}</label>
                 {{ form.max_pages_per_split }}
+                <div class="form-text">Este valor sigue siendo común para todos los ficheros.</div>
                 {% for e in form.max_pages_per_split.errors %}
                   <div class="text-danger small">{{ e }}</div>
                 {% endfor %}
               </div>
 
-              <div class="col-md-4">
-                <label class="form-label">{{ form.same_page_parity.label }}</label>
-                {{ form.same_page_parity }}
-                {% for e in form.same_page_parity.errors %}
-                  <div class="text-danger small">{{ e }}</div>
-                {% endfor %}
-              </div>
-
-              <div class="col-md-4">
-                <label class="form-label">{{ form.margin.label }}</label>
-                {{ form.margin }}
-                {% for e in form.margin.errors %}
-                  <div class="text-danger small">{{ e }}</div>
-                {% endfor %}
+              <div class="col-lg-3">
+                <div class="border rounded-4 p-3 h-100 d-flex align-items-center" id="preserve-parity-wrapper">
+                  <div class="form-check">
+                    {{ form.preserve_file_parity }}
+                    <label class="form-check-label" for="{{ form.preserve_file_parity.id_for_label }}">
+                      {{ form.preserve_file_parity.label }}
+                    </label>
+                    <div class="form-text mt-2">
+                      Si está activo, el sistema añadirá páginas en blanco cuando haga falta para respetar la paridad de inicio de cada PDF.
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div class="form-check mt-3">
-              {{ form.add_watermark }}
-              <label class="form-check-label">{{ form.add_watermark.label }}</label>
+            <div class="mt-4">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h5 mb-0">Configuración por fichero</h2>
+                <span class="text-muted small">Arrastra las tarjetas para reordenar</span>
+              </div>
+
+              <div id="file-config-list" class="d-grid gap-3"></div>
+
+              <template id="file-config-template">
+                <div class="file-config-card p-3" draggable="true">
+                  <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                    <div class="d-flex align-items-start gap-3">
+                      <span class="drag-handle" title="Arrastrar para reordenar">↕</span>
+                      <div>
+                        <div class="fw-semibold file-name"></div>
+                        <div class="text-muted small file-meta"></div>
+                      </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-file">Quitar</button>
+                  </div>
+
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label class="form-label">Paridad de inicio</label>
+                      <select class="form-select parity-select">
+                        <option value="true">Página 1 cae en lado derecho (impar)</option>
+                        <option value="false">Añadir blanco al inicio para que caiga en lado izquierdo</option>
+                      </select>
+                    </div>
+
+                    <div class="col-md-4">
+                      <label class="form-label">Margen externo (cm)</label>
+                      <input type="number" class="form-control margin-input" min="0" step="0.1" value="1.0">
+                    </div>
+
+                    <div class="col-md-4 d-flex align-items-end">
+                      <div class="form-check mb-2">
+                        <input type="checkbox" class="form-check-input watermark-input" checked>
+                        <label class="form-check-label">Añadir marca de agua (*)</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="hidden-inputs"></div>
+                </div>
+              </template>
             </div>
 
             <div class="d-flex gap-2 mt-4">
-              <button class="btn btn-primary" type="submit">
-                Generar booklets
-              </button>
+              <button class="btn btn-primary" type="submit">Generar booklets</button>
             </div>
           </form>
         </div>
@@ -82,9 +167,7 @@
                     <tr>
                       <td class="text-break">{{ r.original_name }}</td>
                       <td class="text-nowrap">
-                        <a class="btn btn-sm btn-success" href="{{ r.download_url }}">
-                          Descargar
-                        </a>
+                        <a class="btn btn-sm btn-success" href="{{ r.download_url }}">Descargar</a>
                       </td>
                     </tr>
                   {% endfor %}
@@ -94,11 +177,170 @@
           </div>
         </div>
 
-        <p class="text-muted mt-2 mb-0">
-          Al generar de nuevo, esta lista se reemplaza por los nuevos resultados.
-        </p>
+        <p class="text-muted mt-2 mb-0">Al generar de nuevo, esta lista se reemplaza por los nuevos resultados.</p>
       {% endif %}
     </div>
   </div>
-{% endblock %}
 
+  <script>
+    (() => {
+      const form = document.getElementById("booklet-form");
+      const fileInput = form.querySelector('input[type="file"][name="input_pdf"]');
+      const dropzone = document.getElementById("upload-dropzone");
+      const list = document.getElementById("file-config-list");
+      const template = document.getElementById("file-config-template");
+      const preserveParityWrapper = document.getElementById("preserve-parity-wrapper");
+      const modeInputs = Array.from(form.querySelectorAll('input[name="processing_mode"]'));
+      let selectedItems = [];
+
+      const formatBytes = (bytes) => {
+        if (!Number.isFinite(bytes)) return "";
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      };
+
+      const syncInputFiles = () => {
+        const transfer = new DataTransfer();
+        selectedItems.forEach((item) => transfer.items.add(item.file));
+        fileInput.files = transfer.files;
+      };
+
+      const rebuildHiddenInputs = (card, index) => {
+        const hidden = card.querySelector(".hidden-inputs");
+        const parity = card.querySelector(".parity-select").value;
+        const margin = card.querySelector(".margin-input").value || "1.0";
+        const watermark = card.querySelector(".watermark-input").checked ? "true" : "false";
+
+        hidden.innerHTML = `
+          <input type="hidden" name="file_same_page_parity_${index}" value="${parity}">
+          <input type="hidden" name="file_margin_${index}" value="${margin}">
+          <input type="hidden" name="file_add_watermark_${index}" value="${watermark}">
+        `;
+      };
+
+      const refreshCards = () => {
+        list.innerHTML = "";
+
+        selectedItems.forEach((item, index) => {
+          const fragment = template.content.cloneNode(true);
+          const card = fragment.querySelector(".file-config-card");
+          card.dataset.index = index;
+
+          const { file } = item;
+          card.querySelector(".file-name").textContent = `${index + 1}. ${file.name}`;
+          card.querySelector(".file-meta").textContent = formatBytes(file.size);
+          card.querySelector(".parity-select").value = item.parity;
+          card.querySelector(".margin-input").value = item.margin;
+          card.querySelector(".watermark-input").checked = item.watermark;
+
+          card.querySelector(".remove-file").addEventListener("click", () => {
+            selectedItems.splice(index, 1);
+            syncInputFiles();
+            refreshCards();
+          });
+
+          const updateItemFromInputs = () => {
+            item.parity = card.querySelector(".parity-select").value;
+            item.margin = card.querySelector(".margin-input").value || "1.0";
+            item.watermark = card.querySelector(".watermark-input").checked;
+            rebuildHiddenInputs(card, index);
+          };
+
+          ["change", "input"].forEach((eventName) => {
+            card.querySelector(".parity-select").addEventListener(eventName, updateItemFromInputs);
+            card.querySelector(".margin-input").addEventListener(eventName, updateItemFromInputs);
+            card.querySelector(".watermark-input").addEventListener(eventName, updateItemFromInputs);
+          });
+
+          card.addEventListener("dragstart", () => {
+            card.classList.add("is-dragging");
+          });
+
+          card.addEventListener("dragend", () => {
+            card.classList.remove("is-dragging");
+          });
+
+          card.addEventListener("dragover", (event) => {
+            event.preventDefault();
+          });
+
+          card.addEventListener("drop", (event) => {
+            event.preventDefault();
+            const draggingCard = list.querySelector(".file-config-card.is-dragging");
+            if (!draggingCard || draggingCard === card) {
+              return;
+            }
+
+            const fromIndex = Number(draggingCard.dataset.index);
+            const toIndex = Number(card.dataset.index);
+            const [moved] = selectedItems.splice(fromIndex, 1);
+            selectedItems.splice(toIndex, 0, moved);
+            syncInputFiles();
+            refreshCards();
+          });
+
+          rebuildHiddenInputs(card, index);
+          list.appendChild(fragment);
+        });
+      };
+
+      const addFiles = (incomingFiles) => {
+        const pdfFiles = Array.from(incomingFiles).filter((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+        if (!pdfFiles.length) {
+          return;
+        }
+        selectedItems = selectedItems.concat(
+          pdfFiles.map((file) => ({
+            file,
+            parity: "true",
+            margin: "1.0",
+            watermark: true,
+          }))
+        );
+        syncInputFiles();
+        refreshCards();
+      };
+
+      const refreshModeUI = () => {
+        const currentMode = modeInputs.find((input) => input.checked)?.value || "separate";
+        preserveParityWrapper.style.display = currentMode === "combined" ? "" : "none";
+      };
+
+      fileInput.addEventListener("change", (event) => {
+        addFiles(event.target.files);
+      });
+
+      dropzone.addEventListener("click", (event) => {
+        if (event.target !== fileInput) {
+          fileInput.click();
+        }
+      });
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.add("is-dragover");
+        });
+      });
+
+      ["dragleave", "drop"].forEach((eventName) => {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          if (eventName === "drop") {
+            addFiles(event.dataTransfer.files);
+          }
+          dropzone.classList.remove("is-dragover");
+        });
+      });
+
+      modeInputs.forEach((input) => input.addEventListener("change", refreshModeUI));
+
+      form.addEventListener("submit", () => {
+        refreshCards();
+        syncInputFiles();
+      });
+
+      refreshModeUI();
+    })();
+  </script>
+{% endblock %}
