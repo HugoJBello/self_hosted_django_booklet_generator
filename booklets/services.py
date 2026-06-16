@@ -6,6 +6,8 @@ import uuid
 from dataclasses import dataclass
 
 import fitz  # PyMuPDF
+from django.utils import timezone
+from pdf_manager_project.pdf_cover import collect_cover_entries, create_cover_pdf
 
 
 @dataclass(frozen=True)
@@ -307,6 +309,7 @@ def build_booklets_pipeline(
     max_pages_per_split: int,
     final_output_dir: str,
     preserve_file_parity: bool = True,
+    generate_cover: bool = False,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("No hay PDFs para procesar.")
@@ -315,10 +318,28 @@ def build_booklets_pipeline(
     os.makedirs(final_output_dir, exist_ok=True)
     final_pdf = os.path.join(final_output_dir, f"{job_id}_booklets_for_printing.pdf")
 
-    prepared_pages = prepare_pages_for_specs(specs, preserve_file_parity=preserve_file_parity)
-    split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
-
     with tempfile.TemporaryDirectory(prefix=f"pdf_manager_{job_id}_") as tmp:
+        specs_to_process = list(specs)
+        if generate_cover:
+            cover_path = os.path.join(tmp, "cover.pdf")
+            create_cover_pdf(
+                output_path=cover_path,
+                entries=collect_cover_entries([spec.input_pdf_path for spec in specs]),
+                generated_on=timezone.localdate(),
+                heading="Indice de booklets",
+            )
+            specs_to_process.insert(
+                0,
+                SourcePdfSpec(
+                    input_pdf_path=cover_path,
+                    same_page_parity=True,
+                    margin_cm=0.0,
+                    add_watermark=False,
+                ),
+            )
+
+        prepared_pages = prepare_pages_for_specs(specs_to_process, preserve_file_parity=preserve_file_parity)
+        split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
         split_outputs: list[str] = []
 
         for split_idx, (start_idx, end_idx) in enumerate(split_ranges, start=1):

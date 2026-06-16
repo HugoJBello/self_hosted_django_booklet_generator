@@ -42,3 +42,10 @@ class JoinRunForm(forms.Form):
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
+
+    generate_cover = forms.BooleanField(
+        label="Generar portada con indice",
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )

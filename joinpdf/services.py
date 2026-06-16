@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import uuid
 from dataclasses import dataclass
 
 import fitz  # PyMuPDF
+from django.utils import timezone
+from pdf_manager_project.pdf_cover import collect_cover_entries, create_cover_pdf
 
 
 @dataclass(frozen=True)
@@ -23,6 +26,7 @@ def join_pdfs(
     input_paths: list[str],
     output_path: str,
     preserve_parity: bool,
+    cover_pdf_path: str | None = None,
 ) -> None:
     """
     Une PDFs en el orden dado.
@@ -36,6 +40,11 @@ def join_pdfs(
         raise ValueError("No hay PDFs para unir")
 
     out = fitz.open()
+
+    if cover_pdf_path:
+        with fitz.open(cover_pdf_path) as cover:
+            if cover.page_count > 0:
+                out.insert_pdf(cover)
 
     for i, p in enumerate(input_paths):
         if not os.path.isfile(p):
@@ -66,16 +75,29 @@ def build_join_pipeline(
     input_paths: list[str],
     final_output_dir: str,
     preserve_parity: bool,
+    generate_cover: bool = False,
+    display_names: list[str] | None = None,
 ) -> JoinJobResult:
     job_id = uuid.uuid4().hex
     os.makedirs(final_output_dir, exist_ok=True)
     final_pdf = os.path.join(final_output_dir, f"{job_id}_joined.pdf")
 
-    join_pdfs(
-        input_paths=input_paths,
-        output_path=final_pdf,
-        preserve_parity=preserve_parity,
-    )
+    with tempfile.TemporaryDirectory(prefix=f"pdf_manager_join_{job_id}_") as tmp:
+        cover_pdf_path = None
+        if generate_cover:
+            cover_pdf_path = os.path.join(tmp, "cover.pdf")
+            create_cover_pdf(
+                output_path=cover_pdf_path,
+                entries=collect_cover_entries(input_paths, display_names=display_names),
+                generated_on=timezone.localdate(),
+                heading="Indice de documentos",
+            )
+
+        join_pdfs(
+            input_paths=input_paths,
+            output_path=final_pdf,
+            preserve_parity=preserve_parity,
+            cover_pdf_path=cover_pdf_path,
+        )
 
     return JoinJobResult(job_id=job_id, output_pdf_path=final_pdf)
-

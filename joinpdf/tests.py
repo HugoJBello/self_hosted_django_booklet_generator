@@ -9,6 +9,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from .services import build_join_pipeline
+
 
 TEST_MEDIA_ROOT = tempfile.mkdtemp(prefix="joinpdf_test_media_")
 
@@ -82,3 +84,31 @@ class JoinPdfViewTests(TestCase):
         items = self.client.session.get("joinpdf_items", [])
         self.assertEqual([item["name"] for item in items], ["dos.pdf", "uno.pdf"])
         self.assertContains(response, "Descargar resultado")
+
+    def test_join_cover_is_first_page_and_preserves_odd_starts(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "join_uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "join_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        first_path = os.path.join(uploads_dir, "uno.pdf")
+        second_path = os.path.join(uploads_dir, "dos.pdf")
+        with open(first_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+        with open(second_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+
+        result = build_join_pipeline(
+            input_paths=[first_path, second_path],
+            final_output_dir=outputs_dir,
+            preserve_parity=True,
+            generate_cover=True,
+            display_names=["uno.pdf", "dos.pdf"],
+        )
+
+        with fitz.open(result.output_pdf_path) as doc:
+            self.assertEqual(doc.page_count, 5)
+            self.assertIn("Indice", doc[0].get_text())
+            self.assertEqual(doc[1].get_text().strip(), "")
+            self.assertIn("Page 1", doc[2].get_text())
+            self.assertEqual(doc[3].get_text().strip(), "")
+            self.assertIn("Page 1", doc[4].get_text())

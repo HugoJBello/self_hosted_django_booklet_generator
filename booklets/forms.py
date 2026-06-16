@@ -64,6 +64,13 @@ class BookletForm(forms.Form):
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
+    generate_cover = forms.BooleanField(
+        label="Generar portada con indice al juntar booklets",
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["input_pdf"].widget.attrs.update(

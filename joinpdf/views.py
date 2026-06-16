@@ -131,13 +131,17 @@ def join_view(request):
                 items = _apply_requested_order(items, request)
                 _save_items(request, items)
                 preserve_parity = bool(run_form.cleaned_data.get("preserve_parity"))
+                generate_cover = bool(run_form.cleaned_data.get("generate_cover"))
 
                 input_paths = [it.get("path") for it in items if it.get("path")]
+                display_names = [it.get("name", os.path.basename(it.get("path", ""))) for it in items if it.get("path")]
                 try:
                     result = build_join_pipeline(
                         input_paths=input_paths,
                         final_output_dir=outputs_dir,
                         preserve_parity=preserve_parity,
+                        generate_cover=generate_cover,
+                        display_names=display_names,
                     )
                 except Exception as e:
                     messages.error(request, f"Error uniendo PDFs: {e}")
@@ -152,7 +156,12 @@ def join_view(request):
                     "joinpdf/join_form.html",
                     {
                         "upload_form": upload_form,
-                        "run_form": JoinRunForm(initial={"preserve_parity": preserve_parity}),
+                        "run_form": JoinRunForm(
+                            initial={
+                                "preserve_parity": preserve_parity,
+                                "generate_cover": generate_cover,
+                            }
+                        ),
                         "items": items,
                         "result_download_url": download_url,
                     },

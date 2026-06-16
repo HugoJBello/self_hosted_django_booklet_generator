@@ -114,6 +114,21 @@
               </div>
             </div>
 
+            <div class="border rounded-4 p-3 mt-3">
+              <div class="form-check">
+                {{ run_form.generate_cover }}
+                <label class="form-check-label" for="{{ run_form.generate_cover.id_for_label }}">
+                  {{ run_form.generate_cover.label }}
+                </label>
+                <div class="form-text mt-2">
+                  La portada será la primera página e incluirá fecha, título, autor, fichero y número de páginas.
+                </div>
+                {% for e in run_form.generate_cover.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </div>
+            </div>
+
             <div class="d-flex gap-2 mt-4">
               <button class="btn btn-success" type="submit" {% if not items or items|length == 0 %}disabled{% endif %}>
                 Join PDF

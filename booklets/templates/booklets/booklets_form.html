@@ -92,6 +92,20 @@
                   </div>
                 </div>
               </div>
+
+              <div class="col-lg-3">
+                <div class="border rounded-4 p-3 h-100 d-flex align-items-center" id="generate-cover-wrapper">
+                  <div class="form-check">
+                    {{ form.generate_cover }}
+                    <label class="form-check-label" for="{{ form.generate_cover.id_for_label }}">
+                      {{ form.generate_cover.label }}
+                    </label>
+                    <div class="form-text mt-2">
+                      Solo para impresión unificada. La portada será la página 1 e incluirá fecha, título, autor, fichero y páginas.
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="mt-4">
@@ -190,6 +204,7 @@
       const list = document.getElementById("file-config-list");
       const template = document.getElementById("file-config-template");
       const preserveParityWrapper = document.getElementById("preserve-parity-wrapper");
+      const generateCoverWrapper = document.getElementById("generate-cover-wrapper");
       const modeInputs = Array.from(form.querySelectorAll('input[name="processing_mode"]'));
       let selectedItems = [];
 
@@ -305,6 +320,7 @@
       const refreshModeUI = () => {
         const currentMode = modeInputs.find((input) => input.checked)?.value || "separate";
         preserveParityWrapper.style.display = currentMode === "combined" ? "" : "none";
+        generateCoverWrapper.style.display = currentMode === "combined" ? "" : "none";
       };
 
       fileInput.addEventListener("change", (event) => {

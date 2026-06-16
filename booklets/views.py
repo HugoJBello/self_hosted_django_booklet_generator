@@ -78,6 +78,7 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "processing_mode": form.cleaned_data.get("processing_mode", "separate"),
             "max_pages_per_split": form.cleaned_data.get("max_pages_per_split", 40),
             "preserve_file_parity": form.cleaned_data.get("preserve_file_parity", True),
+            "generate_cover": form.cleaned_data.get("generate_cover", False),
         }
     )
 
@@ -98,6 +99,7 @@ def booklets_view(request):
         processing_mode = form.cleaned_data["processing_mode"]
         max_pages_per_split = form.cleaned_data["max_pages_per_split"]
         preserve_file_parity = bool(form.cleaned_data["preserve_file_parity"])
+        generate_cover = bool(form.cleaned_data["generate_cover"])
         outputs_dir = os.path.join(settings.MEDIA_ROOT, "booklets_outputs")
         _ensure_dir(outputs_dir)
 
@@ -114,6 +116,7 @@ def booklets_view(request):
                     max_pages_per_split=max_pages_per_split,
                     final_output_dir=outputs_dir,
                     preserve_file_parity=preserve_file_parity,
+                    generate_cover=generate_cover,
                 )
                 results.append(
                     {
@@ -129,6 +132,7 @@ def booklets_view(request):
                         max_pages_per_split=max_pages_per_split,
                         final_output_dir=outputs_dir,
                         preserve_file_parity=True,
+                        generate_cover=False,
                     )
                     results.append(
                         {

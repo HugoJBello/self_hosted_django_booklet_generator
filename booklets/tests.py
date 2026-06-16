@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .services import SourcePdfSpec, prepare_pages_for_specs
+from .services import SourcePdfSpec, build_booklets_pipeline, prepare_pages_for_specs
 
 
 def build_pdf_bytes(page_count: int) -> bytes:
@@ -138,3 +138,31 @@ class BookletsViewTests(TestCase):
         outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
         generated_files = [name for name in os.listdir(outputs_dir) if name.endswith(".pdf")]
         self.assertEqual(len(generated_files), 1)
+
+    def test_combined_mode_cover_keeps_booklet_sheet_parity(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        first_path = os.path.join(uploads_dir, "uno.pdf")
+        second_path = os.path.join(uploads_dir, "dos.pdf")
+        with open(first_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+        with open(second_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+
+        result = build_booklets_pipeline(
+            specs=[
+                SourcePdfSpec(first_path, same_page_parity=True, margin_cm=1.0, add_watermark=False),
+                SourcePdfSpec(second_path, same_page_parity=True, margin_cm=1.0, add_watermark=False),
+            ],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=True,
+        )
+
+        with fitz.open(result.output_pdf_path) as doc:
+            # 4 logical pages (cover, blank, first PDF, blank, second PDF => padded to 8)
+            # become 4 imposed booklet sheets.
+            self.assertEqual(doc.page_count, 4)
