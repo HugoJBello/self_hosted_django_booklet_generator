@@ -33,7 +33,7 @@ class MultipleFileField(forms.FileField):
 class BookletForm(forms.Form):
     input_pdf = MultipleFileField(
         label="Upload PDF(s)",
-        required=True,
+        required=False,
         help_text="Select or drag one or more PDFs. You can reorder and configure them before generating.",
         widget=MultiFileInput(attrs={"multiple": True}),
     )

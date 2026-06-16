@@ -108,6 +108,42 @@
               </div>
             </div>
 
+            <div class="d-flex gap-2 mt-4">
+              <button class="btn btn-primary" type="submit">Generate booklets</button>
+              <a class="btn btn-outline-secondary" href="{% url 'booklets:clear' %}">Clear all</a>
+            </div>
+
+            {% if results and results|length > 0 %}
+              <div class="mt-4">
+                <h2 class="h5 mb-3">Results</h2>
+
+                <div class="border rounded-4 overflow-hidden">
+                  <div class="table-responsive">
+                    <table class="table mb-0 align-middle">
+                      <thead class="table-light">
+                        <tr>
+                          <th scope="col">File</th>
+                          <th scope="col" style="width: 1%;">Download</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for r in results %}
+                          <tr>
+                            <td class="text-break">{{ r.original_name }}</td>
+                            <td class="text-nowrap">
+                              <a class="btn btn-sm btn-success" href="{{ r.download_url }}">Download</a>
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <p class="text-muted mt-2 mb-0">Adjust any setting below and generate again to replace these results.</p>
+              </div>
+            {% endif %}
+
             <div class="mt-4">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h2 class="h5 mb-0">File settings</h2>
@@ -115,6 +151,7 @@
               </div>
 
               <div id="file-config-list" class="d-grid gap-3"></div>
+              <div id="file-form-state"></div>
 
               <template id="file-config-template">
                 <div class="file-config-card p-3" draggable="true">
@@ -155,58 +192,26 @@
                 </div>
               </template>
             </div>
-
-            <div class="d-flex gap-2 mt-4">
-              <button class="btn btn-primary" type="submit">Generate booklets</button>
-            </div>
           </form>
         </div>
       </div>
-
-      {% if results and results|length > 0 %}
-        <h2 class="h5 mb-3">Results</h2>
-
-        <div class="card shadow-sm">
-          <div class="card-body p-0">
-            <div class="table-responsive">
-              <table class="table mb-0 align-middle">
-                <thead class="table-light">
-                  <tr>
-                    <th scope="col">File</th>
-                    <th scope="col" style="width: 1%;">Download</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for r in results %}
-                    <tr>
-                      <td class="text-break">{{ r.original_name }}</td>
-                      <td class="text-nowrap">
-                        <a class="btn btn-sm btn-success" href="{{ r.download_url }}">Download</a>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <p class="text-muted mt-2 mb-0">Generating again replaces this list with the new results.</p>
-      {% endif %}
     </div>
   </div>
 
+  {{ booklet_items|json_script:"booklet-items-data" }}
   <script>
     (() => {
       const form = document.getElementById("booklet-form");
       const fileInput = form.querySelector('input[type="file"][name="input_pdf"]');
       const dropzone = document.getElementById("upload-dropzone");
       const list = document.getElementById("file-config-list");
+      const formState = document.getElementById("file-form-state");
       const template = document.getElementById("file-config-template");
       const preserveParityWrapper = document.getElementById("preserve-parity-wrapper");
       const generateCoverWrapper = document.getElementById("generate-cover-wrapper");
       const modeInputs = Array.from(form.querySelectorAll('input[name="processing_mode"]'));
-      let selectedItems = [];
+      const initialItemsNode = document.getElementById("booklet-items-data");
+      let selectedItems = initialItemsNode ? JSON.parse(initialItemsNode.textContent) : [];
 
       const formatBytes = (bytes) => {
         if (!Number.isFinite(bytes)) return "";
@@ -217,17 +222,24 @@
 
       const syncInputFiles = () => {
         const transfer = new DataTransfer();
-        selectedItems.forEach((item) => transfer.items.add(item.file));
+        selectedItems.forEach((item) => {
+          if (item.file) {
+            transfer.items.add(item.file);
+          }
+        });
         fileInput.files = transfer.files;
       };
 
-      const rebuildHiddenInputs = (card, index) => {
+      const rebuildHiddenInputs = (card, item, index) => {
         const hidden = card.querySelector(".hidden-inputs");
         const parity = card.querySelector(".parity-select").value;
         const margin = card.querySelector(".margin-input").value || "1.0";
         const watermark = card.querySelector(".watermark-input").checked ? "true" : "false";
+        const newIndex = item.id ? "" : selectedItems.slice(0, index + 1).filter((candidate) => !candidate.id).length - 1;
 
         hidden.innerHTML = `
+          <input type="hidden" name="file_item_id_${index}" value="${item.id || ""}">
+          <input type="hidden" name="file_new_index_${index}" value="${newIndex}">
           <input type="hidden" name="file_same_page_parity_${index}" value="${parity}">
           <input type="hidden" name="file_margin_${index}" value="${margin}">
           <input type="hidden" name="file_add_watermark_${index}" value="${watermark}">
@@ -236,15 +248,17 @@
 
       const refreshCards = () => {
         list.innerHTML = "";
+        formState.innerHTML = `<input type="hidden" name="file_count" value="${selectedItems.length}">`;
 
         selectedItems.forEach((item, index) => {
           const fragment = template.content.cloneNode(true);
           const card = fragment.querySelector(".file-config-card");
           card.dataset.index = index;
 
-          const { file } = item;
-          card.querySelector(".file-name").textContent = `${index + 1}. ${file.name}`;
-          card.querySelector(".file-meta").textContent = formatBytes(file.size);
+          const fileName = item.file ? item.file.name : item.name;
+          const fileSize = item.file ? item.file.size : item.size;
+          card.querySelector(".file-name").textContent = `${index + 1}. ${fileName}`;
+          card.querySelector(".file-meta").textContent = item.id ? `${formatBytes(fileSize)} · uploaded` : formatBytes(fileSize);
           card.querySelector(".parity-select").value = item.parity;
           card.querySelector(".margin-input").value = item.margin;
           card.querySelector(".watermark-input").checked = item.watermark;
@@ -259,7 +273,7 @@
             item.parity = card.querySelector(".parity-select").value;
             item.margin = card.querySelector(".margin-input").value || "1.0";
             item.watermark = card.querySelector(".watermark-input").checked;
-            rebuildHiddenInputs(card, index);
+            rebuildHiddenInputs(card, item, index);
           };
 
           ["change", "input"].forEach((eventName) => {
@@ -295,7 +309,7 @@
             refreshCards();
           });
 
-          rebuildHiddenInputs(card, index);
+          rebuildHiddenInputs(card, item, index);
           list.appendChild(fragment);
         });
       };
@@ -308,6 +322,9 @@
         selectedItems = selectedItems.concat(
           pdfFiles.map((file) => ({
             file,
+            id: "",
+            name: file.name,
+            size: file.size,
             parity: "true",
             margin: "1.0",
             watermark: true,
@@ -356,6 +373,8 @@
         syncInputFiles();
       });
 
+      syncInputFiles();
+      refreshCards();
       refreshModeUI();
     })();
   </script>

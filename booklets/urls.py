@@ -6,6 +6,6 @@ app_name = "booklets"
 
 urlpatterns = [
     path("booklets/", views.booklets_view, name="form"),
+    path("booklets/clear/", views.clear_booklets, name="clear"),
     path("booklets/download/<str:job_id>/", views.download_booklets, name="download"),
 ]
-

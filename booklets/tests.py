@@ -139,6 +139,59 @@ class BookletsViewTests(TestCase):
         generated_files = [name for name in os.listdir(outputs_dir) if name.endswith(".pdf")]
         self.assertEqual(len(generated_files), 1)
 
+    def test_uploaded_files_persist_for_regeneration(self):
+        first_response = self.client.post(
+            reverse("booklets:form"),
+            data={
+                "input_pdf": [
+                    SimpleUploadedFile("uno.pdf", build_pdf_bytes(2), content_type="application/pdf"),
+                    SimpleUploadedFile("dos.pdf", build_pdf_bytes(3), content_type="application/pdf"),
+                ],
+                "processing_mode": "combined",
+                "max_pages_per_split": "40",
+                "preserve_file_parity": "on",
+                "file_same_page_parity_0": "true",
+                "file_margin_0": "1.0",
+                "file_add_watermark_0": "true",
+                "file_same_page_parity_1": "true",
+                "file_margin_1": "1.0",
+                "file_add_watermark_1": "true",
+            },
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        stored_items = self.client.session.get("booklets_items", [])
+        self.assertEqual([item["name"] for item in stored_items], ["uno.pdf", "dos.pdf"])
+        self.assertContains(first_response, "uno.pdf")
+        self.assertContains(first_response, "uploaded")
+
+        second_response = self.client.post(
+            reverse("booklets:form"),
+            data={
+                "processing_mode": "combined",
+                "max_pages_per_split": "20",
+                "preserve_file_parity": "on",
+                "file_count": "2",
+                "file_item_id_0": stored_items[1]["id"],
+                "file_new_index_0": "",
+                "file_same_page_parity_0": "true",
+                "file_margin_0": "1.5",
+                "file_add_watermark_0": "false",
+                "file_item_id_1": stored_items[0]["id"],
+                "file_new_index_1": "",
+                "file_same_page_parity_1": "false",
+                "file_margin_1": "2.0",
+                "file_add_watermark_1": "true",
+            },
+        )
+
+        self.assertEqual(second_response.status_code, 200)
+        updated_items = self.client.session.get("booklets_items", [])
+        self.assertEqual([item["name"] for item in updated_items], ["dos.pdf", "uno.pdf"])
+        self.assertEqual(updated_items[0]["margin_cm"], 1.5)
+        self.assertFalse(updated_items[0]["add_watermark"])
+        self.assertFalse(updated_items[1]["same_page_parity"])
+
     def test_combined_mode_cover_keeps_booklet_sheet_parity(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
         outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
