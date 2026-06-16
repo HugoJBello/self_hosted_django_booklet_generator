@@ -107,7 +107,8 @@ class JoinPdfViewTests(TestCase):
 
         with fitz.open(result.output_pdf_path) as doc:
             self.assertEqual(doc.page_count, 5)
-            self.assertIn("Indice", doc[0].get_text())
+            self.assertIn("Document index", doc[0].get_text())
+            self.assertIn("*", doc[0].get_text())
             self.assertEqual(doc[1].get_text().strip(), "")
             self.assertIn("Page 1", doc[2].get_text())
             self.assertEqual(doc[3].get_text().strip(), "")

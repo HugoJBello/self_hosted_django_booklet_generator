@@ -90,7 +90,7 @@ def build_join_pipeline(
                 output_path=cover_pdf_path,
                 entries=collect_cover_entries(input_paths, display_names=display_names),
                 generated_on=timezone.localdate(),
-                heading="Indice de documentos",
+                heading="Document index",
             )
 
         join_pdfs(

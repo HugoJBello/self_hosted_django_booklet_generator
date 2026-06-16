@@ -55,11 +55,21 @@ def _truncate(text: str, max_chars: int) -> str:
     return text[: max(0, max_chars - 1)].rstrip() + "..."
 
 
+def _add_bottom_right_mark(page: fitz.Page) -> None:
+    text = "*"
+    font_size = 12
+    margin = 18
+    text_width = fitz.get_text_length(text, fontname="helv", fontsize=font_size)
+    x = page.rect.width - text_width - margin
+    y = page.rect.height - margin
+    page.insert_text((x, y), text, fontsize=font_size, fontname="helv", color=(0, 0, 0))
+
+
 def create_cover_pdf(
     output_path: str,
     entries: list[CoverEntry],
     generated_on: date,
-    heading: str = "Indice de documentos",
+    heading: str = "Document index",
 ) -> None:
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)
@@ -69,7 +79,7 @@ def create_cover_pdf(
 
     page.insert_text((margin, y), heading, fontsize=22, fontname="helv", color=(0.08, 0.08, 0.08))
     y += 28
-    subtitle = f"Generado el {generated_on.strftime('%d/%m/%Y')} - {len(entries)} documento(s)"
+    subtitle = f"Generated on {generated_on.strftime('%Y-%m-%d')} - {len(entries)} document(s)"
     page.insert_text((margin, y), subtitle, fontsize=10.5, fontname="helv", color=(0.34, 0.34, 0.34))
     y += 34
 
@@ -77,7 +87,7 @@ def create_cover_pdf(
     y += 22
 
     if not entries:
-        page.insert_text((margin, y), "Sin documentos.", fontsize=11, fontname="helv")
+        page.insert_text((margin, y), "No documents.", fontsize=11, fontname="helv")
     else:
         row_height = 54
         if len(entries) > 11:
@@ -88,7 +98,7 @@ def create_cover_pdf(
                 remaining = len(entries) - idx + 1
                 page.insert_text(
                     (margin, y + 10),
-                    f"... y {remaining} documento(s) mas",
+                    f"... and {remaining} more document(s)",
                     fontsize=9,
                     fontname="helv",
                     color=(0.34, 0.34, 0.34),
@@ -109,8 +119,8 @@ def create_cover_pdf(
 
             details = [entry.filename]
             if entry.author:
-                details.append(f"Autor: {_truncate(entry.author, 34)}")
-            details.append(f"{entry.page_count} pagina(s)")
+                details.append(f"Author: {_truncate(entry.author, 34)}")
+            details.append(f"{entry.page_count} page(s)")
             details_text = " - ".join(details)
             if row_height >= 38:
                 page.insert_text(
@@ -125,6 +135,7 @@ def create_cover_pdf(
             if idx < len(entries):
                 page.draw_line((margin + 28, y - 8), (width - margin, y - 8), color=(0.9, 0.9, 0.9), width=0.5)
 
+    _add_bottom_right_mark(page)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     doc.save(output_path)
     doc.close()

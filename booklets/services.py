@@ -326,7 +326,7 @@ def build_booklets_pipeline(
                 output_path=cover_path,
                 entries=collect_cover_entries([spec.input_pdf_path for spec in specs]),
                 generated_on=timezone.localdate(),
-                heading="Indice de booklets",
+                heading="Booklet index",
             )
             specs_to_process.insert(
                 0,
