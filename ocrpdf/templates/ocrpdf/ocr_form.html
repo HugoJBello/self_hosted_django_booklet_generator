@@ -6,7 +6,7 @@
 {% block content %}
   <div class="row">
     <div class="col-lg-10 col-xl-9">
-      <h1 class="h3 mb-3">Generar PDF con OCR</h1>
+      <h1 class="h3 mb-3">Generate OCR PDF</h1>
 
       <div class="card shadow-sm mb-4">
         <div class="card-body">
@@ -52,14 +52,14 @@
             </div>
 
             <div class="d-flex gap-2 mt-4">
-              <button class="btn btn-primary" type="submit">Encolar OCR</button>
+              <button class="btn btn-primary" type="submit">Queue OCR</button>
             </div>
           </form>
         </div>
       </div>
 
       {% if jobs and jobs|length > 0 %}
-        <h2 class="h5 mb-3">Trabajos</h2>
+        <h2 class="h5 mb-3">Jobs</h2>
 
         <div class="card shadow-sm">
           <div class="card-body p-0">
@@ -67,9 +67,9 @@
               <table class="table mb-0 align-middle">
                 <thead class="table-light">
                   <tr>
-                    <th>Fichero</th>
-                    <th style="width: 1%;">Estado</th>
-                    <th style="width: 1%;">Descarga</th>
+                    <th>File</th>
+                    <th style="width: 1%;">Status</th>
+                    <th style="width: 1%;">Download</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -80,7 +80,7 @@
                         <span class="badge text-bg-secondary job-status">queued</span>
                       </td>
                       <td class="text-nowrap">
-                        <a class="btn btn-sm btn-success job-download d-none" href="{{ j.download_url }}">Descargar</a>
+                        <a class="btn btn-sm btn-success job-download d-none" href="{{ j.download_url }}">Download</a>
                         <span class="text-muted small job-wait">—</span>
                       </td>
                     </tr>
@@ -114,7 +114,7 @@
                 const btn = tr.querySelector(".job-download");
                 const wait = tr.querySelector(".job-wait");
 
-                // si ya está done/error, no molestamos
+                // Skip completed rows.
                 const current = badge.textContent;
                 if (current === "done" || current === "error") continue;
 
@@ -157,4 +157,3 @@
     </div>
   </div>
 {% endblock %}
-

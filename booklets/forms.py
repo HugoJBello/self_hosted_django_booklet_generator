@@ -6,24 +6,24 @@ from django import forms
 
 class MultiFileInput(forms.FileInput):
     """
-    Widget que permite seleccionar múltiples ficheros.
+    Widget that allows selecting multiple files.
     """
     allow_multiple_selected = True
 
 
 class MultipleFileField(forms.FileField):
     """
-    Campo que acepta uno o varios ficheros.
-    Devuelve siempre una lista de UploadedFile.
+    Field that accepts one or more files.
+    Always returns a list of UploadedFile objects.
     """
 
     def clean(self, data, initial=None):
-        # data puede ser UploadedFile o lista/tupla de UploadedFile
+        # data can be an UploadedFile or a list/tuple of UploadedFile objects.
         if data is None:
             return []
 
-        # OJO: en Python 3.11, super() sin args dentro de list comprehensions puede fallar.
-        # Por eso llamamos explícitamente al método base.
+        # In Python 3.11, no-arg super() can fail inside list comprehensions.
+        # Call the base method explicitly.
         if isinstance(data, (list, tuple)):
             return [forms.FileField.clean(self, d, initial) for d in data]
 
@@ -32,25 +32,25 @@ class MultipleFileField(forms.FileField):
 
 class BookletForm(forms.Form):
     input_pdf = MultipleFileField(
-        label="Subir PDF(s)",
+        label="Upload PDF(s)",
         required=True,
-        help_text="Selecciona o arrastra uno o varios PDFs. Después podrás reordenarlos y configurar cada uno.",
+        help_text="Select or drag one or more PDFs. You can reorder and configure them before generating.",
         widget=MultiFileInput(attrs={"multiple": True}),
     )
 
     processing_mode = forms.ChoiceField(
-        label="Modo de generación",
+        label="Generation mode",
         required=True,
         initial="separate",
         choices=[
-            ("separate", "Generar booklets y ficheros separados"),
-            ("combined", "Juntar booklets para una única impresión"),
+            ("separate", "Generate separate booklet files"),
+            ("combined", "Combine booklets into one print file"),
         ],
         widget=forms.RadioSelect,
     )
 
     max_pages_per_split = forms.IntegerField(
-        label="Máx. páginas por split",
+        label="Max pages per split",
         required=True,
         initial=40,
         min_value=1,
@@ -58,14 +58,14 @@ class BookletForm(forms.Form):
     )
 
     preserve_file_parity = forms.BooleanField(
-        label="Respetar la paridad de inicio de cada fichero al unificarlos",
+        label="Preserve each file's start parity",
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
     generate_cover = forms.BooleanField(
-        label="Generar portada con indice al juntar booklets",
+        label="Add cover index",
         required=False,
         initial=False,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),

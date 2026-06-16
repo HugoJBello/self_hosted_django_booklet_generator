@@ -83,7 +83,7 @@ class JoinPdfViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         items = self.client.session.get("joinpdf_items", [])
         self.assertEqual([item["name"] for item in items], ["dos.pdf", "uno.pdf"])
-        self.assertContains(response, "Descargar resultado")
+        self.assertContains(response, "Download result")
 
     def test_join_cover_is_first_page_and_preserves_odd_starts(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "join_uploads")

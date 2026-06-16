@@ -38,7 +38,7 @@
 
   <div class="row">
     <div class="col-xl-10">
-      <h1 class="h3 mb-3">Unir PDFs</h1>
+      <h1 class="h3 mb-3">Join PDFs</h1>
 
       <div class="card shadow-sm mb-4">
         <div class="card-body">
@@ -49,7 +49,7 @@
             <div class="mb-4">
               <label class="form-label">{{ upload_form.input_pdf.label }}</label>
               <div class="upload-dropzone" id="upload-dropzone">
-                <p class="fw-semibold mb-1">Arrastra aquí tus PDFs o haz clic para elegirlos</p>
+                <p class="fw-semibold mb-1">Drop PDFs here or click to choose files</p>
                 <p class="text-muted mb-3 small">{{ upload_form.input_pdf.help_text }}</p>
                 {{ upload_form.input_pdf }}
               </div>
@@ -59,8 +59,8 @@
             </div>
 
             <div class="d-flex gap-2">
-              <button class="btn btn-primary" type="submit">Añadir a la lista</button>
-              <a class="btn btn-outline-secondary" href="{% url 'joinpdf:clear' %}">Limpiar lista</a>
+              <button class="btn btn-primary" type="submit">Add to list</button>
+              <a class="btn btn-outline-secondary" href="{% url 'joinpdf:clear' %}">Clear list</a>
             </div>
           </form>
         </div>
@@ -71,8 +71,8 @@
         <input type="hidden" name="action" value="join">
 
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <h2 class="h5 mb-0">Lista de PDFs</h2>
-          <span class="text-muted small">Arrastra las tarjetas para reordenar</span>
+          <h2 class="h5 mb-0">PDF list</h2>
+          <span class="text-muted small">Drag cards to reorder</span>
         </div>
 
         <div id="join-items-list" class="d-grid gap-3 mb-4">
@@ -82,18 +82,18 @@
                 <input type="hidden" name="item_order" value="{{ forloop.counter0 }}">
                 <div class="d-flex justify-content-between align-items-start gap-3">
                   <div class="d-flex align-items-start gap-3">
-                    <span class="drag-handle" title="Arrastrar para reordenar">↕</span>
+                    <span class="drag-handle" title="Drag to reorder">↕</span>
                     <div>
                       <div class="fw-semibold">{{ forloop.counter }}. {{ it.name }}</div>
-                      <div class="text-muted small">Posición actual de unión</div>
+                      <div class="text-muted small">Current join position</div>
                     </div>
                   </div>
-                  <a class="btn btn-sm btn-outline-danger" href="{% url 'joinpdf:remove' forloop.counter0 %}">Quitar</a>
+                  <a class="btn btn-sm btn-outline-danger" href="{% url 'joinpdf:remove' forloop.counter0 %}">Remove</a>
                 </div>
               </div>
             {% endfor %}
           {% else %}
-            <div class="file-config-card p-4 text-muted">No hay PDFs aún. Añade uno o varios arriba.</div>
+            <div class="file-config-card p-4 text-muted">No PDFs yet. Add one or more above.</div>
           {% endif %}
         </div>
 
@@ -106,7 +106,7 @@
                   {{ run_form.preserve_parity.label }}
                 </label>
                 <div class="form-text mt-2">
-                  Si está activado, se inserta una página en blanco entre PDFs cuando haga falta para que cada nuevo PDF empiece en página impar.
+                  Adds a blank page between PDFs when needed so each new PDF starts on an odd page.
                 </div>
                 {% for e in run_form.preserve_parity.errors %}
                   <div class="text-danger small">{{ e }}</div>
@@ -121,7 +121,7 @@
                   {{ run_form.generate_cover.label }}
                 </label>
                 <div class="form-text mt-2">
-                  La portada será la primera página e incluirá fecha, título, autor, fichero y número de páginas.
+                  The cover becomes the first page and lists date, title, author, file, and page count.
                 </div>
                 {% for e in run_form.generate_cover.errors %}
                   <div class="text-danger small">{{ e }}</div>
@@ -134,7 +134,7 @@
                 Join PDF
               </button>
               {% if result_download_url %}
-                <a class="btn btn-primary" href="{{ result_download_url }}">Descargar resultado</a>
+                <a class="btn btn-primary" href="{{ result_download_url }}">Download result</a>
               {% endif %}
             </div>
           </div>
@@ -142,7 +142,7 @@
       </form>
 
       <p class="text-muted mt-3 mb-0">
-        Consejo: puedes subir PDFs en varias tandas; la lista se mantiene hasta que la limpies.
+        Tip: you can upload PDFs in several batches; the list stays until you clear it.
       </p>
     </div>
   </div>

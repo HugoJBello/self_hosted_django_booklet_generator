@@ -18,8 +18,8 @@ def _require_ocrmypdf() -> str:
     exe = shutil.which("ocrmypdf")
     if not exe:
         raise RuntimeError(
-            "No se encuentra 'ocrmypdf' en el sistema. "
-            "Instálalo (p.ej. 'apt install ocrmypdf' o via pip/venv) y asegúrate de que está en PATH."
+            "'ocrmypdf' was not found on the system. "
+            "Install it (for example, 'apt install ocrmypdf' or via pip/venv) and make sure it is in PATH."
         )
     return exe
 
@@ -35,14 +35,12 @@ def run_ocrmypdf(
 ) -> None:
     exe = _require_ocrmypdf()
 
-    # Construimos comando seguro
     cmd = [
         exe,
         "--output-type", "pdf",
         "--optimize", str(int(optimize)),
     ]
 
-    # Idioma (si viene vacío, no lo pasamos)
     lang = (language or "").strip()
     if lang:
         cmd += ["-l", lang]
@@ -56,14 +54,10 @@ def run_ocrmypdf(
     if force_ocr:
         cmd.append("--force-ocr")
     else:
-        # Por defecto, ocrmypdf suele saltarse páginas con texto, lo cual es deseable
-        # (no añadimos nada)
         pass
 
-    # input / output
     cmd += [input_pdf_path, output_pdf_path]
 
-    # Ejecutar
     proc = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
@@ -71,9 +65,8 @@ def run_ocrmypdf(
         text=True,
     )
     if proc.returncode != 0:
-        # devolvemos el error útil
         err = (proc.stderr or proc.stdout or "").strip()
-        raise RuntimeError(f"OCR falló (code={proc.returncode}). Detalle: {err[:2000]}")
+        raise RuntimeError(f"OCR failed (code={proc.returncode}). Details: {err[:2000]}")
 
 
 def build_ocr_pipeline(
@@ -101,4 +94,3 @@ def build_ocr_pipeline(
     )
 
     return OcrJobResult(job_id=job_id, output_pdf_path=final_pdf)
-

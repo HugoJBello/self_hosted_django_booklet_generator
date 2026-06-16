@@ -50,10 +50,10 @@ def _build_specs(files, request) -> list[SourcePdfSpec]:
         try:
             margin_cm = float(margin_raw)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Margen inválido para '{uploaded_file.name}'.") from exc
+            raise ValueError(f"Invalid margin for '{uploaded_file.name}'.") from exc
 
         if margin_cm < 0:
-            raise ValueError(f"El margen no puede ser negativo en '{uploaded_file.name}'.")
+            raise ValueError(f"Margin cannot be negative for '{uploaded_file.name}'.")
 
         upload_path = _unique_path(uploads_dir, uploaded_file.name)
         with open(upload_path, "wb") as out:
@@ -93,7 +93,7 @@ def booklets_view(request):
 
         files = form.cleaned_data.get("input_pdf") or request.FILES.getlist("input_pdf")
         if not files:
-            messages.error(request, "No se recibió ningún fichero.")
+            messages.error(request, "No file was received.")
             return render(request, "booklets/booklets_form.html", {"form": form, "results": []})
 
         processing_mode = form.cleaned_data["processing_mode"]
@@ -120,11 +120,11 @@ def booklets_view(request):
                 )
                 results.append(
                     {
-                        "original_name": "Impresión unificada",
+                        "original_name": "Combined print file",
                         "download_url": reverse("booklets:download", kwargs={"job_id": result.job_id}),
                     }
                 )
-                messages.success(request, "Booklet unificado generado correctamente.")
+                messages.success(request, "Combined booklet generated successfully.")
             else:
                 for uploaded_file, spec in zip(files, specs):
                     result = build_booklets_pipeline(
@@ -140,9 +140,9 @@ def booklets_view(request):
                             "download_url": reverse("booklets:download", kwargs={"job_id": result.job_id}),
                         }
                     )
-                messages.success(request, f"Booklets generados para {len(results)} fichero(s).")
+                messages.success(request, f"Generated booklets for {len(results)} file(s).")
         except Exception as exc:
-            messages.error(request, f"Error generando booklets: {exc}")
+            messages.error(request, f"Error generating booklets: {exc}")
 
         return render(
             request,
@@ -161,7 +161,7 @@ def download_booklets(request, job_id: str):
     pdf_path = os.path.join(outputs_dir, f"{job_id}_booklets_for_printing.pdf")
 
     if not os.path.isfile(pdf_path):
-        raise Http404("Archivo no encontrado")
+        raise Http404("File not found")
 
     return FileResponse(
         open(pdf_path, "rb"),

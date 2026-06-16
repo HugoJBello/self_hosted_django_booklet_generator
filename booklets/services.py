@@ -134,7 +134,7 @@ def prepare_pages_for_specs(
     for spec in specs:
         with fitz.open(spec.input_pdf_path) as doc:
             if len(doc) == 0:
-                raise ValueError(f"PDF vacío: {os.path.basename(spec.input_pdf_path)}")
+                raise ValueError(f"Empty PDF: {os.path.basename(spec.input_pdf_path)}")
 
             first_page = doc[0]
             desired_is_odd = spec.same_page_parity
@@ -312,7 +312,7 @@ def build_booklets_pipeline(
     generate_cover: bool = False,
 ) -> BookletJobResult:
     if not specs:
-        raise ValueError("No hay PDFs para procesar.")
+        raise ValueError("There are no PDFs to process.")
 
     job_id = uuid.uuid4().hex
     os.makedirs(final_output_dir, exist_ok=True)

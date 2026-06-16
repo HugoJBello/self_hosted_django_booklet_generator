@@ -133,7 +133,7 @@ class BookletsViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Impresión unificada")
+        self.assertContains(response, "Combined print file")
 
         outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
         generated_files = [name for name in os.listdir(outputs_dir) if name.endswith(".pdf")]

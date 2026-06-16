@@ -6,24 +6,24 @@ from django import forms
 
 class MultiFileInput(forms.FileInput):
     """
-    Widget que permite seleccionar múltiples ficheros.
+    Widget that allows selecting multiple files.
     """
     allow_multiple_selected = True
 
 
 class MultipleFileField(forms.FileField):
     """
-    Campo que acepta uno o varios ficheros.
-    Devuelve siempre una lista de UploadedFile.
+    Field that accepts one or more files.
+    Always returns a list of UploadedFile objects.
     """
 
     def clean(self, data, initial=None):
-        # data puede ser UploadedFile o lista/tupla de UploadedFile
+        # data can be an UploadedFile or a list/tuple of UploadedFile objects.
         if data is None:
             return []
 
-        # OJO: en Python 3.11, super() sin args dentro de list comprehensions puede fallar.
-        # Por eso llamamos explícitamente al método base.
+        # In Python 3.11, no-arg super() can fail inside list comprehensions.
+        # Call the base method explicitly.
         if isinstance(data, (list, tuple)):
             return [forms.FileField.clean(self, d, initial) for d in data]
 
@@ -32,49 +32,49 @@ class MultipleFileField(forms.FileField):
 
 class OcrPdfForm(forms.Form):
     input_pdf = MultipleFileField(
-        label="Subir PDF(s)",
+        label="Upload PDF(s)",
         required=True,
-        help_text="Selecciona uno o varios PDFs (Ctrl/Shift) para procesar.",
+        help_text="Select one or more PDFs (Ctrl/Shift) to process.",
         widget=MultiFileInput(attrs={"multiple": True}),
     )
 
     language = forms.CharField(
-        label="Idioma OCR (tesseract)",
+        label="OCR language (Tesseract)",
         required=False,
         initial="spa",
-        help_text="Ej: spa, eng, spa+eng",
+        help_text="Examples: spa, eng, spa+eng",
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
 
     optimize = forms.ChoiceField(
-        label="Optimización",
+        label="Optimization",
         required=True,
         initial="2",
         choices=[
-            ("0", "0 – sin optimizar"),
-            ("1", "1 – ligera"),
-            ("2", "2 – media"),
-            ("3", "3 – máxima"),
+            ("0", "0 - none"),
+            ("1", "1 - light"),
+            ("2", "2 - medium"),
+            ("3", "3 - maximum"),
         ],
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 
     deskew = forms.BooleanField(
-        label="Enderezar páginas (deskew)",
+        label="Deskew pages",
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
     rotate_pages = forms.BooleanField(
-        label="Auto-rotación de páginas",
+        label="Auto-rotate pages",
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
     force_ocr = forms.BooleanField(
-        label="Forzar OCR aunque el PDF ya tenga texto",
+        label="Force OCR even if the PDF already has text",
         required=False,
         initial=False,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
@@ -82,6 +82,4 @@ class OcrPdfForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Igual que en BookletForm
         self.fields["input_pdf"].widget.attrs.update({"class": "form-control"})
-

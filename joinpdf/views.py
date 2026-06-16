@@ -76,11 +76,11 @@ def join_view(request):
         action = request.POST.get("action", "").strip()
 
         # -------------------------
-        # ACTION: UPLOAD (acumular)
+        # ACTION: UPLOAD (append)
         # -------------------------
         if action == "upload":
             upload_form = JoinUploadForm(request.POST, request.FILES)
-            run_form = JoinRunForm()  # vacío
+            run_form = JoinRunForm()
 
             if upload_form.is_valid():
                 files = upload_form.cleaned_data.get("input_pdf") or []
@@ -89,7 +89,7 @@ def join_view(request):
                     files = request.FILES.getlist("input_pdf")
 
                 if not files:
-                    messages.error(request, "No se recibió ningún fichero.")
+                    messages.error(request, "No file was received.")
                     return render(
                         request,
                         "joinpdf/join_form.html",
@@ -107,7 +107,7 @@ def join_view(request):
                     added += 1
 
                 _save_items(request, items)
-                messages.success(request, f"Añadido(s) {added} PDF(s) a la lista.")
+                messages.success(request, f"Added {added} PDF(s) to the list.")
                 return redirect("joinpdf:form")
 
             return render(
@@ -121,10 +121,10 @@ def join_view(request):
         # -------------------------
         if action == "join":
             run_form = JoinRunForm(request.POST)
-            upload_form = JoinUploadForm()  # vacío
+            upload_form = JoinUploadForm()
 
             if not items:
-                messages.error(request, "La lista está vacía. Sube algún PDF primero.")
+                messages.error(request, "The list is empty. Upload at least one PDF first.")
                 return redirect("joinpdf:form")
 
             if run_form.is_valid():
@@ -144,11 +144,11 @@ def join_view(request):
                         display_names=display_names,
                     )
                 except Exception as e:
-                    messages.error(request, f"Error uniendo PDFs: {e}")
+                    messages.error(request, f"Error joining PDFs: {e}")
                     return redirect("joinpdf:form")
 
-                # dejamos la lista intacta (por si el usuario quiere re-join con otra opción)
-                messages.success(request, "PDF unido generado correctamente.")
+                # Keep the list intact in case the user wants to join again with different options.
+                messages.success(request, "Joined PDF generated successfully.")
                 download_url = reverse("joinpdf:download", kwargs={"job_id": result.job_id})
 
                 return render(
@@ -173,7 +173,7 @@ def join_view(request):
                 {"upload_form": upload_form, "run_form": run_form, "items": items},
             )
 
-        messages.error(request, "Acción no reconocida.")
+        messages.error(request, "Unknown action.")
         return redirect("joinpdf:form")
 
     return render(
@@ -188,15 +188,15 @@ def join_remove(request, idx: int):
     if 0 <= idx < len(items):
         removed = items.pop(idx)
         _save_items(request, items)
-        messages.success(request, f"Eliminado: {removed.get('name','(sin nombre)')}")
+        messages.success(request, f"Removed: {removed.get('name','(unnamed)')}")
     else:
-        messages.error(request, "Índice inválido.")
+        messages.error(request, "Invalid index.")
     return redirect("joinpdf:form")
 
 
 def join_clear(request):
     _save_items(request, [])
-    messages.success(request, "Lista limpiada.")
+    messages.success(request, "List cleared.")
     return redirect("joinpdf:form")
 
 
@@ -205,7 +205,7 @@ def join_download(request, job_id: str):
     pdf_path = os.path.join(outputs_dir, f"{job_id}_joined.pdf")
 
     if not os.path.isfile(pdf_path):
-        raise Http404("Archivo no encontrado")
+        raise Http404("File not found")
 
     return FileResponse(
         open(pdf_path, "rb"),

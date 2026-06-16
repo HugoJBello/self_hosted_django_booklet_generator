@@ -19,9 +19,9 @@ class MultipleFileField(forms.FileField):
 
 class JoinUploadForm(forms.Form):
     input_pdf = MultipleFileField(
-        label="Subir PDF(s)",
-        required=False,  # aquí permitimos POST de Join sin archivos
-        help_text="Selecciona o arrastra uno o varios PDFs. Se irán acumulando en la lista.",
+        label="Upload PDF(s)",
+        required=False,
+        help_text="Select or drag one or more PDFs. They will be added to the current list.",
         widget=MultiFileInput(attrs={"multiple": True}),
     )
 
@@ -37,14 +37,14 @@ class JoinUploadForm(forms.Form):
 
 class JoinRunForm(forms.Form):
     preserve_parity = forms.BooleanField(
-        label="Preservar paridad para impresión (capítulos empiezan en impar)",
+        label="Preserve print parity (sections start on odd pages)",
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
     generate_cover = forms.BooleanField(
-        label="Generar portada con indice",
+        label="Add cover index",
         required=False,
         initial=False,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),

@@ -38,7 +38,7 @@
 
   <div class="row">
     <div class="col-xl-10">
-      <h1 class="h3 mb-3">Generar booklets</h1>
+      <h1 class="h3 mb-3">Generate booklets</h1>
 
       <div class="card shadow-sm mb-4">
         <div class="card-body">
@@ -48,7 +48,7 @@
             <div class="mb-4">
               <label class="form-label">{{ form.input_pdf.label }}</label>
               <div class="upload-dropzone" id="upload-dropzone">
-                <p class="fw-semibold mb-1">Arrastra aquí tus PDFs o haz clic para elegirlos</p>
+                <p class="fw-semibold mb-1">Drop PDFs here or click to choose files</p>
                 <p class="text-muted mb-3 small">{{ form.input_pdf.help_text }}</p>
                 {{ form.input_pdf }}
               </div>
@@ -58,7 +58,7 @@
             </div>
 
             <div class="row g-4">
-              <div class="col-lg-6">
+              <div class="col-lg-6 col-xl-4">
                 <label class="form-label d-block">{{ form.processing_mode.label }}</label>
                 <div class="border rounded-4 p-3 bg-light">
                   {% for radio in form.processing_mode %}
@@ -70,16 +70,16 @@
                 </div>
               </div>
 
-              <div class="col-lg-3">
+              <div class="col-lg-6 col-xl-2">
                 <label class="form-label">{{ form.max_pages_per_split.label }}</label>
                 {{ form.max_pages_per_split }}
-                <div class="form-text">Este valor sigue siendo común para todos los ficheros.</div>
+                <div class="form-text">Shared by every file.</div>
                 {% for e in form.max_pages_per_split.errors %}
                   <div class="text-danger small">{{ e }}</div>
                 {% endfor %}
               </div>
 
-              <div class="col-lg-3">
+              <div class="col-lg-6 col-xl-3">
                 <div class="border rounded-4 p-3 h-100 d-flex align-items-center" id="preserve-parity-wrapper">
                   <div class="form-check">
                     {{ form.preserve_file_parity }}
@@ -87,13 +87,13 @@
                       {{ form.preserve_file_parity.label }}
                     </label>
                     <div class="form-text mt-2">
-                      Si está activo, el sistema añadirá páginas en blanco cuando haga falta para respetar la paridad de inicio de cada PDF.
+                      Adds blank pages when needed so each PDF keeps its configured start side.
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div class="col-lg-3">
+              <div class="col-lg-6 col-xl-3">
                 <div class="border rounded-4 p-3 h-100 d-flex align-items-center" id="generate-cover-wrapper">
                   <div class="form-check">
                     {{ form.generate_cover }}
@@ -101,7 +101,7 @@
                       {{ form.generate_cover.label }}
                     </label>
                     <div class="form-text mt-2">
-                      Solo para impresión unificada. La portada será la página 1 e incluirá fecha, título, autor, fichero y páginas.
+                      Combined mode only. The cover becomes page 1 and lists date, title, author, file, and page count.
                     </div>
                   </div>
                 </div>
@@ -110,8 +110,8 @@
 
             <div class="mt-4">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <h2 class="h5 mb-0">Configuración por fichero</h2>
-                <span class="text-muted small">Arrastra las tarjetas para reordenar</span>
+                <h2 class="h5 mb-0">File settings</h2>
+                <span class="text-muted small">Drag cards to reorder</span>
               </div>
 
               <div id="file-config-list" class="d-grid gap-3"></div>
@@ -120,33 +120,33 @@
                 <div class="file-config-card p-3" draggable="true">
                   <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                     <div class="d-flex align-items-start gap-3">
-                      <span class="drag-handle" title="Arrastrar para reordenar">↕</span>
+                      <span class="drag-handle" title="Drag to reorder">↕</span>
                       <div>
                         <div class="fw-semibold file-name"></div>
                         <div class="text-muted small file-meta"></div>
                       </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger remove-file">Quitar</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-file">Remove</button>
                   </div>
 
                   <div class="row g-3">
                     <div class="col-md-4">
-                      <label class="form-label">Paridad de inicio</label>
+                      <label class="form-label">Start parity</label>
                       <select class="form-select parity-select">
-                        <option value="true">Página 1 cae en lado derecho (impar)</option>
-                        <option value="false">Añadir blanco al inicio para que caiga en lado izquierdo</option>
+                        <option value="true">Page 1 starts on the right side (odd)</option>
+                        <option value="false">Add a leading blank so it starts on the left side</option>
                       </select>
                     </div>
 
                     <div class="col-md-4">
-                      <label class="form-label">Margen externo (cm)</label>
+                      <label class="form-label">Outer margin (cm)</label>
                       <input type="number" class="form-control margin-input" min="0" step="0.1" value="1.0">
                     </div>
 
                     <div class="col-md-4 d-flex align-items-end">
                       <div class="form-check mb-2">
                         <input type="checkbox" class="form-check-input watermark-input" checked>
-                        <label class="form-check-label">Añadir marca de agua (*)</label>
+                        <label class="form-check-label">Add watermark (*)</label>
                       </div>
                     </div>
                   </div>
@@ -157,14 +157,14 @@
             </div>
 
             <div class="d-flex gap-2 mt-4">
-              <button class="btn btn-primary" type="submit">Generar booklets</button>
+              <button class="btn btn-primary" type="submit">Generate booklets</button>
             </div>
           </form>
         </div>
       </div>
 
       {% if results and results|length > 0 %}
-        <h2 class="h5 mb-3">Resultados</h2>
+        <h2 class="h5 mb-3">Results</h2>
 
         <div class="card shadow-sm">
           <div class="card-body p-0">
@@ -172,8 +172,8 @@
               <table class="table mb-0 align-middle">
                 <thead class="table-light">
                   <tr>
-                    <th scope="col">Fichero</th>
-                    <th scope="col" style="width: 1%;">Descarga</th>
+                    <th scope="col">File</th>
+                    <th scope="col" style="width: 1%;">Download</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,7 +181,7 @@
                     <tr>
                       <td class="text-break">{{ r.original_name }}</td>
                       <td class="text-nowrap">
-                        <a class="btn btn-sm btn-success" href="{{ r.download_url }}">Descargar</a>
+                        <a class="btn btn-sm btn-success" href="{{ r.download_url }}">Download</a>
                       </td>
                     </tr>
                   {% endfor %}
@@ -191,7 +191,7 @@
           </div>
         </div>
 
-        <p class="text-muted mt-2 mb-0">Al generar de nuevo, esta lista se reemplaza por los nuevos resultados.</p>
+        <p class="text-muted mt-2 mb-0">Generating again replaces this list with the new results.</p>
       {% endif %}
     </div>
   </div>

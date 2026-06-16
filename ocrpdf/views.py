@@ -53,7 +53,7 @@ def ocr_view(request):
                 files = request.FILES.getlist("input_pdf")
 
             if not files:
-                messages.error(request, "No se recibió ningún fichero (revisa enctype multipart).")
+                messages.error(request, "No file was received. Check that the form uses multipart encoding.")
                 return render(request, "ocrpdf/ocr_form.html", {"form": form, "jobs": []})
 
             q = django_rq.get_queue("default")
@@ -76,7 +76,6 @@ def ocr_view(request):
                     force_ocr=force_ocr,
                 )
 
-                # Encolar background
                 q.enqueue(run_ocr_job, job_id)
 
                 created_jobs.append(
@@ -88,7 +87,7 @@ def ocr_view(request):
                     }
                 )
 
-            messages.success(request, f"Se han encolado {len(created_jobs)} OCR(s). Puedes dejar esta página abierta.")
+            messages.success(request, f"Queued {len(created_jobs)} OCR job(s). You can leave this page open.")
             return render(
                 request,
                 "ocrpdf/ocr_form.html",
@@ -128,10 +127,10 @@ def ocr_status(request, job_id: str):
 def download_ocr(request, job_id: str):
     job = OcrJob.objects.filter(job_id=job_id).first()
     if job is None:
-        raise Http404("Job no encontrado")
+        raise Http404("Job not found")
 
     if job.status != "done" or not job.output_path or not os.path.isfile(job.output_path):
-        raise Http404("Archivo no disponible todavía")
+        raise Http404("File is not available yet")
 
     return FileResponse(
         open(job.output_path, "rb"),
@@ -139,4 +138,3 @@ def download_ocr(request, job_id: str):
         filename=os.path.basename(job.output_path),
         content_type="application/pdf",
     )
-

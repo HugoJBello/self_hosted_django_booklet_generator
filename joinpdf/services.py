@@ -29,15 +29,14 @@ def join_pdfs(
     cover_pdf_path: str | None = None,
 ) -> None:
     """
-    Une PDFs en el orden dado.
+    Joins PDFs in the given order.
 
     preserve_parity=True:
-      antes de insertar cada PDF (a partir del segundo), si el documento de salida
-      tiene un número de páginas impar (1-based), se añade una página en blanco
-      para que el siguiente PDF empiece en página impar.
+      before inserting each PDF, if the output document has an odd page count,
+      a blank page is added so the next PDF starts on an odd page.
     """
     if not input_paths:
-        raise ValueError("No hay PDFs para unir")
+        raise ValueError("There are no PDFs to join")
 
     out = fitz.open()
 
@@ -48,15 +47,14 @@ def join_pdfs(
 
     for i, p in enumerate(input_paths):
         if not os.path.isfile(p):
-            raise FileNotFoundError(f"No existe: {p}")
+            raise FileNotFoundError(f"File does not exist: {p}")
 
         with fitz.open(p) as d:
             if d.page_count == 0:
                 continue
 
-            # Si queremos que cada PDF "capítulo" empiece en impar (1-based):
-            # el siguiente empieza en page_count(out)+1
-            # si out.page_count es impar -> next page es par -> añadimos blanco
+            # If each section should start on an odd page, add a blank when the
+            # current output page count would make the next page even.
             if preserve_parity and out.page_count > 0 and (out.page_count % 2 == 1):
                 _add_blank_page(out, d[0])
 
@@ -64,7 +62,7 @@ def join_pdfs(
 
     if out.page_count == 0:
         out.close()
-        raise ValueError("Resultado vacío (todos los PDFs estaban vacíos)")
+        raise ValueError("Empty result (all PDFs were empty)")
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     out.save(output_path)
