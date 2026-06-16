@@ -55,14 +55,19 @@ def _truncate(text: str, max_chars: int) -> str:
     return text[: max(0, max_chars - 1)].rstrip() + "..."
 
 
-def _add_bottom_right_mark(page: fitz.Page) -> None:
+def _add_corner_marks(page: fitz.Page) -> None:
     text = "*"
     font_size = 12
     margin = 18
     text_width = fitz.get_text_length(text, fontname="helv", fontsize=font_size)
-    x = page.rect.width - text_width - margin
-    y = page.rect.height - margin
-    page.insert_text((x, y), text, fontsize=font_size, fontname="helv", color=(0, 0, 0))
+    positions = [
+        (margin, margin + font_size),
+        (page.rect.width - text_width - margin, margin + font_size),
+        (margin, page.rect.height - margin),
+        (page.rect.width - text_width - margin, page.rect.height - margin),
+    ]
+    for x, y in positions:
+        page.insert_text((x, y), text, fontsize=font_size, fontname="helv", color=(0, 0, 0))
 
 
 def create_cover_pdf(
@@ -135,7 +140,7 @@ def create_cover_pdf(
             if idx < len(entries):
                 page.draw_line((margin + 28, y - 8), (width - margin, y - 8), color=(0.9, 0.9, 0.9), width=0.5)
 
-    _add_bottom_right_mark(page)
+    _add_corner_marks(page)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     doc.save(output_path)
     doc.close()
