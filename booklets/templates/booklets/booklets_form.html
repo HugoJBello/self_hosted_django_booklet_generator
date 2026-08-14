@@ -80,6 +80,28 @@
               </div>
 
               <div class="col-lg-6 col-xl-3">
+                <div class="border rounded-4 p-3 h-100">
+                  <div class="form-check mb-3">
+                    {{ form.flipped_a4 }}
+                    <label class="form-check-label" for="{{ form.flipped_a4.id_for_label }}">{{ form.flipped_a4.label }}</label>
+                    <div class="form-text mt-2">
+                      Splits each A4 page into top and bottom halves and imposes those halves for short-edge duplex printing.
+                    </div>
+                  </div>
+                  <label class="form-label small mb-1" for="{{ form.flipped_a4_quality.id_for_label }}">
+                    {{ form.flipped_a4_quality.label }}
+                  </label>
+                  {{ form.flipped_a4_quality }}
+                  <div class="form-text mt-2">
+                    Low is the current balanced rendering. High improves text clarity while aiming to keep typical outputs under 10 MB.
+                  </div>
+                  {% for e in form.flipped_a4_quality.errors %}
+                    <div class="text-danger small">{{ e }}</div>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <div class="col-lg-6 col-xl-3">
                 <div class="border rounded-4 p-3 h-100 d-flex align-items-center" id="preserve-parity-wrapper">
                   <div class="form-check">
                     {{ form.preserve_file_parity }}

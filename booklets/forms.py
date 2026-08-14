@@ -71,6 +71,24 @@ class BookletForm(forms.Form):
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
+    flipped_a4 = forms.BooleanField(
+        label="Flipped A4",
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
+    flipped_a4_quality = forms.ChoiceField(
+        label="Rendering quality",
+        required=False,
+        initial="low",
+        choices=[
+            ("low", "Low"),
+            ("high", "High"),
+        ],
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["input_pdf"].widget.attrs.update(
@@ -79,3 +97,6 @@ class BookletForm(forms.Form):
                 "accept": "application/pdf,.pdf",
             }
         )
+
+    def clean_flipped_a4_quality(self):
+        return self.cleaned_data.get("flipped_a4_quality") or "low"

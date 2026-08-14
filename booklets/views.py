@@ -11,6 +11,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from .forms import BookletForm
+from .flipped_a4 import build_flipped_a4_booklets_pipeline
 from .services import SourcePdfSpec, build_booklets_pipeline
 
 SESSION_KEY = "booklets_items"
@@ -172,6 +173,8 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "max_pages_per_split": form.cleaned_data.get("max_pages_per_split", 40),
             "preserve_file_parity": form.cleaned_data.get("preserve_file_parity", True),
             "generate_cover": form.cleaned_data.get("generate_cover", False),
+            "flipped_a4": form.cleaned_data.get("flipped_a4", False),
+            "flipped_a4_quality": form.cleaned_data.get("flipped_a4_quality", "low"),
         }
     )
 
@@ -194,6 +197,8 @@ def booklets_view(request):
         max_pages_per_split = form.cleaned_data["max_pages_per_split"]
         preserve_file_parity = bool(form.cleaned_data["preserve_file_parity"])
         generate_cover = bool(form.cleaned_data["generate_cover"])
+        flipped_a4 = bool(form.cleaned_data["flipped_a4"])
+        flipped_a4_quality = form.cleaned_data["flipped_a4_quality"]
         outputs_dir = os.path.join(settings.MEDIA_ROOT, "booklets_outputs")
         _ensure_dir(outputs_dir)
 
@@ -217,14 +222,18 @@ def booklets_view(request):
             )
 
         try:
+            pipeline = build_flipped_a4_booklets_pipeline if flipped_a4 else build_booklets_pipeline
             if processing_mode == "combined":
-                result = build_booklets_pipeline(
-                    specs=specs,
-                    max_pages_per_split=max_pages_per_split,
-                    final_output_dir=outputs_dir,
-                    preserve_file_parity=preserve_file_parity,
-                    generate_cover=generate_cover,
-                )
+                pipeline_kwargs = {
+                    "specs": specs,
+                    "max_pages_per_split": max_pages_per_split,
+                    "final_output_dir": outputs_dir,
+                    "preserve_file_parity": preserve_file_parity,
+                    "generate_cover": generate_cover,
+                }
+                if flipped_a4:
+                    pipeline_kwargs["render_quality"] = flipped_a4_quality
+                result = pipeline(**pipeline_kwargs)
                 results.append(
                     {
                         "original_name": "Combined print file",
@@ -234,13 +243,16 @@ def booklets_view(request):
                 messages.success(request, "Combined booklet generated successfully.")
             else:
                 for item, spec in zip(items, specs):
-                    result = build_booklets_pipeline(
-                        specs=[spec],
-                        max_pages_per_split=max_pages_per_split,
-                        final_output_dir=outputs_dir,
-                        preserve_file_parity=True,
-                        generate_cover=False,
-                    )
+                    pipeline_kwargs = {
+                        "specs": [spec],
+                        "max_pages_per_split": max_pages_per_split,
+                        "final_output_dir": outputs_dir,
+                        "preserve_file_parity": True,
+                        "generate_cover": False,
+                    }
+                    if flipped_a4:
+                        pipeline_kwargs["render_quality"] = flipped_a4_quality
+                    result = pipeline(**pipeline_kwargs)
                     results.append(
                         {
                             "original_name": item.get("name", os.path.basename(spec.input_pdf_path)),
@@ -277,6 +289,8 @@ def clear_booklets(request):
 def download_booklets(request, job_id: str):
     outputs_dir = os.path.join(settings.MEDIA_ROOT, "booklets_outputs")
     pdf_path = os.path.join(outputs_dir, f"{job_id}_booklets_for_printing.pdf")
+    if not os.path.isfile(pdf_path):
+        pdf_path = os.path.join(outputs_dir, f"{job_id}_flipped_a4_booklets_for_printing.pdf")
 
     if not os.path.isfile(pdf_path):
         raise Http404("File not found")
