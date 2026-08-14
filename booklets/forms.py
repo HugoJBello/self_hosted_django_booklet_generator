@@ -49,6 +49,17 @@ class BookletForm(forms.Form):
         widget=forms.RadioSelect,
     )
 
+    booklet_layout = forms.ChoiceField(
+        label="Booklet layout",
+        required=False,
+        initial="side_by_side",
+        choices=[
+            ("side_by_side", "Side-by-side booklet"),
+            ("flipped_a4", "Flipped booklet"),
+        ],
+        widget=forms.RadioSelect,
+    )
+
     max_pages_per_split = forms.IntegerField(
         label="Max pages per split",
         required=True,
@@ -89,6 +100,14 @@ class BookletForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 
+    flipped_a4_center_gap_cm = forms.FloatField(
+        label="Middle page separation (cm)",
+        required=False,
+        initial=1.0,
+        min_value=0.0,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "0.1"}),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["input_pdf"].widget.attrs.update(
@@ -100,3 +119,17 @@ class BookletForm(forms.Form):
 
     def clean_flipped_a4_quality(self):
         return self.cleaned_data.get("flipped_a4_quality") or "low"
+
+    def clean_flipped_a4_center_gap_cm(self):
+        value = self.cleaned_data.get("flipped_a4_center_gap_cm")
+        if value is None:
+            return 1.0
+        return value
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("flipped_a4"):
+            cleaned_data["booklet_layout"] = "flipped_a4"
+        else:
+            cleaned_data["booklet_layout"] = cleaned_data.get("booklet_layout") or "side_by_side"
+        return cleaned_data

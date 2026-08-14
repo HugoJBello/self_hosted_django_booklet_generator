@@ -170,11 +170,13 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
     return BookletForm(
         initial={
             "processing_mode": form.cleaned_data.get("processing_mode", "separate"),
+            "booklet_layout": form.cleaned_data.get("booklet_layout", "side_by_side"),
             "max_pages_per_split": form.cleaned_data.get("max_pages_per_split", 40),
             "preserve_file_parity": form.cleaned_data.get("preserve_file_parity", True),
             "generate_cover": form.cleaned_data.get("generate_cover", False),
-            "flipped_a4": form.cleaned_data.get("flipped_a4", False),
+            "flipped_a4": form.cleaned_data.get("booklet_layout") == "flipped_a4",
             "flipped_a4_quality": form.cleaned_data.get("flipped_a4_quality", "low"),
+            "flipped_a4_center_gap_cm": form.cleaned_data.get("flipped_a4_center_gap_cm", 1.0),
         }
     )
 
@@ -194,11 +196,13 @@ def booklets_view(request):
 
         files = form.cleaned_data.get("input_pdf") or request.FILES.getlist("input_pdf")
         processing_mode = form.cleaned_data["processing_mode"]
+        booklet_layout = form.cleaned_data["booklet_layout"]
         max_pages_per_split = form.cleaned_data["max_pages_per_split"]
         preserve_file_parity = bool(form.cleaned_data["preserve_file_parity"])
         generate_cover = bool(form.cleaned_data["generate_cover"])
-        flipped_a4 = bool(form.cleaned_data["flipped_a4"])
+        flipped_a4 = booklet_layout == "flipped_a4"
         flipped_a4_quality = form.cleaned_data["flipped_a4_quality"]
+        flipped_a4_center_gap_cm = form.cleaned_data["flipped_a4_center_gap_cm"]
         outputs_dir = os.path.join(settings.MEDIA_ROOT, "booklets_outputs")
         _ensure_dir(outputs_dir)
 
@@ -233,6 +237,7 @@ def booklets_view(request):
                 }
                 if flipped_a4:
                     pipeline_kwargs["render_quality"] = flipped_a4_quality
+                    pipeline_kwargs["center_gap_cm"] = flipped_a4_center_gap_cm
                 result = pipeline(**pipeline_kwargs)
                 results.append(
                     {
@@ -252,6 +257,7 @@ def booklets_view(request):
                     }
                     if flipped_a4:
                         pipeline_kwargs["render_quality"] = flipped_a4_quality
+                        pipeline_kwargs["center_gap_cm"] = flipped_a4_center_gap_cm
                     result = pipeline(**pipeline_kwargs)
                     results.append(
                         {

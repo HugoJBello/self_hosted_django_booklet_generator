@@ -22,8 +22,8 @@ from .services import (
 )
 
 
-FLIPPED_A4_FOLD_GUTTER_CM = 0.35
-FLIPPED_A4_SAFE_MARGIN_CM = 0.70
+FLIPPED_A4_CENTER_GAP_CM = 1.0
+FLIPPED_A4_MIN_OUTER_MARGIN_CM = 0.15
 FlippedA4Quality = Literal["low", "high"]
 
 FLIPPED_A4_QUALITY_PROFILES: dict[FlippedA4Quality, tuple[float, int]] = {
@@ -186,14 +186,14 @@ def _cell_draw_rect(
     cell_y1: float,
     outer_margin_pts: float,
     fold_edge: str,
+    center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
 ) -> fitz.Rect:
-    fold_margin_pts = FLIPPED_A4_FOLD_GUTTER_CM * 72 / 2.54
-    safe_margin_pts = FLIPPED_A4_SAFE_MARGIN_CM * 72 / 2.54
-    base_margin_pts = outer_margin_pts + safe_margin_pts
-    left_margin = base_margin_pts + (fold_margin_pts if fold_edge == "left" else 0)
-    right_margin = base_margin_pts + (fold_margin_pts if fold_edge == "right" else 0)
-    top_margin = base_margin_pts + (fold_margin_pts if fold_edge == "top" else 0)
-    bottom_margin = base_margin_pts + (fold_margin_pts if fold_edge == "bottom" else 0)
+    base_margin_pts = max(outer_margin_pts, FLIPPED_A4_MIN_OUTER_MARGIN_CM * 72 / 2.54)
+    fold_margin_pts = (max(center_gap_cm, 0.0) / 2) * 72 / 2.54
+    left_margin = base_margin_pts
+    right_margin = base_margin_pts
+    top_margin = fold_margin_pts if fold_edge == "top" else base_margin_pts
+    bottom_margin = fold_margin_pts if fold_edge == "bottom" else base_margin_pts
     return fitz.Rect(
         cell_x0 + left_margin,
         cell_y0 + top_margin,
@@ -206,6 +206,7 @@ def create_flipped_a4_booklet(
     prepared_pages: list[PreparedPage],
     output_pdf_path: str,
     render_quality: FlippedA4Quality = "low",
+    center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
 ) -> None:
     source_docs: dict[str, fitz.Document] = {}
     half_docs: dict[tuple[str, int, str], fitz.Document] = {}
@@ -240,7 +241,15 @@ def create_flipped_a4_booklet(
                 half_doc = get_materialized_half_doc(half_page)
                 half_page_in = half_doc[0]
                 margin_pts = prepared_page.margin_cm * 72 / 2.54
-                draw_area = _cell_draw_rect(cell_x0, cell_y0, cell_x1, cell_y1, margin_pts, fold_edge)
+                draw_area = _cell_draw_rect(
+                    cell_x0,
+                    cell_y0,
+                    cell_x1,
+                    cell_y1,
+                    margin_pts,
+                    fold_edge,
+                    center_gap_cm=center_gap_cm,
+                )
                 rotation = get_rotation(imposed_half_page)
 
                 cell_width = max(draw_area.width, 1)
@@ -352,6 +361,7 @@ def build_flipped_a4_booklets_pipeline(
     preserve_file_parity: bool = True,
     generate_cover: bool = False,
     render_quality: FlippedA4Quality = "low",
+    center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -390,6 +400,7 @@ def build_flipped_a4_booklets_pipeline(
                 prepared_pages[start_idx : end_idx + 1],
                 output_path,
                 render_quality=render_quality,
+                center_gap_cm=center_gap_cm,
             )
             split_outputs.append(output_path)
 

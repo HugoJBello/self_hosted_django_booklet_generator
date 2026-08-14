@@ -96,10 +96,14 @@ class BookletsViewTests(TestCase):
     def test_flipped_a4_checkbox_is_off_by_default(self):
         form = BookletForm()
 
+        self.assertEqual(form.fields["booklet_layout"].initial, "side_by_side")
         self.assertFalse(form.fields["flipped_a4"].initial)
         self.assertEqual(form.fields["flipped_a4_quality"].initial, "low")
-        self.assertIn("Flipped A4", form.as_p())
+        self.assertEqual(form.fields["flipped_a4_center_gap_cm"].initial, 1.0)
+        self.assertIn("Side-by-side booklet", form.as_p())
+        self.assertIn("Flipped booklet", form.as_p())
         self.assertIn("Rendering quality", form.as_p())
+        self.assertIn("Middle page separation", form.as_p())
 
     def test_separate_mode_generates_one_result_per_file(self):
         response = self.client.post(
@@ -110,6 +114,7 @@ class BookletsViewTests(TestCase):
                     SimpleUploadedFile("dos.pdf", build_pdf_bytes(3), content_type="application/pdf"),
                 ],
                 "processing_mode": "separate",
+                "booklet_layout": "side_by_side",
                 "max_pages_per_split": "40",
                 "preserve_file_parity": "on",
                 "file_same_page_parity_0": "true",
@@ -128,6 +133,7 @@ class BookletsViewTests(TestCase):
         outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
         generated_files = [name for name in os.listdir(outputs_dir) if name.endswith(".pdf")]
         self.assertEqual(len(generated_files), 2)
+        self.assertFalse(any("_flipped_a4_booklets_for_printing.pdf" in name for name in generated_files))
 
     def test_separate_mode_can_generate_flipped_a4_booklets(self):
         response = self.client.post(
@@ -138,10 +144,11 @@ class BookletsViewTests(TestCase):
                     SimpleUploadedFile("dos.pdf", build_pdf_bytes(1), content_type="application/pdf"),
                 ],
                 "processing_mode": "separate",
+                "booklet_layout": "flipped_a4",
                 "max_pages_per_split": "40",
                 "preserve_file_parity": "on",
-                "flipped_a4": "on",
                 "flipped_a4_quality": "high",
+                "flipped_a4_center_gap_cm": "1.5",
                 "file_same_page_parity_0": "true",
                 "file_margin_0": "1.0",
                 "file_add_watermark_0": "true",
@@ -294,6 +301,105 @@ class BookletsViewTests(TestCase):
             self.assertEqual(round(doc[0].rect.width), 595)
             self.assertEqual(round(doc[0].rect.height), 842)
 
+    def test_flipped_a4_cover_is_added_before_imposition(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "with_cover.pdf")
+        with open(source_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+
+        with_cover = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=False,
+            generate_cover=True,
+        )
+        without_cover = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=False,
+            generate_cover=False,
+        )
+
+        with fitz.open(with_cover.output_pdf_path) as doc:
+            self.assertEqual(doc.page_count, 4)
+        with fitz.open(without_cover.output_pdf_path) as doc:
+            self.assertEqual(doc.page_count, 2)
+
+    def test_flipped_a4_combined_mode_preserves_file_parity_before_imposition(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        first_path = os.path.join(uploads_dir, "first.pdf")
+        second_path = os.path.join(uploads_dir, "second.pdf")
+        with open(first_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+        with open(second_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+
+        prepared = prepare_pages_for_specs(
+            [
+                SourcePdfSpec(first_path, same_page_parity=True, margin_cm=0.0, add_watermark=False),
+                SourcePdfSpec(second_path, same_page_parity=True, margin_cm=0.0, add_watermark=False),
+            ],
+            preserve_file_parity=True,
+        )
+        pairs = _imposed_cell_pairs(prepared)
+
+        self.assertEqual(len(prepared), 3)
+        self.assertTrue(prepared[1].is_blank)
+        self.assertEqual(len(pairs), 4)
+        self.assertEqual(pairs[-1][0].half_page.prepared_page.source_pdf_path, None)
+        self.assertEqual(pairs[-1][1].half_page.prepared_page.source_pdf_path, None)
+
+    def test_flipped_a4_split_limit_applies_before_each_flipped_imposition(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "large.pdf")
+        with open(source_path, "wb") as fh:
+            fh.write(build_pdf_bytes(5))
+
+        result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=2,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+        )
+
+        with fitz.open(result.output_pdf_path) as doc:
+            # 5 prepared pages split as 2 + 2 + 1 source pages. Flipped imposition
+            # gives 4 + 4 + 2 output pages.
+            self.assertEqual(doc.page_count, 10)
+
+    def test_flipped_a4_watermark_is_added_after_imposition(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "watermarked.pdf")
+        with open(source_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+
+        result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=True)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+        )
+
+        with fitz.open(result.output_pdf_path) as doc:
+            self.assertEqual(doc.page_count, 2)
+            self.assertNotIn("*", doc[0].get_text())
+            self.assertIn("*", doc[1].get_text())
+
     def test_flipped_a4_logical_order_wraps_halves_with_blank_cover_pages(self):
         prepared = [
             PreparedPage("one.pdf", 0, 595, 842, 1.0, False),
@@ -346,13 +452,23 @@ class BookletsViewTests(TestCase):
         finally:
             doc.close()
 
-    def test_flipped_a4_draw_area_keeps_extra_safe_margin_even_without_outer_margin(self):
-        draw_rect = _cell_draw_rect(0, 0, 421, 595, outer_margin_pts=0, fold_edge="right")
+    def test_flipped_a4_draw_area_uses_one_cm_center_gap_and_small_outer_margin(self):
+        page_width = 595
+        page_height = 842
+        center_y = page_height / 2
 
-        self.assertGreater(draw_rect.x0, 10)
-        self.assertGreater(draw_rect.y0, 10)
-        self.assertGreater(595 - draw_rect.y1, 10)
-        self.assertGreater(421 - draw_rect.x1, 20)
+        top_rect = _cell_draw_rect(0, 0, page_width, center_y, outer_margin_pts=0, fold_edge="bottom")
+        bottom_rect = _cell_draw_rect(0, center_y, page_width, page_height, outer_margin_pts=0, fold_edge="top")
+
+        self.assertAlmostEqual(bottom_rect.y0 - top_rect.y1, 72 / 2.54, delta=0.5)
+        self.assertLess(top_rect.x0, 5)
+        self.assertLess(top_rect.y0, 5)
+        self.assertLess(page_width - top_rect.x1, 5)
+        self.assertLess(page_height - bottom_rect.y1, 5)
+
+        wider_top_rect = _cell_draw_rect(0, 0, page_width, center_y, outer_margin_pts=0, fold_edge="bottom", center_gap_cm=1.8)
+        wider_bottom_rect = _cell_draw_rect(0, center_y, page_width, page_height, outer_margin_pts=0, fold_edge="top", center_gap_cm=1.8)
+        self.assertAlmostEqual(wider_bottom_rect.y0 - wider_top_rect.y1, 1.8 * 72 / 2.54, delta=0.5)
 
     def test_flipped_a4_three_page_imposition_matches_provided_algorithm(self):
         prepared = [
