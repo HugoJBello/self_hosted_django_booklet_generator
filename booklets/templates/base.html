@@ -87,6 +87,10 @@
       document.querySelectorAll("form").forEach((form) => {
         form.addEventListener("submit", (event) => {
           const submitter = event.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
+          if (event.defaultPrevented || !form.checkValidity()) {
+            return;
+          }
+
           if (!submitter || submitter.disabled || submitter.dataset.loadingStarted === "true") {
             return;
           }
