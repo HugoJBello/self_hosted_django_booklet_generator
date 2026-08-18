@@ -24,11 +24,14 @@ from .services import (
 
 FLIPPED_A4_CENTER_GAP_CM = 1.0
 FLIPPED_A4_MIN_OUTER_MARGIN_CM = 0.15
-FlippedA4Quality = Literal["low", "high"]
+FlippedA4Quality = Literal["very_low", "low", "medium", "high", "super_high"]
 
 FLIPPED_A4_QUALITY_PROFILES: dict[FlippedA4Quality, tuple[float, int]] = {
-    "low": (2.5, 84),
-    "high": (3.5, 88),
+    "very_low": (2.5, 84),
+    "low": (3.5, 88),
+    "medium": (4.5, 88),
+    "high": (5.0, 86),
+    "super_high": (6.0, 88),
 }
 
 
@@ -205,13 +208,13 @@ def _cell_draw_rect(
 def create_flipped_a4_booklet(
     prepared_pages: list[PreparedPage],
     output_pdf_path: str,
-    render_quality: FlippedA4Quality = "low",
+    render_quality: FlippedA4Quality = "medium",
     center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
 ) -> None:
     source_docs: dict[str, fitz.Document] = {}
     half_docs: dict[tuple[str, int, str], fitz.Document] = {}
     doc_out = fitz.open()
-    render_scale, jpeg_quality = FLIPPED_A4_QUALITY_PROFILES.get(render_quality, FLIPPED_A4_QUALITY_PROFILES["low"])
+    render_scale, jpeg_quality = FLIPPED_A4_QUALITY_PROFILES.get(render_quality, FLIPPED_A4_QUALITY_PROFILES["medium"])
 
     try:
         out_width = 595
@@ -360,7 +363,7 @@ def build_flipped_a4_booklets_pipeline(
     final_output_dir: str,
     preserve_file_parity: bool = True,
     generate_cover: bool = False,
-    render_quality: FlippedA4Quality = "low",
+    render_quality: FlippedA4Quality = "medium",
     center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
 ) -> BookletJobResult:
     if not specs:

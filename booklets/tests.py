@@ -11,6 +11,7 @@ from django.urls import reverse
 
 from .forms import BookletForm
 from .flipped_a4 import (
+    FLIPPED_A4_QUALITY_PROFILES,
     _cell_draw_rect,
     _clip_half_page,
     _find_half_split_y,
@@ -98,12 +99,31 @@ class BookletsViewTests(TestCase):
 
         self.assertEqual(form.fields["booklet_layout"].initial, "side_by_side")
         self.assertFalse(form.fields["flipped_a4"].initial)
-        self.assertEqual(form.fields["flipped_a4_quality"].initial, "low")
+        self.assertEqual(form.fields["flipped_a4_quality"].initial, "medium")
         self.assertEqual(form.fields["flipped_a4_center_gap_cm"].initial, 1.0)
         self.assertIn("Side-by-side booklet", form.as_p())
         self.assertIn("Flipped booklet", form.as_p())
         self.assertIn("Rendering quality", form.as_p())
         self.assertIn("Middle page separation", form.as_p())
+
+    def test_flipped_a4_quality_profiles_preserve_old_low_and_high_as_lower_options(self):
+        form = BookletForm()
+
+        self.assertEqual(
+            list(form.fields["flipped_a4_quality"].choices),
+            [
+                ("very_low", "Very low"),
+                ("low", "Low"),
+                ("medium", "Medium"),
+                ("high", "High"),
+                ("super_high", "Super high"),
+            ],
+        )
+        self.assertEqual(FLIPPED_A4_QUALITY_PROFILES["very_low"], (2.5, 84))
+        self.assertEqual(FLIPPED_A4_QUALITY_PROFILES["low"], (3.5, 88))
+        self.assertGreater(FLIPPED_A4_QUALITY_PROFILES["medium"][0], FLIPPED_A4_QUALITY_PROFILES["low"][0])
+        self.assertGreater(FLIPPED_A4_QUALITY_PROFILES["high"][0], FLIPPED_A4_QUALITY_PROFILES["medium"][0])
+        self.assertGreater(FLIPPED_A4_QUALITY_PROFILES["super_high"][0], FLIPPED_A4_QUALITY_PROFILES["high"][0])
 
     def test_separate_mode_generates_one_result_per_file(self):
         response = self.client.post(

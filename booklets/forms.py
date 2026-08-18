@@ -92,10 +92,13 @@ class BookletForm(forms.Form):
     flipped_a4_quality = forms.ChoiceField(
         label="Rendering quality",
         required=False,
-        initial="low",
+        initial="medium",
         choices=[
+            ("very_low", "Very low"),
             ("low", "Low"),
+            ("medium", "Medium"),
             ("high", "High"),
+            ("super_high", "Super high"),
         ],
         widget=forms.Select(attrs={"class": "form-select"}),
     )
@@ -118,7 +121,7 @@ class BookletForm(forms.Form):
         )
 
     def clean_flipped_a4_quality(self):
-        return self.cleaned_data.get("flipped_a4_quality") or "low"
+        return self.cleaned_data.get("flipped_a4_quality") or "medium"
 
     def clean_flipped_a4_center_gap_cm(self):
         value = self.cleaned_data.get("flipped_a4_center_gap_cm")

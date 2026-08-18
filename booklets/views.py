@@ -175,7 +175,7 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "preserve_file_parity": form.cleaned_data.get("preserve_file_parity", True),
             "generate_cover": form.cleaned_data.get("generate_cover", False),
             "flipped_a4": form.cleaned_data.get("booklet_layout") == "flipped_a4",
-            "flipped_a4_quality": form.cleaned_data.get("flipped_a4_quality", "low"),
+            "flipped_a4_quality": form.cleaned_data.get("flipped_a4_quality", "medium"),
             "flipped_a4_center_gap_cm": form.cleaned_data.get("flipped_a4_center_gap_cm", 1.0),
         }
     )
