@@ -265,7 +265,12 @@ def create_flipped_a4_booklet(
                 w_scaled = rotated_width * scale
                 h_scaled = rotated_height * scale
                 x_draw = draw_area.x0 + (cell_width - w_scaled) / 2
-                y_draw = draw_area.y0 + (cell_height - h_scaled) / 2
+                if fold_edge == "bottom":
+                    y_draw = draw_area.y1 - h_scaled
+                elif fold_edge == "top":
+                    y_draw = draw_area.y0
+                else:
+                    y_draw = draw_area.y0 + (cell_height - h_scaled) / 2
 
                 try:
                     page_out.show_pdf_page(

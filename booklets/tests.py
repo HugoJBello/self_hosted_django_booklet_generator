@@ -435,6 +435,59 @@ class BookletsViewTests(TestCase):
             self.assertGreater(bottom_rgb[1], bottom_rgb[0] + 80)
             self.assertGreater(bottom_rgb[1], bottom_rgb[2] + 80)
 
+    def test_flipped_a4_center_gap_changes_rendered_vector_split_spacing(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "full_bleed_halves.pdf")
+        doc = fitz.open()
+        try:
+            page = doc.new_page(width=595, height=842)
+            split_y = page.rect.height / 2
+            page.draw_rect(fitz.Rect(0, 0, 595, split_y), fill=(0.95, 0.1, 0.1))
+            page.draw_rect(fitz.Rect(0, split_y, 595, 842), fill=(0.1, 0.8, 0.1))
+            doc.save(source_path)
+        finally:
+            doc.close()
+
+        narrow_gap_result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+            split_mode="vector",
+            center_gap_cm=0.0,
+        )
+        wide_gap_result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+            split_mode="vector",
+            center_gap_cm=2.0,
+        )
+
+        with fitz.open(narrow_gap_result.output_pdf_path) as narrow_gap, fitz.open(wide_gap_result.output_pdf_path) as wide_gap:
+            narrow_top_bbox = _rendered_non_white_bbox(narrow_gap[1], top=True)
+            narrow_bottom_bbox = _rendered_non_white_bbox(narrow_gap[1], top=False)
+            wide_top_bbox = _rendered_non_white_bbox(wide_gap[1], top=True)
+            wide_bottom_bbox = _rendered_non_white_bbox(wide_gap[1], top=False)
+            self.assertIsNotNone(narrow_top_bbox)
+            self.assertIsNotNone(narrow_bottom_bbox)
+            self.assertIsNotNone(wide_top_bbox)
+            self.assertIsNotNone(wide_bottom_bbox)
+            assert narrow_top_bbox is not None
+            assert narrow_bottom_bbox is not None
+            assert wide_top_bbox is not None
+            assert wide_bottom_bbox is not None
+
+            narrow_rendered_gap = narrow_bottom_bbox[1] - narrow_top_bbox[3]
+            wide_rendered_gap = wide_bottom_bbox[1] - wide_top_bbox[3]
+            self.assertGreater(wide_rendered_gap, narrow_rendered_gap + 35)
+
     def test_flipped_a4_cover_is_added_before_imposition(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
         outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
