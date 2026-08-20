@@ -400,6 +400,41 @@ class BookletsViewTests(TestCase):
             self.assertGreater(bottom_rgb[1], bottom_rgb[0] + 80)
             self.assertGreater(bottom_rgb[1], bottom_rgb[2] + 80)
 
+    def test_flipped_a4_vector_split_handles_shifted_mediabox_without_merging_halves(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "shifted_mediabox_halves.pdf")
+        doc = fitz.open()
+        try:
+            page = doc.new_page(width=595, height=842)
+            page.set_mediabox(fitz.Rect(0, -842, 595, 0))
+            split_y = page.rect.height / 2
+            page.draw_rect(fitz.Rect(36, 36, 559, split_y - 36), fill=(0.95, 0.1, 0.1))
+            page.draw_rect(fitz.Rect(36, split_y + 36, 559, 806), fill=(0.1, 0.8, 0.1))
+            doc.save(source_path)
+        finally:
+            doc.close()
+
+        result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=1.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+            split_mode="vector",
+        )
+
+        with fitz.open(result.output_pdf_path) as generated:
+            self.assertEqual(generated.page_count, 2)
+            top_rgb = _average_rendered_region_rgb(generated[1], top=True)
+            bottom_rgb = _average_rendered_region_rgb(generated[1], top=False)
+            self.assertGreater(top_rgb[0], top_rgb[1] + 80)
+            self.assertGreater(top_rgb[0], top_rgb[2] + 80)
+            self.assertGreater(bottom_rgb[1], bottom_rgb[0] + 80)
+            self.assertGreater(bottom_rgb[1], bottom_rgb[2] + 80)
+
     def test_flipped_a4_cover_is_added_before_imposition(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
         outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")

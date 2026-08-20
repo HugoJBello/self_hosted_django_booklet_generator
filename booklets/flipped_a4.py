@@ -364,8 +364,13 @@ def create_flipped_a4_booklet(
 
 def _materialize_vector_half_doc(source_doc: fitz.Document, source_page_number: int, clip: fitz.Rect) -> fitz.Document:
     half_doc = fitz.open()
-    half_doc.insert_pdf(source_doc, from_page=source_page_number, to_page=source_page_number)
-    half_doc[0].set_cropbox(clip)
+    page_half = half_doc.new_page(width=clip.width, height=clip.height)
+    page_half.show_pdf_page(
+        fitz.Rect(0, 0, clip.width, clip.height),
+        source_doc,
+        source_page_number,
+        clip=clip,
+    )
     return half_doc
 
 
