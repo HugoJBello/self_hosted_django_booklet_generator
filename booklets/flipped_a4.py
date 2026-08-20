@@ -25,6 +25,7 @@ from .services import (
 FLIPPED_A4_CENTER_GAP_CM = 1.0
 FLIPPED_A4_MIN_OUTER_MARGIN_CM = 0.15
 FlippedA4Quality = Literal["very_low", "low", "medium", "high", "super_high"]
+FlippedA4SplitMode = Literal["raster", "vector"]
 
 FLIPPED_A4_QUALITY_PROFILES: dict[FlippedA4Quality, tuple[float, int]] = {
     "very_low": (2.5, 84),
@@ -210,6 +211,7 @@ def create_flipped_a4_booklet(
     output_pdf_path: str,
     render_quality: FlippedA4Quality = "medium",
     center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
+    split_mode: FlippedA4SplitMode = "vector",
 ) -> None:
     source_docs: dict[str, fitz.Document] = {}
     half_docs: dict[tuple[str, int, str], fitz.Document] = {}
@@ -297,17 +299,20 @@ def create_flipped_a4_booklet(
 
                 page_in = doc_in[prepared_page.source_page_number]
                 clip = _clip_half_page(page_in, half_page.half)
-                half_doc = fitz.open()
-                page_half = half_doc.new_page(width=clip.width, height=clip.height)
-                pixmap = page_in.get_pixmap(
-                    matrix=fitz.Matrix(render_scale, render_scale),
-                    clip=clip,
-                    alpha=False,
-                )
-                page_half.insert_image(
-                    fitz.Rect(0, 0, clip.width, clip.height),
-                    stream=pixmap.tobytes("jpeg", jpg_quality=jpeg_quality),
-                )
+                if split_mode == "vector":
+                    half_doc = _materialize_vector_half_doc(doc_in, page_in.number, clip)
+                else:
+                    half_doc = fitz.open()
+                    page_half = half_doc.new_page(width=clip.width, height=clip.height)
+                    pixmap = page_in.get_pixmap(
+                        matrix=fitz.Matrix(render_scale, render_scale),
+                        clip=clip,
+                        alpha=False,
+                    )
+                    page_half.insert_image(
+                        fitz.Rect(0, 0, clip.width, clip.height),
+                        stream=pixmap.tobytes("jpeg", jpg_quality=jpeg_quality),
+                    )
                 half_docs[cache_key] = half_doc
                 return half_doc
 
@@ -357,6 +362,13 @@ def create_flipped_a4_booklet(
             doc.close()
 
 
+def _materialize_vector_half_doc(source_doc: fitz.Document, source_page_number: int, clip: fitz.Rect) -> fitz.Document:
+    half_doc = fitz.open()
+    half_doc.insert_pdf(source_doc, from_page=source_page_number, to_page=source_page_number)
+    half_doc[0].set_cropbox(clip)
+    return half_doc
+
+
 def build_flipped_a4_booklets_pipeline(
     specs: list[SourcePdfSpec],
     max_pages_per_split: int,
@@ -365,6 +377,7 @@ def build_flipped_a4_booklets_pipeline(
     generate_cover: bool = False,
     render_quality: FlippedA4Quality = "medium",
     center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
+    split_mode: FlippedA4SplitMode = "vector",
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -404,6 +417,7 @@ def build_flipped_a4_booklets_pipeline(
                 output_path,
                 render_quality=render_quality,
                 center_gap_cm=center_gap_cm,
+                split_mode=split_mode,
             )
             split_outputs.append(output_path)
 

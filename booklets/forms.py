@@ -103,6 +103,17 @@ class BookletForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 
+    flipped_a4_split_mode = forms.ChoiceField(
+        label="Page split method",
+        required=False,
+        initial="vector",
+        choices=[
+            ("vector", "Vector split (keeps text and shapes)"),
+            ("raster", "Image split (most reliable fallback)"),
+        ],
+        widget=forms.RadioSelect,
+    )
+
     flipped_a4_center_gap_cm = forms.FloatField(
         label="Middle page separation (cm)",
         required=False,
@@ -122,6 +133,9 @@ class BookletForm(forms.Form):
 
     def clean_flipped_a4_quality(self):
         return self.cleaned_data.get("flipped_a4_quality") or "medium"
+
+    def clean_flipped_a4_split_mode(self):
+        return self.cleaned_data.get("flipped_a4_split_mode") or "vector"
 
     def clean_flipped_a4_center_gap_cm(self):
         value = self.cleaned_data.get("flipped_a4_center_gap_cm")

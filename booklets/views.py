@@ -176,6 +176,7 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "generate_cover": form.cleaned_data.get("generate_cover", False),
             "flipped_a4": form.cleaned_data.get("booklet_layout") == "flipped_a4",
             "flipped_a4_quality": form.cleaned_data.get("flipped_a4_quality", "medium"),
+            "flipped_a4_split_mode": form.cleaned_data.get("flipped_a4_split_mode", "vector"),
             "flipped_a4_center_gap_cm": form.cleaned_data.get("flipped_a4_center_gap_cm", 1.0),
         }
     )
@@ -202,6 +203,7 @@ def booklets_view(request):
         generate_cover = bool(form.cleaned_data["generate_cover"])
         flipped_a4 = booklet_layout == "flipped_a4"
         flipped_a4_quality = form.cleaned_data["flipped_a4_quality"]
+        flipped_a4_split_mode = form.cleaned_data["flipped_a4_split_mode"]
         flipped_a4_center_gap_cm = form.cleaned_data["flipped_a4_center_gap_cm"]
         outputs_dir = os.path.join(settings.MEDIA_ROOT, "booklets_outputs")
         _ensure_dir(outputs_dir)
@@ -237,6 +239,7 @@ def booklets_view(request):
                 }
                 if flipped_a4:
                     pipeline_kwargs["render_quality"] = flipped_a4_quality
+                    pipeline_kwargs["split_mode"] = flipped_a4_split_mode
                     pipeline_kwargs["center_gap_cm"] = flipped_a4_center_gap_cm
                 result = pipeline(**pipeline_kwargs)
                 results.append(
@@ -257,6 +260,7 @@ def booklets_view(request):
                     }
                     if flipped_a4:
                         pipeline_kwargs["render_quality"] = flipped_a4_quality
+                        pipeline_kwargs["split_mode"] = flipped_a4_split_mode
                         pipeline_kwargs["center_gap_cm"] = flipped_a4_center_gap_cm
                     result = pipeline(**pipeline_kwargs)
                     results.append(

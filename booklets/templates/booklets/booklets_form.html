@@ -176,7 +176,20 @@
                 <div class="settings-panel-title">Flipped booklet options</div>
                 <div class="settings-panel-subtitle">Only used when Flipped booklet is selected.</div>
                 <div class="row g-3">
-                  <div class="col-sm-6">
+                  <div class="col-12">
+                    <label class="form-label">{{ form.flipped_a4_split_mode.label }}</label>
+                    {% for radio in form.flipped_a4_split_mode %}
+                      <div class="form-check">
+                        {{ radio.tag }}
+                        <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                      </div>
+                    {% endfor %}
+                    <div class="form-text">Vector split cuts at the exact page midpoint without converting text and shapes to an image.</div>
+                    {% for e in form.flipped_a4_split_mode.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                  <div class="col-sm-6" id="flipped-quality-wrapper">
                     <label class="form-label" for="{{ form.flipped_a4_quality.id_for_label }}">
                       {{ form.flipped_a4_quality.label }}
                     </label>
@@ -306,7 +319,9 @@
       const preserveParityWrapper = document.getElementById("preserve-parity-wrapper");
       const generateCoverWrapper = document.getElementById("generate-cover-wrapper");
       const flippedOptionsPanel = document.getElementById("flipped-options-panel");
+      const flippedQualityWrapper = document.getElementById("flipped-quality-wrapper");
       const layoutInputs = Array.from(form.querySelectorAll('input[name="booklet_layout"]'));
+      const splitModeInputs = Array.from(form.querySelectorAll('input[name="flipped_a4_split_mode"]'));
       const modeInputs = Array.from(form.querySelectorAll('input[name="processing_mode"]'));
       const initialItemsNode = document.getElementById("booklet-items-data");
       let selectedItems = initialItemsNode ? JSON.parse(initialItemsNode.textContent) : [];
@@ -442,6 +457,17 @@
       const refreshLayoutUI = () => {
         const currentLayout = layoutInputs.find((input) => input.checked)?.value || "side_by_side";
         flippedOptionsPanel.style.display = currentLayout === "flipped_a4" ? "" : "none";
+        refreshSplitModeUI();
+      };
+
+      const refreshSplitModeUI = () => {
+        const currentSplitMode = splitModeInputs.find((input) => input.checked)?.value || "vector";
+        const qualityInput = form.querySelector('[name="flipped_a4_quality"]');
+        const usesRasterSplit = currentSplitMode === "raster";
+        flippedQualityWrapper.style.display = usesRasterSplit ? "" : "none";
+        if (qualityInput) {
+          qualityInput.disabled = !usesRasterSplit;
+        }
       };
 
       fileInput.addEventListener("change", (event) => {
@@ -472,6 +498,7 @@
 
       modeInputs.forEach((input) => input.addEventListener("change", refreshModeUI));
       layoutInputs.forEach((input) => input.addEventListener("change", refreshLayoutUI));
+      splitModeInputs.forEach((input) => input.addEventListener("change", refreshSplitModeUI));
 
       form.addEventListener("submit", () => {
         refreshCards();

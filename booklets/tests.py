@@ -100,10 +100,12 @@ class BookletsViewTests(TestCase):
         self.assertEqual(form.fields["booklet_layout"].initial, "side_by_side")
         self.assertFalse(form.fields["flipped_a4"].initial)
         self.assertEqual(form.fields["flipped_a4_quality"].initial, "medium")
+        self.assertEqual(form.fields["flipped_a4_split_mode"].initial, "vector")
         self.assertEqual(form.fields["flipped_a4_center_gap_cm"].initial, 1.0)
         self.assertIn("Side-by-side booklet", form.as_p())
         self.assertIn("Flipped booklet", form.as_p())
         self.assertIn("Rendering quality", form.as_p())
+        self.assertIn("Page split method", form.as_p())
         self.assertIn("Middle page separation", form.as_p())
 
     def test_flipped_a4_quality_profiles_preserve_old_low_and_high_as_lower_options(self):
@@ -168,6 +170,7 @@ class BookletsViewTests(TestCase):
                 "max_pages_per_split": "40",
                 "preserve_file_parity": "on",
                 "flipped_a4_quality": "high",
+                "flipped_a4_split_mode": "vector",
                 "flipped_a4_center_gap_cm": "1.5",
                 "file_same_page_parity_0": "true",
                 "file_margin_0": "1.0",
@@ -320,6 +323,82 @@ class BookletsViewTests(TestCase):
             self.assertEqual(doc.page_count, 4)
             self.assertEqual(round(doc[0].rect.width), 595)
             self.assertEqual(round(doc[0].rect.height), 842)
+
+    def test_flipped_a4_vector_split_preserves_text_content(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "vector_source.pdf")
+        doc = fitz.open()
+        try:
+            page = doc.new_page(width=595, height=842)
+            page.insert_text((72, 96), "VECTOR TOP TEXT")
+            page.insert_text((72, 650), "VECTOR BOTTOM TEXT")
+            doc.save(source_path)
+        finally:
+            doc.close()
+
+        vector_result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+            split_mode="vector",
+        )
+        raster_result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+            split_mode="raster",
+        )
+
+        with fitz.open(vector_result.output_pdf_path) as generated:
+            text = "\n".join(page.get_text() for page in generated)
+            self.assertIn("VECTOR TOP TEXT", text)
+            self.assertIn("VECTOR BOTTOM TEXT", text)
+
+        with fitz.open(raster_result.output_pdf_path) as generated:
+            text = "\n".join(page.get_text() for page in generated)
+            self.assertNotIn("VECTOR TOP TEXT", text)
+            self.assertNotIn("VECTOR BOTTOM TEXT", text)
+
+    def test_flipped_a4_vector_split_visually_clips_each_half(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "vector_marked_halves.pdf")
+        doc = fitz.open()
+        try:
+            page = doc.new_page(width=595, height=842)
+            split_y = page.rect.height / 2
+            page.draw_rect(fitz.Rect(36, 36, 559, split_y - 36), fill=(0.95, 0.1, 0.1))
+            page.draw_rect(fitz.Rect(36, split_y + 36, 559, 806), fill=(0.1, 0.8, 0.1))
+            doc.save(source_path)
+        finally:
+            doc.close()
+
+        result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=1.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+            split_mode="vector",
+        )
+
+        with fitz.open(result.output_pdf_path) as generated:
+            self.assertEqual(generated.page_count, 2)
+            top_rgb = _average_rendered_region_rgb(generated[1], top=True)
+            bottom_rgb = _average_rendered_region_rgb(generated[1], top=False)
+            self.assertGreater(top_rgb[0], top_rgb[1] + 80)
+            self.assertGreater(top_rgb[0], top_rgb[2] + 80)
+            self.assertGreater(bottom_rgb[1], bottom_rgb[0] + 80)
+            self.assertGreater(bottom_rgb[1], bottom_rgb[2] + 80)
 
     def test_flipped_a4_cover_is_added_before_imposition(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
@@ -730,3 +809,22 @@ def _region_palette_counts(
                 counts[nearest_key] += 1
 
     return counts
+
+
+def _average_rendered_region_rgb(page: fitz.Page, top: bool) -> tuple[int, int, int]:
+    rect = fitz.Rect(page.rect)
+    if top:
+        rect.y1 = page.rect.height / 2
+    else:
+        rect.y0 = page.rect.height / 2
+
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(0.2, 0.2), clip=rect, alpha=False)
+    totals = [0, 0, 0]
+    count = 0
+    for idx in range(0, len(pixmap.samples), pixmap.n):
+        totals[0] += pixmap.samples[idx]
+        totals[1] += pixmap.samples[idx + 1]
+        totals[2] += pixmap.samples[idx + 2]
+        count += 1
+
+    return tuple(round(total / count) for total in totals)
