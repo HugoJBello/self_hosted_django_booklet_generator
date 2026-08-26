@@ -178,6 +178,7 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "flipped_a4_quality": form.cleaned_data.get("flipped_a4_quality", "medium"),
             "flipped_a4_split_mode": form.cleaned_data.get("flipped_a4_split_mode", "vector"),
             "flipped_a4_center_gap_cm": form.cleaned_data.get("flipped_a4_center_gap_cm", 1.0),
+            "flipped_a4_prepare_for_a5_printing": form.cleaned_data.get("flipped_a4_prepare_for_a5_printing", False),
         }
     )
 
@@ -205,6 +206,7 @@ def booklets_view(request):
         flipped_a4_quality = form.cleaned_data["flipped_a4_quality"]
         flipped_a4_split_mode = form.cleaned_data["flipped_a4_split_mode"]
         flipped_a4_center_gap_cm = form.cleaned_data["flipped_a4_center_gap_cm"]
+        flipped_a4_prepare_for_a5_printing = bool(form.cleaned_data["flipped_a4_prepare_for_a5_printing"])
         outputs_dir = os.path.join(settings.MEDIA_ROOT, "booklets_outputs")
         _ensure_dir(outputs_dir)
 
@@ -241,6 +243,7 @@ def booklets_view(request):
                     pipeline_kwargs["render_quality"] = flipped_a4_quality
                     pipeline_kwargs["split_mode"] = flipped_a4_split_mode
                     pipeline_kwargs["center_gap_cm"] = flipped_a4_center_gap_cm
+                    pipeline_kwargs["prepare_for_a5_printing"] = flipped_a4_prepare_for_a5_printing
                 result = pipeline(**pipeline_kwargs)
                 results.append(
                     {
@@ -262,6 +265,7 @@ def booklets_view(request):
                         pipeline_kwargs["render_quality"] = flipped_a4_quality
                         pipeline_kwargs["split_mode"] = flipped_a4_split_mode
                         pipeline_kwargs["center_gap_cm"] = flipped_a4_center_gap_cm
+                        pipeline_kwargs["prepare_for_a5_printing"] = flipped_a4_prepare_for_a5_printing
                     result = pipeline(**pipeline_kwargs)
                     results.append(
                         {

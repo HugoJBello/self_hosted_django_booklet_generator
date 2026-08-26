@@ -102,11 +102,13 @@ class BookletsViewTests(TestCase):
         self.assertEqual(form.fields["flipped_a4_quality"].initial, "medium")
         self.assertEqual(form.fields["flipped_a4_split_mode"].initial, "vector")
         self.assertEqual(form.fields["flipped_a4_center_gap_cm"].initial, 1.0)
+        self.assertFalse(form.fields["flipped_a4_prepare_for_a5_printing"].initial)
         self.assertIn("Side-by-side booklet", form.as_p())
         self.assertIn("Flipped booklet", form.as_p())
         self.assertIn("Rendering quality", form.as_p())
         self.assertIn("Page split method", form.as_p())
         self.assertIn("Middle page separation", form.as_p())
+        self.assertIn("Prepare for A5 printing", form.as_p())
 
     def test_flipped_a4_quality_profiles_preserve_old_low_and_high_as_lower_options(self):
         form = BookletForm()
@@ -323,6 +325,32 @@ class BookletsViewTests(TestCase):
             self.assertEqual(doc.page_count, 4)
             self.assertEqual(round(doc[0].rect.width), 595)
             self.assertEqual(round(doc[0].rect.height), 842)
+
+    def test_flipped_a4_pipeline_can_prepare_output_for_a5_printing(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "a5_ready_source.pdf")
+        with open(source_path, "wb") as fh:
+            fh.write(build_pdf_bytes(1))
+
+        result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+            prepare_for_a5_printing=True,
+        )
+
+        with fitz.open(result.output_pdf_path) as doc:
+            self.assertEqual(doc.page_count, 2)
+            self.assertEqual(round(doc[0].rect.width), 595)
+            self.assertEqual(round(doc[0].rect.height), 842)
+            self.assertEqual(doc[0].rotation, 0)
+            self.assertFalse(_is_rendered_region_blank(doc[1], top=True))
+            self.assertTrue(_is_rendered_region_blank(doc[1], top=False))
 
     def test_flipped_a4_vector_split_preserves_text_content(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
@@ -679,6 +707,36 @@ class BookletsViewTests(TestCase):
                 (None, None),
                 (("page1.pdf", "top", False), ("page3.pdf", "bottom", False)),
                 (("page1.pdf", "bottom", True), ("page3.pdf", "top", True)),
+                (("page2.pdf", "top", False), ("page2.pdf", "bottom", False)),
+            ],
+        )
+
+    def test_flipped_a4_a5_printing_imposition_swaps_even_half_pages_without_rotation(self):
+        prepared = [
+            PreparedPage("page1.pdf", 0, 595, 842, 1.0, False),
+            PreparedPage("page2.pdf", 0, 595, 842, 1.0, False),
+            PreparedPage("page3.pdf", 0, 595, 842, 1.0, False),
+        ]
+        pairs = _imposed_cell_pairs(
+            prepared,
+            rotate_even_half_pages=False,
+            swap_even_half_pages=True,
+        )
+
+        printable_pairs = [
+            (
+                None if left.is_blank else (left.half_page.prepared_page.source_pdf_path, left.half_page.half, left.rotate_180),
+                None if right.is_blank else (right.half_page.prepared_page.source_pdf_path, right.half_page.half, right.rotate_180),
+            )
+            for left, right in pairs
+        ]
+
+        self.assertEqual(
+            printable_pairs,
+            [
+                (None, None),
+                (("page1.pdf", "top", False), ("page3.pdf", "bottom", False)),
+                (("page3.pdf", "top", False), ("page1.pdf", "bottom", False)),
                 (("page2.pdf", "top", False), ("page2.pdf", "bottom", False)),
             ],
         )

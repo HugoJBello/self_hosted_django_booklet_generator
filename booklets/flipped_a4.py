@@ -143,7 +143,11 @@ def _ensure_odd_prepared_pages(prepared_pages: list[PreparedPage]) -> list[Prepa
     ]
 
 
-def _imposed_cell_pairs(prepared_pages: list[PreparedPage]) -> list[tuple[ImposedHalfPage, ImposedHalfPage]]:
+def _imposed_cell_pairs(
+    prepared_pages: list[PreparedPage],
+    rotate_even_half_pages: bool = True,
+    swap_even_half_pages: bool = False,
+) -> list[tuple[ImposedHalfPage, ImposedHalfPage]]:
     original = _ensure_odd_prepared_pages(prepared_pages)
     if not original:
         blank = ImposedHalfPage(_blank_half_like(None))
@@ -162,11 +166,10 @@ def _imposed_cell_pairs(prepared_pages: list[PreparedPage]) -> list[tuple[Impose
                 ImposedHalfPage(PreparedHalfPage(right_page, "bottom")),
             )
         )
+        even_left = ImposedHalfPage(PreparedHalfPage(left_page, "bottom"), rotate_180=rotate_even_half_pages)
+        even_right = ImposedHalfPage(PreparedHalfPage(right_page, "top"), rotate_180=rotate_even_half_pages)
         imposed.append(
-            (
-                ImposedHalfPage(PreparedHalfPage(left_page, "bottom"), rotate_180=True),
-                ImposedHalfPage(PreparedHalfPage(right_page, "top"), rotate_180=True),
-            )
+            (even_right, even_left) if swap_even_half_pages else (even_left, even_right)
         )
 
     center_page = original[len(original) // 2]
@@ -212,6 +215,8 @@ def create_flipped_a4_booklet(
     render_quality: FlippedA4Quality = "medium",
     center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
     split_mode: FlippedA4SplitMode = "vector",
+    rotate_even_half_pages: bool = True,
+    swap_even_half_pages: bool = False,
 ) -> None:
     source_docs: dict[str, fitz.Document] = {}
     half_docs: dict[tuple[str, int, str], fitz.Document] = {}
@@ -222,7 +227,11 @@ def create_flipped_a4_booklet(
         out_width = 595
         out_height = 842
 
-        imposed_cell_pairs = _imposed_cell_pairs(prepared_pages)
+        imposed_cell_pairs = _imposed_cell_pairs(
+            prepared_pages,
+            rotate_even_half_pages=rotate_even_half_pages,
+            swap_even_half_pages=swap_even_half_pages,
+        )
 
         for top_slot_page, bottom_slot_page in imposed_cell_pairs:
             page_out = doc_out.new_page(width=out_width, height=out_height)
@@ -379,6 +388,32 @@ def _materialize_vector_half_doc(source_doc: fitz.Document, source_page_number: 
     return half_doc
 
 
+def prepare_pdf_for_a5_printing(input_pdf_path: str, output_pdf_path: str) -> None:
+    source_doc = fitz.open(input_pdf_path)
+    output_doc = fitz.open()
+
+    try:
+        for source_page in source_doc:
+            page_width = source_page.rect.width
+            page_height = source_page.rect.height
+            output_page = output_doc.new_page(width=page_width, height=page_height)
+            try:
+                output_page.show_pdf_page(
+                    fitz.Rect(0, 0, page_width, page_height / 2),
+                    source_doc,
+                    source_page.number,
+                    rotate=90,
+                )
+            except ValueError as exc:
+                if "source page empty" not in str(exc):
+                    raise
+
+        output_doc.save(output_pdf_path, garbage=4, deflate=True)
+    finally:
+        output_doc.close()
+        source_doc.close()
+
+
 def build_flipped_a4_booklets_pipeline(
     specs: list[SourcePdfSpec],
     max_pages_per_split: int,
@@ -388,6 +423,7 @@ def build_flipped_a4_booklets_pipeline(
     render_quality: FlippedA4Quality = "medium",
     center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
     split_mode: FlippedA4SplitMode = "vector",
+    prepare_for_a5_printing: bool = False,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -428,9 +464,16 @@ def build_flipped_a4_booklets_pipeline(
                 render_quality=render_quality,
                 center_gap_cm=center_gap_cm,
                 split_mode=split_mode,
+                rotate_even_half_pages=not prepare_for_a5_printing,
+                swap_even_half_pages=prepare_for_a5_printing,
             )
             split_outputs.append(output_path)
 
-        merge_pdfs(split_outputs, final_pdf)
+        if prepare_for_a5_printing:
+            merged_pdf = os.path.join(tmp, "merged_flipped_a4_booklet.pdf")
+            merge_pdfs(split_outputs, merged_pdf)
+            prepare_pdf_for_a5_printing(merged_pdf, final_pdf)
+        else:
+            merge_pdfs(split_outputs, final_pdf)
 
     return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf)

@@ -209,6 +209,18 @@
                       <div class="text-danger small">{{ e }}</div>
                     {% endfor %}
                   </div>
+                  <div class="col-12">
+                    <div class="form-check">
+                      {{ form.flipped_a4_prepare_for_a5_printing }}
+                      <label class="form-check-label" for="{{ form.flipped_a4_prepare_for_a5_printing.id_for_label }}">
+                        {{ form.flipped_a4_prepare_for_a5_printing.label }}
+                      </label>
+                      <div class="form-text">Places each generated page on half an A4 portrait sheet for A5 printing.</div>
+                    </div>
+                    {% for e in form.flipped_a4_prepare_for_a5_printing.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
                 </div>
               </section>
             </div>

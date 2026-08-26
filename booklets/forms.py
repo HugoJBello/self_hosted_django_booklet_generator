@@ -122,6 +122,13 @@ class BookletForm(forms.Form):
         widget=forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "0.1"}),
     )
 
+    flipped_a4_prepare_for_a5_printing = forms.BooleanField(
+        label="Prepare for A5 printing",
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["input_pdf"].widget.attrs.update(
