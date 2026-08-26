@@ -176,6 +176,7 @@ class BookletsViewTests(TestCase):
                 "flipped_a4_quality": "high",
                 "flipped_a4_split_mode": "vector",
                 "flipped_a4_center_gap_cm": "1.5",
+                "generate_cover": "on",
                 "file_same_page_parity_0": "true",
                 "file_margin_0": "1.0",
                 "file_add_watermark_0": "true",
@@ -193,6 +194,9 @@ class BookletsViewTests(TestCase):
         generated_files = [name for name in os.listdir(outputs_dir) if name.endswith(".pdf")]
         self.assertEqual(len(generated_files), 2)
         self.assertTrue(all("_flipped_a4_booklets_for_printing.pdf" in name for name in generated_files))
+        for filename in generated_files:
+            with fitz.open(os.path.join(outputs_dir, filename)) as generated:
+                self.assertIn("Booklet index", generated[0].get_text())
 
     def test_combined_mode_generates_single_result(self):
         response = self.client.post(
@@ -401,6 +405,74 @@ class BookletsViewTests(TestCase):
             self.assertFalse(_is_rendered_region_blank(doc[1], top=True))
             self.assertTrue(_is_rendered_region_blank(doc[1], top=False))
 
+    def test_flipped_a4_cover_index_uses_first_blank_lower_half_page(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "cover_details.pdf")
+        doc = fitz.open()
+        try:
+            page = doc.new_page(width=595, height=842)
+            page.insert_text((72, 72), "Body page")
+            doc.set_metadata({"title": "Collected Notes", "author": "Ada Lovelace"})
+            doc.save(source_path)
+        finally:
+            doc.close()
+
+        result = build_flipped_a4_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=True,
+        )
+
+        with fitz.open(result.output_pdf_path) as generated:
+            self.assertEqual(generated.page_count, 2)
+            first_page_text = generated[0].get_text()
+            self.assertIn("Booklet index", first_page_text)
+            self.assertIn("Collected Notes", first_page_text)
+            self.assertIn("cover_details.pdf", first_page_text)
+            self.assertIn("Ada Lovelace", first_page_text)
+            self.assertIn("1", first_page_text)
+            self.assertTrue(_is_rendered_region_blank(generated[0], top=True))
+            self.assertFalse(_is_rendered_region_blank(generated[0], top=False))
+
+    def test_flipped_a4_compact_cover_index_fits_multiple_documents(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        specs = []
+        for number in range(1, 13):
+            source_path = os.path.join(uploads_dir, f"doc_{number:02}.pdf")
+            doc = fitz.open()
+            try:
+                page = doc.new_page(width=595, height=842)
+                page.insert_text((72, 72), f"Body {number}")
+                doc.set_metadata({"title": f"Title {number:02}", "author": f"Author {number:02}"})
+                doc.save(source_path)
+            finally:
+                doc.close()
+            specs.append(SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False))
+
+        result = build_flipped_a4_booklets_pipeline(
+            specs=specs,
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=False,
+            generate_cover=True,
+        )
+
+        with fitz.open(result.output_pdf_path) as generated:
+            first_page_text = generated[0].get_text()
+            self.assertIn("12 document(s)", first_page_text)
+            for number in range(1, 13):
+                self.assertIn(f"Title {number:02}", first_page_text)
+            self.assertTrue(_is_rendered_region_blank(generated[0], top=True))
+            self.assertFalse(_is_rendered_region_blank(generated[0], top=False))
+
     def test_flipped_a4_vector_split_preserves_text_content(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
         outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
@@ -565,7 +637,7 @@ class BookletsViewTests(TestCase):
             wide_rendered_gap = wide_bottom_bbox[1] - wide_top_bbox[3]
             self.assertGreater(wide_rendered_gap, narrow_rendered_gap + 35)
 
-    def test_flipped_a4_cover_is_added_before_imposition(self):
+    def test_flipped_a4_cover_index_does_not_add_a_full_cover_page(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
         outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
         os.makedirs(uploads_dir, exist_ok=True)
@@ -590,7 +662,8 @@ class BookletsViewTests(TestCase):
         )
 
         with fitz.open(with_cover.output_pdf_path) as doc:
-            self.assertEqual(doc.page_count, 4)
+            self.assertEqual(doc.page_count, 2)
+            self.assertIn("Booklet index", doc[0].get_text())
         with fitz.open(without_cover.output_pdf_path) as doc:
             self.assertEqual(doc.page_count, 2)
 

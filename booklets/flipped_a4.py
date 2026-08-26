@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 import fitz
-from django.utils import timezone
 
-from pdf_manager_project.pdf_cover import collect_cover_entries, create_cover_pdf
+from pdf_manager_project.pdf_cover import CoverEntry, collect_cover_entries, draw_compact_cover_index
 
 from .services import (
     BookletJobResult,
@@ -217,6 +216,7 @@ def create_flipped_a4_booklet(
     split_mode: FlippedA4SplitMode = "vector",
     rotate_even_half_pages: bool = True,
     swap_even_half_pages: bool = False,
+    cover_entries: list[CoverEntry] | None = None,
 ) -> None:
     source_docs: dict[str, fitz.Document] = {}
     half_docs: dict[tuple[str, int, str], fitz.Document] = {}
@@ -233,7 +233,7 @@ def create_flipped_a4_booklet(
             swap_even_half_pages=swap_even_half_pages,
         )
 
-        for top_slot_page, bottom_slot_page in imposed_cell_pairs:
+        for output_page_number, (top_slot_page, bottom_slot_page) in enumerate(imposed_cell_pairs, start=1):
             page_out = doc_out.new_page(width=out_width, height=out_height)
 
             def place_half_page(
@@ -364,6 +364,13 @@ def create_flipped_a4_booklet(
                 "top",
             )
 
+            if output_page_number == 1 and cover_entries is not None and bottom_slot_page.is_blank:
+                draw_compact_cover_index(
+                    page_out,
+                    fitz.Rect(0, out_height / 2, out_width, out_height),
+                    cover_entries,
+                )
+
             if top_slot_page.add_watermark or bottom_slot_page.add_watermark:
                 add_watermark_to_page(page_out)
 
@@ -433,28 +440,10 @@ def build_flipped_a4_booklets_pipeline(
     final_pdf = os.path.join(final_output_dir, f"{job_id}_flipped_a4_booklets_for_printing.pdf")
 
     with tempfile.TemporaryDirectory(prefix=f"pdf_manager_{job_id}_") as tmp:
-        specs_to_process = list(specs)
-        if generate_cover:
-            cover_path = os.path.join(tmp, "cover.pdf")
-            create_cover_pdf(
-                output_path=cover_path,
-                entries=collect_cover_entries([spec.input_pdf_path for spec in specs]),
-                generated_on=timezone.localdate(),
-                heading="Booklet index",
-            )
-            specs_to_process.insert(
-                0,
-                SourcePdfSpec(
-                    input_pdf_path=cover_path,
-                    same_page_parity=True,
-                    margin_cm=0.0,
-                    add_watermark=False,
-                ),
-            )
-
-        prepared_pages = prepare_pages_for_specs(specs_to_process, preserve_file_parity=preserve_file_parity)
+        prepared_pages = prepare_pages_for_specs(list(specs), preserve_file_parity=preserve_file_parity)
         split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
         split_outputs: list[str] = []
+        cover_entries = collect_cover_entries([spec.input_pdf_path for spec in specs]) if generate_cover else None
 
         for split_idx, (start_idx, end_idx) in enumerate(split_ranges, start=1):
             output_path = os.path.join(tmp, f"split{split_idx:02}_flipped_a4_booklet.pdf")
@@ -466,6 +455,7 @@ def build_flipped_a4_booklets_pipeline(
                 split_mode=split_mode,
                 rotate_even_half_pages=not prepare_for_a5_printing,
                 swap_even_half_pages=prepare_for_a5_printing,
+                cover_entries=cover_entries if split_idx == 1 else None,
             )
             split_outputs.append(output_path)
 

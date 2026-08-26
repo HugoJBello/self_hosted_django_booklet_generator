@@ -70,6 +70,94 @@ def _add_corner_marks(page: fitz.Page) -> None:
         page.insert_text((x, y), text, fontsize=font_size, fontname="helv", color=(0, 0, 0))
 
 
+def draw_compact_cover_index(
+    page: fitz.Page,
+    rect: fitz.Rect,
+    entries: list[CoverEntry],
+    heading: str = "Booklet index",
+) -> None:
+    margin = 18
+    x0 = rect.x0 + margin
+    x1 = rect.x1 - margin
+    y = rect.y0 + 28
+
+    page.insert_text((x0, y), heading, fontsize=13, fontname="helv", color=(0.08, 0.08, 0.08))
+    subtitle = f"{len(entries)} document(s)"
+    subtitle_x = x1 - fitz.get_text_length(subtitle, fontname="helv", fontsize=7)
+    page.insert_text(
+        (subtitle_x, y),
+        subtitle,
+        fontsize=7,
+        fontname="helv",
+        color=(0.38, 0.38, 0.38),
+    )
+    y += 12
+    page.draw_line((x0, y), (x1, y), color=(0.72, 0.72, 0.72), width=0.6)
+    y += 12
+
+    if not entries:
+        page.insert_text((x0, y), "No documents.", fontsize=8, fontname="helv")
+        return
+
+    available_height = max(rect.y1 - y - 16, 1)
+    max_columns = 4
+    columns = 1
+    row_height = available_height / len(entries)
+    for candidate_columns in range(1, max_columns + 1):
+        rows = (len(entries) + candidate_columns - 1) // candidate_columns
+        candidate_row_height = available_height / rows
+        columns = candidate_columns
+        row_height = candidate_row_height
+        if candidate_row_height >= 18:
+            break
+
+    rows_per_column = (len(entries) + columns - 1) // columns
+    column_gap = 10
+    column_width = (x1 - x0 - (column_gap * (columns - 1))) / columns
+    title_font_size = max(4.8, min(8.2, row_height * 0.42))
+    detail_font_size = max(4.2, min(6.4, row_height * 0.32))
+    show_details = row_height >= 11
+
+    for idx, entry in enumerate(entries):
+        column = idx // rows_per_column
+        row = idx % rows_per_column
+        cell_x0 = x0 + column * (column_width + column_gap)
+        cell_y0 = y + row * row_height
+        number = f"{idx + 1}."
+        number_width = fitz.get_text_length(number, fontname="helv", fontsize=title_font_size)
+        text_x0 = cell_x0 + number_width + 4
+        title_chars = max(10, int(column_width / max(title_font_size * 0.48, 1)) - 6)
+
+        page.insert_text(
+            (cell_x0, cell_y0 + title_font_size),
+            number,
+            fontsize=title_font_size,
+            fontname="helv",
+            color=(0.12, 0.12, 0.12),
+        )
+        page.insert_textbox(
+            fitz.Rect(text_x0, cell_y0, cell_x0 + column_width, cell_y0 + row_height),
+            _truncate(entry.title, title_chars),
+            fontsize=title_font_size,
+            fontname="helv",
+            color=(0.08, 0.08, 0.08),
+        )
+
+        if show_details:
+            details = [entry.filename]
+            if entry.author:
+                details.append(f"Author: {entry.author}")
+            details.append(f"{entry.page_count}p")
+            detail_chars = max(10, int(column_width / max(detail_font_size * 0.48, 1)) - 3)
+            page.insert_textbox(
+                fitz.Rect(text_x0, cell_y0 + title_font_size + 2, cell_x0 + column_width, cell_y0 + row_height),
+                _truncate(" - ".join(details), detail_chars),
+                fontsize=detail_font_size,
+                fontname="helv",
+                color=(0.38, 0.38, 0.38),
+            )
+
+
 def create_cover_pdf(
     output_path: str,
     entries: list[CoverEntry],

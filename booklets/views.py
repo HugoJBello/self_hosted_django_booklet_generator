@@ -268,7 +268,7 @@ def booklets_view(request):
                         "max_pages_per_split": max_pages_per_split,
                         "final_output_dir": outputs_dir,
                         "preserve_file_parity": True,
-                        "generate_cover": False,
+                        "generate_cover": generate_cover if flipped_a4 else False,
                     }
                     if flipped_a4:
                         pipeline_kwargs["render_quality"] = flipped_a4_quality

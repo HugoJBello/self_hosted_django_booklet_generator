@@ -166,7 +166,7 @@
                       <label class="form-check-label" for="{{ form.generate_cover.id_for_label }}">
                         {{ form.generate_cover.label }}
                       </label>
-                      <div class="form-text">Combined mode only. Adds a first-page index.</div>
+                      <div class="form-text">Side-by-side combined adds a full page. Flipped places the index in the first blank lower half-page, including separate files.</div>
                     </div>
                   </div>
                 </div>
@@ -478,14 +478,16 @@
 
       const refreshModeUI = () => {
         const currentMode = modeInputs.find((input) => input.checked)?.value || "separate";
+        const currentLayout = layoutInputs.find((input) => input.checked)?.value || "side_by_side";
         preserveParityWrapper.style.display = currentMode === "combined" ? "" : "none";
-        generateCoverWrapper.style.display = currentMode === "combined" ? "" : "none";
+        generateCoverWrapper.style.display = currentMode === "combined" || currentLayout === "flipped_a4" ? "" : "none";
       };
 
       const refreshLayoutUI = () => {
         const currentLayout = layoutInputs.find((input) => input.checked)?.value || "side_by_side";
         sideBySideOptionsPanel.style.display = currentLayout === "side_by_side" ? "" : "none";
         flippedOptionsPanel.style.display = currentLayout === "flipped_a4" ? "" : "none";
+        refreshModeUI();
         refreshSplitModeUI();
       };
 
