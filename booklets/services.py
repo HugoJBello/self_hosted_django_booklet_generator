@@ -98,6 +98,32 @@ def merge_pdfs(input_paths: list[str], output_path: str) -> None:
     merged.close()
 
 
+def prepare_pdf_for_portrait_printing(input_pdf_path: str, output_pdf_path: str) -> None:
+    source_doc = fitz.open(input_pdf_path)
+    output_doc = fitz.open()
+
+    try:
+        for source_page in source_doc:
+            page_width = source_page.rect.width
+            page_height = source_page.rect.height
+            output_page = output_doc.new_page(width=page_height, height=page_width)
+            try:
+                output_page.show_pdf_page(
+                    fitz.Rect(0, 0, page_height, page_width),
+                    source_doc,
+                    source_page.number,
+                    rotate=90,
+                )
+            except ValueError as exc:
+                if "source page empty" not in str(exc):
+                    raise
+
+        output_doc.save(output_pdf_path, garbage=4, deflate=True)
+    finally:
+        output_doc.close()
+        source_doc.close()
+
+
 def compute_split_ranges(total_pages: int, max_pages_per_split: int) -> list[tuple[int, int]]:
     split_ranges: list[tuple[int, int]] = []
     split_count = 0
@@ -310,6 +336,7 @@ def build_booklets_pipeline(
     final_output_dir: str,
     preserve_file_parity: bool = True,
     generate_cover: bool = False,
+    prepare_for_portrait_printing: bool = False,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -347,6 +374,11 @@ def build_booklets_pipeline(
             create_booklet(prepared_pages[start_idx:end_idx + 1], output_path)
             split_outputs.append(output_path)
 
-        merge_pdfs(split_outputs, final_pdf)
+        if prepare_for_portrait_printing:
+            merged_pdf = os.path.join(tmp, "merged_booklet.pdf")
+            merge_pdfs(split_outputs, merged_pdf)
+            prepare_pdf_for_portrait_printing(merged_pdf, final_pdf)
+        else:
+            merge_pdfs(split_outputs, final_pdf)
 
     return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf)

@@ -82,6 +82,13 @@ class BookletForm(forms.Form):
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
+    side_by_side_prepare_for_portrait_printing = forms.BooleanField(
+        label="Prepare for portrait printing",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
     flipped_a4 = forms.BooleanField(
         label="Flipped A4",
         required=False,

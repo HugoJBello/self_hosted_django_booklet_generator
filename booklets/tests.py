@@ -98,12 +98,14 @@ class BookletsViewTests(TestCase):
         form = BookletForm()
 
         self.assertEqual(form.fields["booklet_layout"].initial, "side_by_side")
+        self.assertTrue(form.fields["side_by_side_prepare_for_portrait_printing"].initial)
         self.assertFalse(form.fields["flipped_a4"].initial)
         self.assertEqual(form.fields["flipped_a4_quality"].initial, "medium")
         self.assertEqual(form.fields["flipped_a4_split_mode"].initial, "vector")
         self.assertEqual(form.fields["flipped_a4_center_gap_cm"].initial, 1.0)
         self.assertFalse(form.fields["flipped_a4_prepare_for_a5_printing"].initial)
         self.assertIn("Side-by-side booklet", form.as_p())
+        self.assertIn("Prepare for portrait printing", form.as_p())
         self.assertIn("Flipped booklet", form.as_p())
         self.assertIn("Rendering quality", form.as_p())
         self.assertIn("Page split method", form.as_p())
@@ -299,6 +301,53 @@ class BookletsViewTests(TestCase):
             # 4 logical pages (cover, blank, first PDF, blank, second PDF => padded to 8)
             # become 4 imposed booklet sheets.
             self.assertEqual(doc.page_count, 4)
+
+    def test_side_by_side_pipeline_outputs_landscape_by_default(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "side_by_side_default.pdf")
+        with open(source_path, "wb") as fh:
+            fh.write(build_pdf_bytes(2))
+
+        result = build_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+        )
+
+        with fitz.open(result.output_pdf_path) as doc:
+            self.assertEqual(doc.page_count, 2)
+            self.assertEqual(round(doc[0].rect.width), 842)
+            self.assertEqual(round(doc[0].rect.height), 595)
+            self.assertEqual(doc[0].rotation, 0)
+
+    def test_side_by_side_pipeline_can_prepare_output_for_portrait_printing(self):
+        uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")
+        outputs_dir = os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        source_path = os.path.join(uploads_dir, "side_by_side_portrait.pdf")
+        with open(source_path, "wb") as fh:
+            fh.write(build_pdf_bytes(2))
+
+        result = build_booklets_pipeline(
+            specs=[SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.0, add_watermark=False)],
+            max_pages_per_split=40,
+            final_output_dir=outputs_dir,
+            preserve_file_parity=True,
+            generate_cover=False,
+            prepare_for_portrait_printing=True,
+        )
+
+        with fitz.open(result.output_pdf_path) as doc:
+            self.assertEqual(doc.page_count, 2)
+            self.assertEqual(round(doc[0].rect.width), 595)
+            self.assertEqual(round(doc[0].rect.height), 842)
+            self.assertEqual(doc[0].rotation, 0)
 
     def test_flipped_a4_pipeline_splits_source_pages_into_half_pages(self):
         uploads_dir = os.path.join(TEST_MEDIA_ROOT, "uploads")

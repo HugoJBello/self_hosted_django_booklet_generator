@@ -172,6 +172,21 @@
                 </div>
               </section>
 
+              <section class="settings-panel" id="side-by-side-options-panel">
+                <div class="settings-panel-title">Side-by-side booklet options</div>
+                <div class="settings-panel-subtitle">Only used when Side-by-side booklet is selected.</div>
+                <div class="form-check">
+                  {{ form.side_by_side_prepare_for_portrait_printing }}
+                  <label class="form-check-label" for="{{ form.side_by_side_prepare_for_portrait_printing.id_for_label }}">
+                    {{ form.side_by_side_prepare_for_portrait_printing.label }}
+                  </label>
+                  <div class="form-text">Rotates each imposed sheet onto A4 portrait paper for portrait duplex printing.</div>
+                </div>
+                {% for e in form.side_by_side_prepare_for_portrait_printing.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </section>
+
               <section class="settings-panel" id="flipped-options-panel">
                 <div class="settings-panel-title">Flipped booklet options</div>
                 <div class="settings-panel-subtitle">Only used when Flipped booklet is selected.</div>
@@ -330,6 +345,7 @@
       const template = document.getElementById("file-config-template");
       const preserveParityWrapper = document.getElementById("preserve-parity-wrapper");
       const generateCoverWrapper = document.getElementById("generate-cover-wrapper");
+      const sideBySideOptionsPanel = document.getElementById("side-by-side-options-panel");
       const flippedOptionsPanel = document.getElementById("flipped-options-panel");
       const flippedQualityWrapper = document.getElementById("flipped-quality-wrapper");
       const layoutInputs = Array.from(form.querySelectorAll('input[name="booklet_layout"]'));
@@ -468,6 +484,7 @@
 
       const refreshLayoutUI = () => {
         const currentLayout = layoutInputs.find((input) => input.checked)?.value || "side_by_side";
+        sideBySideOptionsPanel.style.display = currentLayout === "side_by_side" ? "" : "none";
         flippedOptionsPanel.style.display = currentLayout === "flipped_a4" ? "" : "none";
         refreshSplitModeUI();
       };

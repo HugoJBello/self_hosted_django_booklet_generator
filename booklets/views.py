@@ -174,6 +174,10 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "max_pages_per_split": form.cleaned_data.get("max_pages_per_split", 40),
             "preserve_file_parity": form.cleaned_data.get("preserve_file_parity", True),
             "generate_cover": form.cleaned_data.get("generate_cover", False),
+            "side_by_side_prepare_for_portrait_printing": form.cleaned_data.get(
+                "side_by_side_prepare_for_portrait_printing",
+                True,
+            ),
             "flipped_a4": form.cleaned_data.get("booklet_layout") == "flipped_a4",
             "flipped_a4_quality": form.cleaned_data.get("flipped_a4_quality", "medium"),
             "flipped_a4_split_mode": form.cleaned_data.get("flipped_a4_split_mode", "vector"),
@@ -203,6 +207,9 @@ def booklets_view(request):
         preserve_file_parity = bool(form.cleaned_data["preserve_file_parity"])
         generate_cover = bool(form.cleaned_data["generate_cover"])
         flipped_a4 = booklet_layout == "flipped_a4"
+        side_by_side_prepare_for_portrait_printing = bool(
+            form.cleaned_data["side_by_side_prepare_for_portrait_printing"]
+        )
         flipped_a4_quality = form.cleaned_data["flipped_a4_quality"]
         flipped_a4_split_mode = form.cleaned_data["flipped_a4_split_mode"]
         flipped_a4_center_gap_cm = form.cleaned_data["flipped_a4_center_gap_cm"]
@@ -244,6 +251,8 @@ def booklets_view(request):
                     pipeline_kwargs["split_mode"] = flipped_a4_split_mode
                     pipeline_kwargs["center_gap_cm"] = flipped_a4_center_gap_cm
                     pipeline_kwargs["prepare_for_a5_printing"] = flipped_a4_prepare_for_a5_printing
+                else:
+                    pipeline_kwargs["prepare_for_portrait_printing"] = side_by_side_prepare_for_portrait_printing
                 result = pipeline(**pipeline_kwargs)
                 results.append(
                     {
@@ -266,6 +275,8 @@ def booklets_view(request):
                         pipeline_kwargs["split_mode"] = flipped_a4_split_mode
                         pipeline_kwargs["center_gap_cm"] = flipped_a4_center_gap_cm
                         pipeline_kwargs["prepare_for_a5_printing"] = flipped_a4_prepare_for_a5_printing
+                    else:
+                        pipeline_kwargs["prepare_for_portrait_printing"] = side_by_side_prepare_for_portrait_printing
                     result = pipeline(**pipeline_kwargs)
                     results.append(
                         {
