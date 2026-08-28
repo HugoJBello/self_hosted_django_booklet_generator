@@ -43,6 +43,76 @@
 \definecolor{calendarWeekend}{RGB}{244,239,229}
 \definecolor{calendarBorder}{RGB}{110,122,135}
 
+\newcommand{\moonPhaseIcon}[1]{%
+\begin{tikzpicture}[baseline=-0.45ex,x=0.13cm,y=0.13cm]
+  \ifcase#1
+    \fill (0,0) circle (1);
+  \or
+    \fill (0,0) circle (1);
+    \fill[white] (0.45,0) circle (1);
+    \draw (0,0) circle (1);
+  \or
+    \fill (-1,-1) rectangle (0,1);
+    \draw (0,0) circle (1);
+  \or
+    \fill (0,0) circle (1);
+    \fill[white] (-0.45,0) circle (1);
+    \draw (0,0) circle (1);
+  \or
+    \draw (0,0) circle (1);
+  \or
+    \fill (0,0) circle (1);
+    \fill[white] (0.45,0) circle (1);
+    \draw (0,0) circle (1);
+  \or
+    \fill (0,-1) rectangle (1,1);
+    \draw (0,0) circle (1);
+  \else
+    \fill (0,0) circle (1);
+    \fill[white] (-0.45,0) circle (1);
+    \draw (0,0) circle (1);
+  \fi
+\end{tikzpicture}%
+}
+
+\newcommand{\planetMercuryIcon}{%
+\begin{tikzpicture}[baseline=-0.45ex,x=0.10cm,y=0.10cm]
+  \draw (0,0.25) circle (0.78);
+  \draw (-0.48,1.1) arc[start angle=205,end angle=335,radius=0.55];
+  \draw (0,-0.55) -- (0,-1.35);
+  \draw (-0.42,-0.95) -- (0.42,-0.95);
+\end{tikzpicture}%
+}
+\newcommand{\planetVenusIcon}{%
+\begin{tikzpicture}[baseline=-0.45ex,x=0.10cm,y=0.10cm]
+  \draw (0,0.2) circle (0.8);
+  \draw (0,-0.6) -- (0,-1.35);
+  \draw (-0.45,-0.98) -- (0.45,-0.98);
+\end{tikzpicture}%
+}
+\newcommand{\planetMarsIcon}{%
+\begin{tikzpicture}[baseline=-0.45ex,x=0.10cm,y=0.10cm]
+  \draw (-0.2,-0.2) circle (0.75);
+  \draw (0.35,0.35) -- (1.15,1.15);
+  \draw (0.55,1.15) -- (1.15,1.15) -- (1.15,0.55);
+\end{tikzpicture}%
+}
+\newcommand{\planetJupiterIcon}{%
+\begin{tikzpicture}[baseline=-0.45ex,x=0.10cm,y=0.10cm]
+  \draw (-0.9,0.75) .. controls (-0.3,0.75) and (-0.2,0.15) .. (-0.72,-0.12);
+  \draw (-0.72,-0.12) .. controls (-0.25,-0.38) and (0.25,-0.1) .. (0.25,0.5);
+  \draw (0.25,0.95) -- (0.25,-1.05);
+  \draw (-0.95,-0.35) -- (0.95,-0.35);
+\end{tikzpicture}%
+}
+\newcommand{\planetSaturnIcon}{%
+\begin{tikzpicture}[baseline=-0.45ex,x=0.10cm,y=0.10cm]
+  \draw (0,0) circle (0.7);
+  \draw[rotate=18] (-1.25,0) ellipse (1.45 and 0.38);
+\end{tikzpicture}%
+}
+\newcommand{\planetItem}[2]{\mbox{#1\,#2}\hspace{0.65em}}
+
 \newcommand{\calendarMeta}[2]{%
   {\footnotesize #1\par #2\par}%
 }

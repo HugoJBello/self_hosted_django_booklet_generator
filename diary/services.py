@@ -59,7 +59,7 @@ def _surround_day(date: dt.date) -> str:
 
 
 def _moon_image(date: dt.date) -> str:
-    return f"\\includegraphics[width=0.32cm]{{moon_phases/Moon_phase_{_moon_phase_index(date)}.svg.png}}"
+    return f"\\moonPhaseIcon{{{_moon_phase_index(date)}}}"
 
 
 def _date_text(date: dt.date, dates: dict[str, str]) -> str:
@@ -87,18 +87,18 @@ def _latex_escape(value: str) -> str:
     return "".join(replacements.get(char, char) for char in value)
 
 
-def _visible_planet_names(date: dt.date, latitude: float, longitude: float) -> list[str]:
+def _visible_planets(date: dt.date, latitude: float, longitude: float) -> list[tuple[str, str]]:
     observer = ephem.Observer()
     observer.lat = str(latitude)
     observer.lon = str(longitude)
     observer.elevation = 0
 
     planets = [
-        ("Merc.", ephem.Mercury),
-        ("Ven.", ephem.Venus),
-        ("Mar.", ephem.Mars),
-        ("Jup.", ephem.Jupiter),
-        ("Sat.", ephem.Saturn),
+        ("\\planetMercuryIcon", "Merc.", ephem.Mercury),
+        ("\\planetVenusIcon", "Ven.", ephem.Venus),
+        ("\\planetMarsIcon", "Mar.", ephem.Mars),
+        ("\\planetJupiterIcon", "Jup.", ephem.Jupiter),
+        ("\\planetSaturnIcon", "Sat.", ephem.Saturn),
     ]
     local_utc_offset_hours = round(longitude / 15)
     local_sample_times = [
@@ -110,9 +110,9 @@ def _visible_planet_names(date: dt.date, latitude: float, longitude: float) -> l
     utc_sample_times = [sample - dt.timedelta(hours=local_utc_offset_hours) for sample in local_sample_times]
     min_planet_altitude = math.radians(10)
     max_sun_altitude = math.radians(-6)
-    visible: list[tuple[str, float]] = []
+    visible: list[tuple[str, str, float]] = []
 
-    for name, planet_cls in planets:
+    for icon_macro, label, planet_cls in planets:
         best_altitude = None
         for sample_time in utc_sample_times:
             observer.date = sample_time
@@ -124,19 +124,30 @@ def _visible_planet_names(date: dt.date, latitude: float, longitude: float) -> l
                     best_altitude = planet_altitude
 
         if best_altitude is not None:
-            visible.append((name, best_altitude))
+            visible.append((icon_macro, label, best_altitude))
 
-    return [name for name, _ in sorted(visible, key=lambda item: item[1], reverse=True)]
+    return [
+        (icon_macro, label)
+        for icon_macro, label, _ in sorted(visible, key=lambda item: item[2], reverse=True)
+    ]
+
+
+def _visible_planet_names(date: dt.date, latitude: float, longitude: float) -> list[str]:
+    return [label for _, label in _visible_planets(date, latitude, longitude)]
 
 
 def _planet_text(date: dt.date, latitude: float | None, longitude: float | None) -> str:
     if latitude is None or longitude is None:
         return ""
 
-    names = _visible_planet_names(date, latitude, longitude)
-    if not names:
-        return "\\scriptsize{Pl: --}"
-    return "\\scriptsize{Pl: " + _latex_escape(", ".join(names)) + "}"
+    planets = _visible_planets(date, latitude, longitude)
+    if not planets:
+        return ""
+    items = "".join(
+        f"\\planetItem{{{icon_macro}}}{{{_latex_escape(label)}}}"
+        for icon_macro, label in planets
+    )
+    return "\\scriptsize{" + items + "}"
 
 
 def _generate_graph(output_dir: str, initial_date: dt.date, number_of_weeks: int) -> None:
