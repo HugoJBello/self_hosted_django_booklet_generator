@@ -1,45 +1,186 @@
-
 \section*{Semana DATE1 -- DATE2}
 \markboth{Semana DATE1 -- DATE2}{}
 \thispagestyle{empty}
+
+% Damos un poco más de espacio únicamente a esta página.
+% Esto evita que LaTeX desplace las tablas a una página nueva
+% por unos pocos milímetros de falta de espacio.
+\enlargethispage{2cm}
+
+% =========================================================
+% TABLA 1: TAREAS 1--5
+% =========================================================
+
 \noindent
 \begin{lrbox}{\taskTableBox}
 \begin{minipage}{\dimexpr\linewidth-2mm\relax}
+
 \begin{tabularx}{\linewidth}{X|c c}
+
     \hline
-  \rule{0pt}{3.0ex}\textbf{Tarea} & \textbf{descripción} & \textbf{proceso}\\[0.2ex]
-  \hline
-  \taskNumber{1}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{2}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{3}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{4}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{5}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{6}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{7}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{8}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{9}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
-  \taskNumber{10}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
-  \hline
+
+    \rule{0pt}{2.5ex}
+    \textbf{Tarea}
+    &
+    \textbf{descripción}
+    &
+    \textbf{proceso}
+    \\[0.1ex]
+
+    \hline
+
+    \taskNumber{1}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+    \taskNumber{2}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+    \taskNumber{3}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+    \taskNumber{4}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+    \taskNumber{5}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
 \end{tabularx}
+
 \end{minipage}
 \end{lrbox}
+
 \begin{tikzpicture}
-  \node[inner sep=0pt, outer sep=0pt] (tasktable) {\usebox{\taskTableBox}};
-  \draw[
-    draw=black!50!black,
-    rounded corners=4pt,
-    line width=0.4pt
-  ] (tasktable.south west) rectangle (tasktable.north east);
+    \node[
+        inner sep=0pt,
+        outer sep=0pt
+    ] (tasktableA) {\usebox{\taskTableBox}};
+
+    \draw[
+        draw=black!50!black,
+        rounded corners=4pt,
+        line width=0.4pt
+    ]
+    (tasktableA.south west)
+    rectangle
+    (tasktableA.north east);
 \end{tikzpicture}
+
+% =========================================================
+% MUY IMPORTANTE:
+% prohibimos el salto de página entre ambas tablas.
+% =========================================================
+
+\nopagebreak[4]
+
+% Separación amplia entre las dos subtablas.
+\vspace{3.5ex}
+
+\nopagebreak[4]
+
+% =========================================================
+% TABLA 2: TAREAS 6--10
+% Sin segunda cabecera
+% =========================================================
+
+\noindent
+\begin{lrbox}{\taskTableBox}
+\begin{minipage}{\dimexpr\linewidth-2mm\relax}
+
+\begin{tabularx}{\linewidth}{X|c c}
+
+    \hline
+
+    \taskNumber{6}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+    \taskNumber{7}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+    \taskNumber{8}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+    \taskNumber{9}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+    \taskNumber{10}\vspace{2.0ex}
+    &
+    \subtablaDescrip
+    &
+    $\square\square\square\square\square$
+    \\
+    \hline
+
+\end{tabularx}
+
+\end{minipage}
+\end{lrbox}
+
+\begin{tikzpicture}
+    \node[
+        inner sep=0pt,
+        outer sep=0pt
+    ] (tasktableB) {\usebox{\taskTableBox}};
+
+    \draw[
+        draw=black!50!black,
+        rounded corners=4pt,
+        line width=0.4pt
+    ]
+    (tasktableB.south west)
+    rectangle
+    (tasktableB.north east);
+\end{tikzpicture}
+
+
+% =========================================================
+% SEGUNDA PÁGINA
+% EXACTAMENTE como en tu plantilla original.
+% =========================================================
 
 \newpage
 
@@ -47,28 +188,47 @@
 
 \noindent
 \begin{minipage}[t][0.455\textheight][t]{\linewidth}
+
   \noindent
   \begin{minipage}[t]{0.485\linewidth}
+
   \textbf{Facilidades / dificultades}\par\vspace{1ex}
+
   \roundedContentBox{3.6cm}{\strut}
-  \end{minipage}\hfill
+
+  \end{minipage}
+  \hfill
   \begin{minipage}[t]{0.485\linewidth}
+
   \textbf{Objetivos}\par\vspace{1ex}
+
   \roundedContentBox{3.6cm}{\strut}
+
   \end{minipage}
 
   \vspace{3.0ex}
-  \noindent\textbf{Reflexiones}\par\vspace{1ex}
-  \noindent\roundedContentBox{4.4cm}{\strut}
+
+  \noindent
+  \textbf{Reflexiones}\par\vspace{1ex}
+
+  \noindent
+  \roundedContentBox{4.4cm}{\strut}
+
 \end{minipage}
 
 \vspace{8.0ex}
 
 \noindent
 \begin{minipage}[t][0.43\textheight][t]{\linewidth}
-  \noindent\textbf{Notas}\par\vspace{1ex}
-  \noindent\roundedContentBox{4.8cm}{\strut}
+
+  \noindent
+  \textbf{Notas}\par\vspace{1ex}
+
+  \noindent
+  \roundedContentBox{4.8cm}{\strut}
 
   \vspace{1.4ex}
+
   Resultado semana: \Vtextvisiblespace[2em]
+
 \end{minipage}
