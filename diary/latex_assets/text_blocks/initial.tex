@@ -51,14 +51,14 @@
   \hfill #1%
 }
 
-\newcommand{\calendarDayBlock}[5]{%
+\newcommand{\calendarDayBlock}[6]{%
 \fcolorbox{calendarBorder}{white}{%
 \begin{minipage}[t][0.44\textheight][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
 \colorbox{calendarHeader}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\strut\textbf{\sffamily #1}\hfill #2}}%
 \vspace{0.8ex}
 \calendarMeta{#3}{#4}
 \vfill
-\calendarMoonCorner{#5}
+\calendarMoonCorner{#5\hspace{0.45em}#6}
 \end{minipage}}%
 }
 
@@ -67,17 +67,17 @@
 \begin{minipage}[t][0.44\textheight][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
 \colorbox{calendarWeekend}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\strut\textbf{\sffamily Sábado}\hfill #1}}%
 \vspace{0.6ex}
-\calendarMeta{#2}{#3}
+\calendarMeta{#2}{}
 \vfill
-\calendarMoonCorner{#4}
+\calendarMoonCorner{#3\hspace{0.45em}#4}
 \vspace{0.6ex}
 \hrule
 \vspace{0.6ex}
 \colorbox{calendarWeekend}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\strut\textbf{\sffamily Domingo}\hfill #5}}%
 \vspace{0.6ex}
-\calendarMeta{#6}{#7}
+\calendarMeta{#6}{}
 \vfill
-\calendarMoonCorner{#8}
+\calendarMoonCorner{#7\hspace{0.45em}#8}
 \end{minipage}}%
 }
 

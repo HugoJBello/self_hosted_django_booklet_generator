@@ -56,6 +56,11 @@
         <div class="card-body">
           <form method="post" id="diary-form">
             {% csrf_token %}
+            {{ form.latitude }}
+            {{ form.longitude }}
+            {% for e in form.non_field_errors %}
+              <div class="alert alert-danger">{{ e }}</div>
+            {% endfor %}
 
             <div class="settings-grid">
               <section class="settings-panel">
@@ -116,6 +121,22 @@
                   <div class="form-text">Adds the monthly constellation map and its following blank page.</div>
                 </div>
                 {% for e in form.include_constellation_map.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+                <div class="form-check mt-3">
+                  {{ form.include_visible_planets }}
+                  <label class="form-check-label" for="{{ form.include_visible_planets.id_for_label }}">
+                    {{ form.include_visible_planets.label }}
+                  </label>
+                  <div class="form-text">Uses browser location to add compact daily visibility notes for Mercury, Venus, Mars, Jupiter and Saturn.</div>
+                </div>
+                {% for e in form.include_visible_planets.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+                {% for e in form.latitude.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+                {% for e in form.longitude.errors %}
                   <div class="text-danger small">{{ e }}</div>
                 {% endfor %}
               </section>
@@ -236,6 +257,10 @@
       const qualityWrapper = document.getElementById("flipped-quality-wrapper");
       const outputInputs = Array.from(document.querySelectorAll('input[name="output_mode"]'));
       const splitModeInputs = Array.from(document.querySelectorAll('input[name="flipped_a4_split_mode"]'));
+      const form = document.getElementById("diary-form");
+      const includePlanetsInput = document.getElementById("id_include_visible_planets");
+      const latitudeInput = document.getElementById("id_latitude");
+      const longitudeInput = document.getElementById("id_longitude");
 
       const refreshPanels = () => {
         const selected = outputInputs.find((input) => input.checked)?.value || "pdf";
@@ -249,6 +274,36 @@
       outputInputs.forEach((input) => input.addEventListener("change", refreshPanels));
       splitModeInputs.forEach((input) => input.addEventListener("change", refreshPanels));
       refreshPanels();
+
+      form.addEventListener("submit", (event) => {
+        if (!includePlanetsInput.checked || form.dataset.locationReady === "true") {
+          return;
+        }
+
+        if (!navigator.geolocation) {
+          event.preventDefault();
+          alert("This browser does not support location access.");
+          return;
+        }
+
+        event.preventDefault();
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            latitudeInput.value = position.coords.latitude.toFixed(6);
+            longitudeInput.value = position.coords.longitude.toFixed(6);
+            form.dataset.locationReady = "true";
+            form.requestSubmit();
+          },
+          () => {
+            alert("Location permission is required to include visible planets.");
+          },
+          {
+            enableHighAccuracy: false,
+            timeout: 10000,
+            maximumAge: 3600000,
+          },
+        );
+      });
     })();
   </script>
 {% endblock %}

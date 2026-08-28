@@ -43,6 +43,24 @@ class DiaryForm(forms.Form):
         initial=False,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
+    include_visible_planets = forms.BooleanField(
+        label="Include visible planets",
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+    latitude = forms.FloatField(
+        required=False,
+        min_value=-90.0,
+        max_value=90.0,
+        widget=forms.HiddenInput(),
+    )
+    longitude = forms.FloatField(
+        required=False,
+        min_value=-180.0,
+        max_value=180.0,
+        widget=forms.HiddenInput(),
+    )
     output_mode = forms.ChoiceField(
         label="Output",
         initial=OUTPUT_PDF,
@@ -116,3 +134,10 @@ class DiaryForm(forms.Form):
 
     def clean_flipped_a4_quality(self):
         return self.cleaned_data.get("flipped_a4_quality") or "medium"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("include_visible_planets"):
+            if cleaned_data.get("latitude") is None or cleaned_data.get("longitude") is None:
+                raise forms.ValidationError("Browser location is required to include visible planets.")
+        return cleaned_data

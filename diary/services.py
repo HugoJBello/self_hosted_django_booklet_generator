@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+import ephem
 import matplotlib
 
 from booklets.flipped_a4 import FlippedA4Quality, FlippedA4SplitMode, build_flipped_a4_booklets_pipeline
@@ -70,6 +71,74 @@ def _festivity_text(date: dt.date, dates: dict[str, str]) -> str:
     return "\\small{" + (f" {text}" if text else "") + "}"
 
 
+def _latex_escape(value: str) -> str:
+    replacements = {
+        "\\": "\\textbackslash{}",
+        "&": "\\&",
+        "%": "\\%",
+        "$": "\\$",
+        "#": "\\#",
+        "_": "\\_",
+        "{": "\\{",
+        "}": "\\}",
+        "~": "\\textasciitilde{}",
+        "^": "\\textasciicircum{}",
+    }
+    return "".join(replacements.get(char, char) for char in value)
+
+
+def _visible_planet_names(date: dt.date, latitude: float, longitude: float) -> list[str]:
+    observer = ephem.Observer()
+    observer.lat = str(latitude)
+    observer.lon = str(longitude)
+    observer.elevation = 0
+
+    planets = [
+        ("Merc.", ephem.Mercury),
+        ("Ven.", ephem.Venus),
+        ("Mar.", ephem.Mars),
+        ("Jup.", ephem.Jupiter),
+        ("Sat.", ephem.Saturn),
+    ]
+    local_utc_offset_hours = round(longitude / 15)
+    local_sample_times = [
+        dt.datetime.combine(date, dt.time(18, 0)),
+        dt.datetime.combine(date, dt.time(20, 0)),
+        dt.datetime.combine(date, dt.time(22, 0)),
+        dt.datetime.combine(date + dt.timedelta(days=1), dt.time(5, 0)),
+    ]
+    utc_sample_times = [sample - dt.timedelta(hours=local_utc_offset_hours) for sample in local_sample_times]
+    min_planet_altitude = math.radians(10)
+    max_sun_altitude = math.radians(-6)
+    visible: list[tuple[str, float]] = []
+
+    for name, planet_cls in planets:
+        best_altitude = None
+        for sample_time in utc_sample_times:
+            observer.date = sample_time
+            sun = ephem.Sun(observer)
+            planet = planet_cls(observer)
+            planet_altitude = float(planet.alt)
+            if float(sun.alt) <= max_sun_altitude and planet_altitude >= min_planet_altitude:
+                if best_altitude is None or planet_altitude > best_altitude:
+                    best_altitude = planet_altitude
+
+        if best_altitude is not None:
+            visible.append((name, best_altitude))
+
+    return [name for name, _ in sorted(visible, key=lambda item: item[1], reverse=True)]
+
+
+def _planet_text(date: dt.date, latitude: float | None, longitude: float | None) -> str:
+    if latitude is None or longitude is None:
+        return ""
+
+    names = _visible_planet_names(date, latitude, longitude)
+    if not names:
+        return "\\scriptsize{Pl: --}"
+    return "\\scriptsize{Pl: " + _latex_escape(", ".join(names)) + "}"
+
+
 def _generate_graph(output_dir: str, initial_date: dt.date, number_of_weeks: int) -> None:
     from matplotlib import pyplot as plt
 
@@ -125,6 +194,8 @@ def _generate_calendar_page(
     calendar_mode: str,
     important_dates: dict[str, str],
     festivities: dict[str, str],
+    latitude: float | None,
+    longitude: float | None,
 ) -> str:
     template = "text_blocks/calendar.tex" if calendar_mode == "double" else "text_blocks/calendar_single.tex"
     table = _read_asset(template)
@@ -142,6 +213,7 @@ def _generate_calendar_page(
     for suffix, date in days.items():
         table = table.replace(f"DATE{suffix}", _surround_day(date))
         table = table.replace(f"MOON{suffix}", _moon_image(date))
+        table = table.replace(f"PLANET{suffix}", _planet_text(date, latitude, longitude))
         table = table.replace(f"SPECIAL{suffix}", _date_text(date, important_dates))
         table = table.replace(f"FESTIVO{suffix}", _festivity_text(date, festivities))
     return table
@@ -154,6 +226,8 @@ def _write_diary_tex(
     calendar_mode: str,
     include_progress_graph: bool,
     include_constellation_map: bool,
+    latitude: float | None,
+    longitude: float | None,
 ) -> str:
     important_dates = _load_dates("fechas/fechas_importantes_uva.json")
     festivities = _load_dates("fechas/festivos.json")
@@ -178,7 +252,17 @@ def _write_diary_tex(
         week_start = current_date - dt.timedelta(days=current_date.weekday())
         week_end = week_start + dt.timedelta(days=6)
         current_date = week_end + dt.timedelta(days=1)
-        chunks.append(_generate_calendar_page(week_start, calendar_mode, important_dates, festivities) + "\n\\newpage")
+        chunks.append(
+            _generate_calendar_page(
+                week_start,
+                calendar_mode,
+                important_dates,
+                festivities,
+                latitude,
+                longitude,
+            )
+            + "\n\\newpage"
+        )
 
     chunks.append("\\end{document}")
     tex_path = os.path.join(work_dir, "result.tex")
@@ -215,6 +299,9 @@ def generate_diary_pdf(
     final_output_dir: str,
     include_progress_graph: bool = False,
     include_constellation_map: bool = False,
+    include_visible_planets: bool = False,
+    latitude: float | None = None,
+    longitude: float | None = None,
 ) -> DiaryJobResult:
     job_id = uuid.uuid4().hex
     os.makedirs(final_output_dir, exist_ok=True)
@@ -230,6 +317,8 @@ def generate_diary_pdf(
             calendar_mode,
             include_progress_graph,
             include_constellation_map,
+            latitude if include_visible_planets else None,
+            longitude if include_visible_planets else None,
         )
         generated_pdf = _compile_latex(tmp, tex_path)
         shutil.copy2(generated_pdf, final_pdf)
@@ -252,6 +341,9 @@ def build_diary_pipeline(
     flipped_a4_center_gap_cm: float = 0.5,
     flipped_a4_split_mode: FlippedA4SplitMode = "vector",
     flipped_a4_quality: FlippedA4Quality = "medium",
+    include_visible_planets: bool = False,
+    latitude: float | None = None,
+    longitude: float | None = None,
 ) -> DiaryJobResult:
     diary = generate_diary_pdf(
         start_date=start_date,
@@ -259,6 +351,9 @@ def build_diary_pipeline(
         calendar_mode=calendar_mode,
         include_progress_graph=include_progress_graph,
         include_constellation_map=include_constellation_map,
+        include_visible_planets=include_visible_planets,
+        latitude=latitude,
+        longitude=longitude,
         final_output_dir=final_output_dir,
     )
 
