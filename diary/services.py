@@ -87,7 +87,15 @@ def _latex_escape(value: str) -> str:
     return "".join(replacements.get(char, char) for char in value)
 
 
-def _visible_planets(date: dt.date, latitude: float, longitude: float) -> list[tuple[str, str]]:
+def _visibility_level(altitude_degrees: float) -> int:
+    if altitude_degrees >= 45:
+        return 3
+    if altitude_degrees >= 25:
+        return 2
+    return 1
+
+
+def _visible_planets(date: dt.date, latitude: float, longitude: float) -> list[tuple[str, str, int]]:
     observer = ephem.Observer()
     observer.lat = str(latitude)
     observer.lon = str(longitude)
@@ -100,14 +108,13 @@ def _visible_planets(date: dt.date, latitude: float, longitude: float) -> list[t
         ("\\planetJupiterIcon", "Jup.", ephem.Jupiter),
         ("\\planetSaturnIcon", "Sat.", ephem.Saturn),
     ]
-    local_utc_offset_hours = round(longitude / 15)
-    local_sample_times = [
-        dt.datetime.combine(date, dt.time(18, 0)),
-        dt.datetime.combine(date, dt.time(20, 0)),
-        dt.datetime.combine(date, dt.time(22, 0)),
-        dt.datetime.combine(date + dt.timedelta(days=1), dt.time(5, 0)),
+    utc_sample_times = [
+        dt.datetime.combine(date, dt.time(hour, 0))
+        for hour in range(12, 24)
+    ] + [
+        dt.datetime.combine(date + dt.timedelta(days=1), dt.time(hour, 0))
+        for hour in range(0, 8)
     ]
-    utc_sample_times = [sample - dt.timedelta(hours=local_utc_offset_hours) for sample in local_sample_times]
     min_planet_altitude = math.radians(10)
     max_sun_altitude = math.radians(-6)
     visible: list[tuple[str, str, float]] = []
@@ -127,13 +134,13 @@ def _visible_planets(date: dt.date, latitude: float, longitude: float) -> list[t
             visible.append((icon_macro, label, best_altitude))
 
     return [
-        (icon_macro, label)
-        for icon_macro, label, _ in sorted(visible, key=lambda item: item[2], reverse=True)
+        (icon_macro, label, _visibility_level(math.degrees(best_altitude)))
+        for icon_macro, label, best_altitude in sorted(visible, key=lambda item: item[2], reverse=True)
     ]
 
 
 def _visible_planet_names(date: dt.date, latitude: float, longitude: float) -> list[str]:
-    return [label for _, label in _visible_planets(date, latitude, longitude)]
+    return [label for _, label, _ in _visible_planets(date, latitude, longitude)]
 
 
 def _planet_text(date: dt.date, latitude: float | None, longitude: float | None) -> str:
@@ -144,8 +151,8 @@ def _planet_text(date: dt.date, latitude: float | None, longitude: float | None)
     if not planets:
         return ""
     items = "".join(
-        f"\\planetItem{{{icon_macro}}}{{{_latex_escape(label)}}}"
-        for icon_macro, label in planets
+        f"\\planetItem{{{icon_macro}}}{{{_latex_escape(label)}}}{{\\visibilityMark{{{visibility_level}}}}}"
+        for icon_macro, label, visibility_level in planets
     )
     return "\\scriptsize{" + items + "}"
 

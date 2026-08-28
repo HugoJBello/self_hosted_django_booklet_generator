@@ -43,6 +43,32 @@
 \definecolor{calendarWeekend}{RGB}{244,239,229}
 \definecolor{calendarBorder}{RGB}{110,122,135}
 
+\newcommand{\roundedContentBox}[2]{%
+\begin{tikzpicture}[baseline=(box.north)]
+  \node[
+    draw=black!50!black,
+    rounded corners=4pt,
+    line width=0.4pt,
+    inner sep=\fboxsep,
+    outer sep=0pt,
+    fill=white
+  ] (box) {\begin{minipage}[t][#1][t]{\dimexpr\linewidth-2\fboxsep-0.8pt\relax}#2\end{minipage}};
+\end{tikzpicture}%
+}
+
+\newcommand{\taskNumber}[1]{%
+\tikz[baseline=(n.base)]{\node[
+  draw=black!60!black,
+  circle,
+  line width=0.35pt,
+  inner sep=0pt,
+  minimum size=1.55em,
+  font=\scriptsize\sffamily
+] (n) {#1};}%
+}
+
+\newsavebox{\taskTableBox}
+
 \newcommand{\moonPhaseIcon}[1]{%
 \begin{tikzpicture}[baseline=-0.45ex,x=0.13cm,y=0.13cm]
   \ifcase#1
@@ -111,14 +137,33 @@
   \draw[rotate=18] (-1.25,0) ellipse (1.45 and 0.38);
 \end{tikzpicture}%
 }
-\newcommand{\planetItem}[2]{\mbox{#1\,#2}\hspace{0.65em}}
+\newcommand{\visibilityMark}[1]{%
+\begin{tikzpicture}[baseline=-0.25ex,x=0.07cm,y=0.07cm]
+  \ifcase#1
+  \or
+    \draw[line width=0.25pt] (-1,0) -- (1,0);
+  \or
+    \fill (0,0) circle (0.9);
+  \else
+    \fill (0,0) circle (0.9);
+    \draw[line width=0.25pt] (-1.7,0) -- (1.7,0);
+    \draw[line width=0.25pt] (0,-1.7) -- (0,1.7);
+  \fi
+\end{tikzpicture}%
+}
+\newcommand{\planetItem}[3]{%
+\begin{minipage}[b]{0.82cm}
+  \centering #1\\[-0.35ex]{\tiny #2\,#3}
+\end{minipage}%
+\penalty0\hspace{0.3em plus 0.15em minus 0.08em}%
+}
 
 \newcommand{\calendarMeta}[2]{%
   {\footnotesize #1\par #2\par}%
 }
 
 \newcommand{\calendarMoonCorner}[1]{%
-  \hfill #1%
+  \parbox[b][6ex][b]{\linewidth}{\raggedleft #1}%
 }
 
 \newcommand{\calendarDayBlock}[6]{%
@@ -140,9 +185,9 @@
 \calendarMeta{#2}{}
 \vfill
 \calendarMoonCorner{#3\hspace{0.45em}#4}
-\vspace{0.6ex}
+\vspace{0.45ex}
 \hrule
-\vspace{0.6ex}
+\vspace{0.45ex}
 \colorbox{calendarWeekend}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\strut\textbf{\sffamily Domingo}\hfill #5}}%
 \vspace{0.6ex}
 \calendarMeta{#6}{}

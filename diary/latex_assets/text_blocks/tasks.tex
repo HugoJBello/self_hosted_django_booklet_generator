@@ -3,105 +3,65 @@
 \markboth{Semana DATE1 -- DATE2}{}
 \thispagestyle{empty}
 \noindent
-\begin{tabularx}{\linewidth}{|X|c c|}
+\begin{lrbox}{\taskTableBox}
+\begin{minipage}{\dimexpr\linewidth-2mm\relax}
+\begin{tabularx}{\linewidth}{X|c c}
     \hline
-  \textbf{Tarea} & \textbf{descripción} & \textbf{proceso}\\
+  \rule{0pt}{3.0ex}\textbf{Tarea} & \textbf{descripción} & \textbf{proceso}\\[0.2ex]
   \hline
-   1.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{1}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  2.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{2}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  3.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{3}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  4.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{4}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  5.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{5}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  6.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{6}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  7.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{7}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  8.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{8}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  9.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{9}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
-  10.\vspace{4ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
+  \taskNumber{10}\vspace{3.3ex} &      \subtablaDescrip     & $\square\square\square\square\square$ \\
   \hline
 \end{tabularx}
+\end{minipage}
+\end{lrbox}
+\begin{tikzpicture}
+  \node[inner sep=0pt, outer sep=0pt] (tasktable) {\usebox{\taskTableBox}};
+  \draw[
+    draw=black!50!black,
+    rounded corners=4pt,
+    line width=0.4pt
+  ] (tasktable.south west) rectangle (tasktable.north east);
+\end{tikzpicture}
 
 \newpage
 
 
 
-\begin{center}
-\begin{tabular}{ll}
-\textbf{Facilidades / dificultades} & \textbf{Objetivos} \\
-\fcolorbox{black!50!black}{white}{
-\begin{tabular}{c}
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\end{tabular}
+\noindent
+\begin{minipage}[t]{0.485\linewidth}
+\textbf{Facilidades / dificultades}\par\vspace{1ex}
+\roundedContentBox{4.2cm}{\strut}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.485\linewidth}
+\textbf{Objetivos}\par\vspace{1ex}
+\roundedContentBox{4.2cm}{\strut}
+\end{minipage}
 
-} &
-\fcolorbox{black!50!black}{white}{
-\begin{tabular}{c}
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-  \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\end{tabular}
-} \\
-\end{tabular}
-\end{center}
+\vspace{3.2ex}
+\noindent\textbf{Reflexiones}\par\vspace{1ex}
+\noindent\roundedContentBox{5.3cm}{\strut}
 
-\begin{center}
-\textbf{Reflexiones}\\ \vspace{3ex}
-\fcolorbox{black!50!black}{white}{
-\begin{tabular}{l}
-\phantom{Lorem ipsum dolor sit amet, consectetur Lorem  Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\phantom{Lorem ipsum dolor sit amet, consectetur}\\
-\end{tabular}
-}
-\end{center}
-\vspace{5ex}
+\vspace{3.2ex}
+\noindent\textbf{Notas}\par\vspace{1ex}
+\noindent\roundedContentBox{6.8cm}{\strut}
 
-\begin{center}
-\textbf{Notas}\\ \vspace{3ex}
-\fcolorbox{black!50!black}{white}{
-    \begin{tabular}{l}
-    \phantom{Lorem ipsum dolor sit amet, consectetur Lorem  Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \phantom{Lorem ipsum dolor sit amet, consectetur}\\
-    \end{tabular}
-  }
-\end{center}
-
-\vspace{5ex}
+\vspace{1.2ex}
 Resultado semana: \Vtextvisiblespace[2em]
