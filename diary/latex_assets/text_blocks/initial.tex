@@ -166,6 +166,10 @@
   \parbox[b][6ex][b]{\linewidth}{\raggedleft #1}%
 }
 
+\newcommand{\calendarMoonCornerCompact}[1]{%
+  \parbox[b]{\linewidth}{\raggedleft #1}%
+}
+
 \newcommand{\calendarDayBlock}[6]{%
 \fcolorbox{calendarBorder}{white}{%
 \begin{minipage}[t][0.44\textheight][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
@@ -184,10 +188,9 @@
 \vspace{0.6ex}
 \calendarMeta{#2}{}
 \vfill
-\calendarMoonCorner{#3\hspace{0.45em}#4}
-\vspace{0.45ex}
+\calendarMoonCornerCompact{#3\hspace{0.45em}#4}
 \hrule
-\vspace{0.45ex}
+\vspace{0.25ex}
 \colorbox{calendarWeekend}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\strut\textbf{\sffamily Domingo}\hfill #5}}%
 \vspace{0.6ex}
 \calendarMeta{#6}{}
