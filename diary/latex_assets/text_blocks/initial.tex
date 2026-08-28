@@ -1,0 +1,84 @@
+\documentclass[twoside, a4paper,12pt, tikz]{scrartcl}
+\usepackage{pdflscape}
+\usepackage{tabularx}
+\usepackage{lipsum}
+\usepackage{color}
+\usepackage{enumitem,amssymb, amsmath}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{tkz-euclide}
+\usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{titlesec}  
+\pagestyle{fancy}% Opcional: mejor control sobre títulos
+
+% Activar encabezados personalizados
+\pagestyle{fancy}
+\fancyhf{} % Limpiar encabezados y pies
+
+% Texto fijo + nombre de sección en el encabezado interior
+\fancyhead[LE]{Agenda — \nouppercase{\leftmark}} % L = lado izquierdo, E = página par
+\fancyhead[RO]{Agenda — \nouppercase{\leftmark}} % R = lado derecho, O = página impar
+
+% Número de página en el borde exterior
+\fancyfoot[LE,RO]{\thepage}
+
+% Actualizar \leftmark con el nombre de la sección
+\renewcommand{\sectionmark}[1]{\markboth{#1}{}}
+
+% Opcional: hacer que las secciones no estén en mayúsculas automáticamente
+\usepackage{sectsty}
+\allsectionsfont{\normalfont}
+
+
+\newcommand\Vtextvisiblespace[1][.3em]{%
+  \mbox{\kern.06em\vrule height.3ex}%
+  \vbox{\hrule width#1}%
+  \hbox{\vrule height.3ex}}
+\newcommand{\checkbox}{ {\fboxsep=-.2pt\fbox{\rule{0pt}{2ex}\rule{2ex}{0pt}}}}
+
+\newcommand{\subtablaDescrip}{ \begin{tabular}{ll}&\\ prioridad: & \Vtextvisiblespace[2em] \\ dificultad: & \Vtextvisiblespace[2em]\\&\\ \end{tabular}}
+
+\definecolor{calendarHeader}{RGB}{232,238,245}
+\definecolor{calendarWeekend}{RGB}{244,239,229}
+\definecolor{calendarBorder}{RGB}{110,122,135}
+
+\newcommand{\calendarMeta}[2]{%
+  {\footnotesize #1\par #2\par}%
+}
+
+\newcommand{\calendarMoonCorner}[1]{%
+  \hfill #1%
+}
+
+\newcommand{\calendarDayBlock}[5]{%
+\fcolorbox{calendarBorder}{white}{%
+\begin{minipage}[t][0.44\textheight][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
+\colorbox{calendarHeader}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\strut\textbf{\sffamily #1}\hfill #2}}%
+\vspace{0.8ex}
+\calendarMeta{#3}{#4}
+\vfill
+\calendarMoonCorner{#5}
+\end{minipage}}%
+}
+
+\newcommand{\calendarWeekendBlock}[8]{%
+\fcolorbox{calendarBorder}{white}{%
+\begin{minipage}[t][0.44\textheight][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
+\colorbox{calendarWeekend}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\strut\textbf{\sffamily Sábado}\hfill #1}}%
+\vspace{0.6ex}
+\calendarMeta{#2}{#3}
+\vfill
+\calendarMoonCorner{#4}
+\vspace{0.6ex}
+\hrule
+\vspace{0.6ex}
+\colorbox{calendarWeekend}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\strut\textbf{\sffamily Domingo}\hfill #5}}%
+\vspace{0.6ex}
+\calendarMeta{#6}{#7}
+\vfill
+\calendarMoonCorner{#8}
+\end{minipage}}%
+}
+
+\begin{document}

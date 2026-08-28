@@ -9,9 +9,9 @@ urlpatterns = [
     path("pdf_manager/", include("booklets.urls")),
     path("pdf_manager/", include("ocrpdf.urls")),
     path("pdf_manager/", include("joinpdf.urls")),
+    path("pdf_manager/", include("diary.urls")),
 ]
 
 # En dev: servir media
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

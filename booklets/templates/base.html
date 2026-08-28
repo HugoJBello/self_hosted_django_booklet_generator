@@ -64,6 +64,15 @@
 	  </a>
 	</li>
 
+        <li class="nav-item">
+          <a
+            class="nav-link {% if request.resolver_match.app_name == 'diary' %}active{% endif %}"
+            href="{% url 'diary:form' %}"
+          >
+            Diary
+          </a>
+        </li>
+
       </ul>
     </div>
   </div>

@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "booklets",
     "ocrpdf",
     "joinpdf",
+    "diary",
 ]
 
 RQ_QUEUES = {
@@ -178,4 +179,3 @@ SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_SAMESITE", "Lax")
 # Default PK
 # ------------------------------------------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-

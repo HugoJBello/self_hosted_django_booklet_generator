@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Diary · PDF Manager{% endblock %}
+
+{% block content %}
+  <style>
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .settings-panel {
+      border: 1px solid #dee2e6;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      background: #fff;
+      min-height: 100%;
+    }
+
+    .settings-panel-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+
+    .settings-panel-subtitle {
+      color: #6c757d;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+
+    .mode-option {
+      border: 1px solid #dee2e6;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      background: #f8f9fa;
+    }
+
+    .mode-option + .mode-option {
+      margin-top: 0.75rem;
+    }
+
+    @media (max-width: 1199.98px) {
+      .settings-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+
+  <div class="row">
+    <div class="col-xl-10">
+      <h1 class="h3 mb-3">Generate diary</h1>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <form method="post" id="diary-form">
+            {% csrf_token %}
+
+            <div class="settings-grid">
+              <section class="settings-panel">
+                <div class="settings-panel-title">Diary range</div>
+                <div class="settings-panel-subtitle">The selected date is normalized to the Monday of that week.</div>
+                <div class="row g-3">
+                  <div class="col-sm-6">
+                    <label class="form-label" for="{{ form.start_date.id_for_label }}">{{ form.start_date.label }}</label>
+                    {{ form.start_date }}
+                    {% for e in form.start_date.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label" for="{{ form.number_of_weeks.id_for_label }}">{{ form.number_of_weeks.label }}</label>
+                    {{ form.number_of_weeks }}
+                    {% for e in form.number_of_weeks.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-panel">
+                <div class="settings-panel-title">{{ form.calendar_mode.label }}</div>
+                <div class="settings-panel-subtitle">Select the weekly calendar layout from the original LaTeX generator.</div>
+                {% for radio in form.calendar_mode %}
+                  <div class="mode-option">
+                    <div class="form-check">
+                      {{ radio.tag }}
+                      <label class="form-check-label fw-semibold" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                    </div>
+                  </div>
+                {% endfor %}
+                {% for e in form.calendar_mode.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </section>
+
+              <section class="settings-panel">
+                <div class="settings-panel-title">Optional front matter</div>
+                <div class="settings-panel-subtitle">Both options remove or add complete two-page blocks, preserving the parity of the remaining diary pages.</div>
+                <div class="form-check mb-3">
+                  {{ form.include_progress_graph }}
+                  <label class="form-check-label" for="{{ form.include_progress_graph.id_for_label }}">
+                    {{ form.include_progress_graph.label }}
+                  </label>
+                  <div class="form-text">Adds the Matplotlib progress graph and its following blank page.</div>
+                </div>
+                {% for e in form.include_progress_graph.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+                <div class="form-check">
+                  {{ form.include_constellation_map }}
+                  <label class="form-check-label" for="{{ form.include_constellation_map.id_for_label }}">
+                    {{ form.include_constellation_map.label }}
+                  </label>
+                  <div class="form-text">Adds the monthly constellation map and its following blank page.</div>
+                </div>
+                {% for e in form.include_constellation_map.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </section>
+
+              <section class="settings-panel">
+                <div class="settings-panel-title">{{ form.output_mode.label }}</div>
+                <div class="settings-panel-subtitle">Generate the raw agenda PDF or impose it for printing.</div>
+                {% for radio in form.output_mode %}
+                  <div class="mode-option">
+                    <div class="form-check">
+                      {{ radio.tag }}
+                      <label class="form-check-label fw-semibold" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                    </div>
+                  </div>
+                {% endfor %}
+                {% for e in form.output_mode.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </section>
+
+              <section class="settings-panel" id="common-booklet-options">
+                <div class="settings-panel-title">Common booklet options</div>
+                <div class="settings-panel-subtitle">Only used for side-by-side and flipped booklet outputs.</div>
+                <div class="row g-3">
+                  <div class="col-sm-6">
+                    <label class="form-label" for="{{ form.max_pages_per_split.id_for_label }}">{{ form.max_pages_per_split.label }}</label>
+                    {{ form.max_pages_per_split }}
+                    {% for e in form.max_pages_per_split.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label" for="{{ form.content_margin_cm.id_for_label }}">{{ form.content_margin_cm.label }}</label>
+                    {{ form.content_margin_cm }}
+                    {% for e in form.content_margin_cm.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-panel" id="side-by-side-options">
+                <div class="settings-panel-title">Side-by-side booklet options</div>
+                <div class="settings-panel-subtitle">Uses the same imposition pipeline as the Booklets view.</div>
+                <div class="form-check">
+                  {{ form.side_by_side_prepare_for_portrait_printing }}
+                  <label class="form-check-label" for="{{ form.side_by_side_prepare_for_portrait_printing.id_for_label }}">
+                    {{ form.side_by_side_prepare_for_portrait_printing.label }}
+                  </label>
+                </div>
+                {% for e in form.side_by_side_prepare_for_portrait_printing.errors %}
+                  <div class="text-danger small">{{ e }}</div>
+                {% endfor %}
+              </section>
+
+              <section class="settings-panel" id="flipped-options">
+                <div class="settings-panel-title">Flipped booklet options</div>
+                <div class="settings-panel-subtitle">A5 preparation is enabled by default with 0.5 cm center separation.</div>
+                <div class="row g-3">
+                  <div class="col-12">
+                    <div class="form-check">
+                      {{ form.flipped_a4_prepare_for_a5_printing }}
+                      <label class="form-check-label" for="{{ form.flipped_a4_prepare_for_a5_printing.id_for_label }}">
+                        {{ form.flipped_a4_prepare_for_a5_printing.label }}
+                      </label>
+                    </div>
+                    {% for e in form.flipped_a4_prepare_for_a5_printing.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label" for="{{ form.flipped_a4_center_gap_cm.id_for_label }}">{{ form.flipped_a4_center_gap_cm.label }}</label>
+                    {{ form.flipped_a4_center_gap_cm }}
+                    {% for e in form.flipped_a4_center_gap_cm.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                  <div class="col-sm-6" id="flipped-quality-wrapper">
+                    <label class="form-label" for="{{ form.flipped_a4_quality.id_for_label }}">{{ form.flipped_a4_quality.label }}</label>
+                    {{ form.flipped_a4_quality }}
+                    {% for e in form.flipped_a4_quality.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">{{ form.flipped_a4_split_mode.label }}</label>
+                    {% for radio in form.flipped_a4_split_mode %}
+                      <div class="form-check">
+                        {{ radio.tag }}
+                        <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                      </div>
+                    {% endfor %}
+                    {% for e in form.flipped_a4_split_mode.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+              <button class="btn btn-primary" type="submit">Generate diary</button>
+              {% if result_download_url %}
+                <a class="btn btn-success" href="{{ result_download_url }}">Download result</a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const sidePanel = document.getElementById("side-by-side-options");
+      const flippedPanel = document.getElementById("flipped-options");
+      const commonBookletPanel = document.getElementById("common-booklet-options");
+      const qualityWrapper = document.getElementById("flipped-quality-wrapper");
+      const outputInputs = Array.from(document.querySelectorAll('input[name="output_mode"]'));
+      const splitModeInputs = Array.from(document.querySelectorAll('input[name="flipped_a4_split_mode"]'));
+
+      const refreshPanels = () => {
+        const selected = outputInputs.find((input) => input.checked)?.value || "pdf";
+        const splitMode = splitModeInputs.find((input) => input.checked)?.value || "vector";
+        commonBookletPanel.classList.toggle("d-none", selected === "pdf");
+        sidePanel.classList.toggle("d-none", selected !== "side_by_side");
+        flippedPanel.classList.toggle("d-none", selected !== "flipped_a4");
+        qualityWrapper.classList.toggle("d-none", selected !== "flipped_a4" || splitMode === "vector");
+      };
+
+      outputInputs.forEach((input) => input.addEventListener("change", refreshPanels));
+      splitModeInputs.forEach((input) => input.addEventListener("change", refreshPanels));
+      refreshPanels();
+    })();
+  </script>
+{% endblock %}

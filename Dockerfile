@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-eng \
     ghostscript \
     qpdf \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    texlive-pictures \
     # utilidades comunes
     curl \
  && rm -rf /var/lib/apt/lists/*
@@ -38,4 +42,3 @@ RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]
-
