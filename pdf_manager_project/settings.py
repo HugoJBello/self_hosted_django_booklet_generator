@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "ocrpdf",
     "joinpdf",
     "diary",
+    "splitpdf",
 ]
 
 RQ_QUEUES = {

@@ -138,12 +138,12 @@ def _items_from_request(request, files) -> list[dict]:
     return items
 
 
-def _specs_from_items(items: list[dict]) -> list[SourcePdfSpec]:
+def _specs_from_items(items: list[dict], margin_cm: float) -> list[SourcePdfSpec]:
     return [
         SourcePdfSpec(
             input_pdf_path=item["path"],
             same_page_parity=bool(item.get("same_page_parity", True)),
-            margin_cm=float(item.get("margin_cm", 1.0)),
+            margin_cm=margin_cm,
             add_watermark=bool(item.get("add_watermark", False)),
         )
         for item in items
@@ -172,6 +172,7 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "processing_mode": form.cleaned_data.get("processing_mode", "separate"),
             "booklet_layout": form.cleaned_data.get("booklet_layout", "side_by_side"),
             "max_pages_per_split": form.cleaned_data.get("max_pages_per_split", 40),
+            "margin_cm": form.cleaned_data.get("margin_cm", 1.0),
             "preserve_file_parity": form.cleaned_data.get("preserve_file_parity", True),
             "generate_cover": form.cleaned_data.get("generate_cover", False),
             "side_by_side_prepare_for_portrait_printing": form.cleaned_data.get(
@@ -204,6 +205,7 @@ def booklets_view(request):
         processing_mode = form.cleaned_data["processing_mode"]
         booklet_layout = form.cleaned_data["booklet_layout"]
         max_pages_per_split = form.cleaned_data["max_pages_per_split"]
+        margin_cm = form.cleaned_data["margin_cm"]
         preserve_file_parity = bool(form.cleaned_data["preserve_file_parity"])
         generate_cover = bool(form.cleaned_data["generate_cover"])
         flipped_a4 = booklet_layout == "flipped_a4"
@@ -227,7 +229,7 @@ def booklets_view(request):
                     "booklets/booklets_form.html",
                     {"form": form, "results": [], "booklet_items": _items_for_template(items)},
                 )
-            specs = _specs_from_items(items)
+            specs = _specs_from_items(items, margin_cm=margin_cm)
         except ValueError as exc:
             messages.error(request, str(exc))
             return render(

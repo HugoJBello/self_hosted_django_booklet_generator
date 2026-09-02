@@ -154,6 +154,14 @@
                     {% endfor %}
                   </div>
                   <div class="col-sm-6">
+                    <label class="form-label" for="{{ form.margin_cm.id_for_label }}">{{ form.margin_cm.label }}</label>
+                    {{ form.margin_cm }}
+                    <div class="form-text">Extra margin applied to every generated booklet page.</div>
+                    {% for e in form.margin_cm.errors %}
+                      <div class="text-danger small">{{ e }}</div>
+                    {% endfor %}
+                  </div>
+                  <div class="col-sm-6">
                     <div class="form-check mb-3" id="preserve-parity-wrapper">
                       {{ form.preserve_file_parity }}
                       <label class="form-check-label" for="{{ form.preserve_file_parity.id_for_label }}">

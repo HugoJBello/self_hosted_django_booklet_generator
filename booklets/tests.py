@@ -46,6 +46,12 @@ class BookletsViewTests(TestCase):
         super().tearDownClass()
         shutil.rmtree(TEST_MEDIA_ROOT, ignore_errors=True)
 
+    def test_booklet_form_exposes_shared_margin_default(self):
+        form = BookletForm()
+
+        self.assertEqual(form.fields["margin_cm"].initial, 1.0)
+        self.assertContains(self.client.get(reverse("booklets:form")), "Outer margin (cm)")
+
     def test_prepare_pages_for_specs_inserts_blank_to_preserve_even_start(self):
         tmpdir = tempfile.mkdtemp(prefix="booklets_specs_")
         try:

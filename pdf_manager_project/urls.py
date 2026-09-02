@@ -10,6 +10,7 @@ urlpatterns = [
     path("pdf_manager/", include("ocrpdf.urls")),
     path("pdf_manager/", include("joinpdf.urls")),
     path("pdf_manager/", include("diary.urls")),
+    path("pdf_manager/", include("splitpdf.urls")),
 ]
 
 # En dev: servir media

@@ -66,6 +66,15 @@
 
         <li class="nav-item">
           <a
+            class="nav-link {% if request.resolver_match.app_name == 'splitpdf' %}active{% endif %}"
+            href="{% url 'splitpdf:form' %}"
+          >
+            Split PDF
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a
             class="nav-link {% if request.resolver_match.app_name == 'diary' %}active{% endif %}"
             href="{% url 'diary:form' %}"
           >

@@ -68,6 +68,14 @@ class BookletForm(forms.Form):
         widget=forms.NumberInput(attrs={"class": "form-control"}),
     )
 
+    margin_cm = forms.FloatField(
+        label="Outer margin (cm)",
+        required=False,
+        initial=1.0,
+        min_value=0.0,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "0.1"}),
+    )
+
     preserve_file_parity = forms.BooleanField(
         label="Preserve each file's start parity",
         required=False,
@@ -147,6 +155,12 @@ class BookletForm(forms.Form):
 
     def clean_flipped_a4_quality(self):
         return self.cleaned_data.get("flipped_a4_quality") or "medium"
+
+    def clean_margin_cm(self):
+        value = self.cleaned_data.get("margin_cm")
+        if value is None:
+            return 1.0
+        return value
 
     def clean_flipped_a4_split_mode(self):
         return self.cleaned_data.get("flipped_a4_split_mode") or "vector"

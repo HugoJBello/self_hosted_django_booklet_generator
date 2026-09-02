@@ -36,7 +36,7 @@ mkdir -p /app/data \
 echo ""
 echo "➡ PDF Manager arrancando"
 echo "   Subpath : ${APP_SUBPATH}"
-echo "   URL     : (detrás del proxy) ${APP_SUBPATH}/booklets/  |  ${APP_SUBPATH}/ocr/"
+echo "   URL     : (detrás del proxy) ${APP_SUBPATH}/booklets/  |  ${APP_SUBPATH}/split/  |  ${APP_SUBPATH}/ocr/"
 echo ""
 
 # Migraciones + collectstatic (para web y worker)
@@ -67,4 +67,3 @@ exec gunicorn pdf_manager_project.wsgi:application \
   --timeout "${GUNICORN_TIMEOUT}" \
   --access-logfile "-" \
   --error-logfile "-"
-
