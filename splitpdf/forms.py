@@ -51,6 +51,24 @@ class SplitPdfForm(forms.Form):
         widget=forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "0.1"}),
     )
 
+    preserve_file_parity = forms.BooleanField(
+        label="Preserve generated PDF start parity",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
+    same_page_parity = forms.ChoiceField(
+        label="Generated PDF start side",
+        required=False,
+        initial="true",
+        choices=[
+            ("true", "Page 1 starts on the right side (odd)"),
+            ("false", "Add a leading blank so it starts on the left side"),
+        ],
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     side_by_side_prepare_for_portrait_printing = forms.BooleanField(
         label="Prepare for portrait printing",
         required=False,
@@ -116,6 +134,9 @@ class SplitPdfForm(forms.Form):
         if value is None:
             return 1.0
         return value
+
+    def clean_same_page_parity(self):
+        return self.cleaned_data.get("same_page_parity") != "false"
 
     def clean_flipped_a4_quality(self):
         return self.cleaned_data.get("flipped_a4_quality") or "medium"

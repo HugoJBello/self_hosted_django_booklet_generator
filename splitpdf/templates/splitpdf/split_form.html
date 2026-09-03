@@ -85,6 +85,71 @@
       vertical-align: middle;
     }
 
+    .preview-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .preview-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      justify-content: flex-end;
+    }
+
+    .preview-title {
+      min-width: 14rem;
+    }
+
+    .preview-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.35rem;
+    }
+
+    .preview-includes {
+      display: grid;
+      gap: 0.35rem;
+      margin: 0.5rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .preview-include-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 0.5rem;
+      align-items: start;
+      padding: 0.35rem 0.5rem;
+      border: 1px solid #e9ecef;
+      border-radius: 0.5rem;
+      background: #f8f9fa;
+      font-size: 0.86rem;
+    }
+
+    .preview-include-pages {
+      color: #6c757d;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 767.98px) {
+      .preview-actions {
+        justify-content: flex-start;
+      }
+
+      .preview-include-item {
+        grid-template-columns: auto 1fr;
+      }
+
+      .preview-include-pages {
+        grid-column: 2;
+      }
+    }
+
     @media (max-width: 991.98px) {
       .settings-grid {
         grid-template-columns: 1fr;
@@ -101,6 +166,7 @@
           <form method="post" enctype="multipart/form-data" id="split-form">
             {% csrf_token %}
             <input type="hidden" name="action" id="split-action" value="">
+            <input type="hidden" name="section_id" id="split-section-id" value="">
 
             <section class="mb-4">
               <label class="form-label">{{ form.input_pdf.label }}</label>
@@ -183,6 +249,18 @@
                           <div class="text-danger small">{{ e }}</div>
                         {% endfor %}
                       </div>
+                      <div class="col-sm-6">
+                        <div class="form-check mt-sm-4">
+                          {{ form.preserve_file_parity }}
+                          <label class="form-check-label" for="{{ form.preserve_file_parity.id_for_label }}">
+                            {{ form.preserve_file_parity.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-sm-6">
+                        <label class="form-label" for="{{ form.same_page_parity.id_for_label }}">{{ form.same_page_parity.label }}</label>
+                        {{ form.same_page_parity }}
+                      </div>
                     </div>
 
                     <div id="side-by-side-options">
@@ -244,7 +322,12 @@
                 </section>
 
                 <section>
-                  <h2 class="h5 mb-2">Generated split preview</h2>
+                  <h2 class="h5 mb-2">Editable split preview</h2>
+                  <div class="preview-summary">
+                    <span class="badge text-bg-primary">{{ section_count }} PDFs</span>
+                    <span class="badge text-bg-light border">{{ final_page_count }} source pages</span>
+                    <span class="text-muted small">Split a section into its next TOC level or merge it with the next output.</span>
+                  </div>
                   <div class="border rounded-3 overflow-hidden">
                     <div class="table-responsive">
                       <table class="table table-sm mb-0 align-middle">
@@ -253,21 +336,61 @@
                             <th scope="col">PDF</th>
                             <th scope="col">Pages</th>
                             <th scope="col">Filename</th>
+                            <th scope="col" class="text-end">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {% for section in sections %}
                             <tr>
-                              <td class="text-break">
-                                <span class="fw-semibold">{{ section.index }}.</span>
-                                {{ section.title }}
+                              <td class="text-break preview-title">
+                                <div>
+                                  <span class="fw-semibold">{{ section.index }}.</span>
+                                  {{ section.title }}
+                                </div>
+                                <div class="preview-meta">
+                                  <span class="badge text-bg-light border">L{{ section.level }}</span>
+                                  {% if section.part_count > 1 %}
+                                    <span class="badge text-bg-secondary">{{ section.part_count }} included blocks</span>
+                                  {% endif %}
+                                </div>
+                                <ul class="preview-includes">
+                                  {% for part in section.included_parts %}
+                                    <li class="preview-include-item">
+                                      <span class="badge text-bg-light border">L{{ part.level }}</span>
+                                      <span>{{ part.title }}</span>
+                                      <span class="preview-include-pages">p. {{ part.start_page }}-{{ part.end_page }}</span>
+                                    </li>
+                                  {% endfor %}
+                                </ul>
                               </td>
                               <td class="text-nowrap">{{ section.start_page }}-{{ section.end_page }} · {{ section.page_count }}</td>
                               <td class="text-break"><code>{{ section.filename }}</code></td>
+                              <td>
+                                <div class="preview-actions">
+                                  <button
+                                    class="btn btn-sm btn-outline-primary"
+                                    type="submit"
+                                    data-action="split_section"
+                                    data-section-id="{{ section.section_id }}"
+                                    {% if not section.can_split %}disabled{% endif %}
+                                  >
+                                    Split
+                                  </button>
+                                  <button
+                                    class="btn btn-sm btn-outline-secondary"
+                                    type="submit"
+                                    data-action="merge_next"
+                                    data-section-id="{{ section.section_id }}"
+                                    {% if not section.can_merge %}disabled{% endif %}
+                                  >
+                                    Merge next
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           {% empty %}
                             <tr>
-                              <td colspan="3" class="text-muted">No sections for the selected level.</td>
+                              <td colspan="4" class="text-muted">No sections for the selected level.</td>
                             </tr>
                           {% endfor %}
                         </tbody>
@@ -279,7 +402,10 @@
 
               {% if outputs %}
                 <section class="mb-2">
-                  <h2 class="h5 mb-2">Results</h2>
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <h2 class="h5 mb-0">Results</h2>
+                    <a class="btn btn-sm btn-outline-success" href="{% url 'splitpdf:download_all' %}">Download all</a>
+                  </div>
                   <div class="border rounded-3 overflow-hidden">
                     <div class="table-responsive">
                       <table class="table mb-0 output-table">
@@ -324,6 +450,7 @@
     (() => {
       const form = document.getElementById("split-form");
       const actionInput = document.getElementById("split-action");
+      const sectionInput = document.getElementById("split-section-id");
       const dropzone = document.getElementById("upload-dropzone");
       const fileInput = form.querySelector('input[type="file"][name="input_pdf"]');
       const applyBooklets = form.querySelector('input[name="apply_booklets"]');
@@ -392,6 +519,9 @@
         const requestedAction = event.submitter?.dataset?.action || "";
         if (actionInput && requestedAction) {
           actionInput.value = requestedAction;
+        }
+        if (sectionInput) {
+          sectionInput.value = event.submitter?.dataset?.sectionId || "";
         }
       });
       refreshBookletUI();

@@ -26,6 +26,19 @@ class TocEntry:
 
 
 @dataclass(frozen=True)
+class SplitSectionPart:
+    level: int
+    title: str
+    start_page: int
+    end_page: int
+    toc_index: int | None = None
+
+    @property
+    def page_count(self) -> int:
+        return self.end_page - self.start_page + 1
+
+
+@dataclass(frozen=True)
 class SplitSection:
     index: int
     level: int
@@ -33,10 +46,27 @@ class SplitSection:
     start_page: int
     end_page: int
     filename: str
+    section_id: str = ""
+    toc_indexes: tuple[int, ...] = ()
+    parts: tuple[SplitSectionPart, ...] = ()
 
     @property
     def page_count(self) -> int:
         return self.end_page - self.start_page + 1
+
+    @property
+    def included_parts(self) -> tuple[SplitSectionPart, ...]:
+        if self.parts:
+            return self.parts
+        return (
+            SplitSectionPart(
+                level=self.level,
+                title=self.title,
+                start_page=self.start_page,
+                end_page=self.end_page,
+                toc_index=self.toc_indexes[0] if self.toc_indexes else None,
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -57,6 +87,8 @@ class SplitPdfJobOptions:
     booklet_layout: BookletLayout = "side_by_side"
     max_pages_per_split: int = 40
     margin_cm: float = 1.0
+    preserve_file_parity: bool = True
+    same_page_parity: bool = True
     side_by_side_prepare_for_portrait_printing: bool = True
     flipped_a4_quality: str = "medium"
     flipped_a4_split_mode: FlippedSplitMode = "vector"
@@ -115,10 +147,84 @@ def build_sections_for_level(
                 start_page=start_page,
                 end_page=end_page,
                 filename=section_filename(idx, entry.title),
+                section_id=_section_id(),
+                toc_indexes=(entry_index,),
+                parts=(
+                    SplitSectionPart(
+                        level=entry.level,
+                        title=entry.title,
+                        start_page=start_page,
+                        end_page=end_page,
+                        toc_index=entry_index,
+                    ),
+                ),
             )
         )
 
     return sections
+
+
+def renumber_sections(sections: list[SplitSection]) -> list[SplitSection]:
+    return [
+        SplitSection(
+            index=idx,
+            level=section.level,
+            title=section.title,
+            start_page=section.start_page,
+            end_page=section.end_page,
+            filename=section_filename(idx, section.title),
+            section_id=section.section_id or _section_id(),
+            toc_indexes=section.toc_indexes,
+            parts=section.included_parts,
+        )
+        for idx, section in enumerate(sections, start=1)
+    ]
+
+
+def split_section_for_preview(section: SplitSection) -> list[SplitSection]:
+    parts = section.included_parts
+    if len(parts) > 1:
+        return renumber_sections([_section_from_part(index, part) for index, part in enumerate(parts, start=1)])
+
+    if section.page_count < 2:
+        return []
+
+    first_page_count = (section.page_count + 1) // 2
+    first_end_page = section.start_page + first_page_count - 1
+    first = SplitSectionPart(
+        level=section.level,
+        title=f"{section.title} part 1",
+        start_page=section.start_page,
+        end_page=first_end_page,
+        toc_index=parts[0].toc_index if parts else None,
+    )
+    second = SplitSectionPart(
+        level=section.level,
+        title=f"{section.title} part 2",
+        start_page=first_end_page + 1,
+        end_page=section.end_page,
+        toc_index=parts[0].toc_index if parts else None,
+    )
+    return renumber_sections([_section_from_part(1, first), _section_from_part(2, second)])
+
+
+def merge_adjacent_sections(first: SplitSection, second: SplitSection) -> SplitSection:
+    title = _merged_title(first.title, second.title)
+    return SplitSection(
+        index=first.index,
+        level=min(first.level, second.level),
+        title=title,
+        start_page=min(first.start_page, second.start_page),
+        end_page=max(first.end_page, second.end_page),
+        filename=section_filename(first.index, title),
+        section_id=_section_id(),
+        toc_indexes=(*first.toc_indexes, *second.toc_indexes),
+        parts=(*first.included_parts, *second.included_parts),
+    )
+
+
+def section_can_split(section: SplitSection) -> bool:
+    return len(section.included_parts) > 1 or section.page_count > 1
 
 
 def split_pdf_by_sections(
@@ -174,7 +280,7 @@ def _apply_booklet(
 ) -> str:
     spec = SourcePdfSpec(
         input_pdf_path=section_pdf_path,
-        same_page_parity=True,
+        same_page_parity=options.same_page_parity,
         margin_cm=options.margin_cm,
         add_watermark=False,
     )
@@ -183,7 +289,7 @@ def _apply_booklet(
         "specs": [spec],
         "max_pages_per_split": options.max_pages_per_split,
         "final_output_dir": output_dir,
-        "preserve_file_parity": True,
+        "preserve_file_parity": options.preserve_file_parity,
         "generate_cover": False,
     }
 
@@ -229,6 +335,28 @@ def _find_next_boundary_page(
     return None
 
 
+def _section_from_part(index: int, part: SplitSectionPart) -> SplitSection:
+    toc_indexes = (part.toc_index,) if part.toc_index is not None else ()
+    return SplitSection(
+        index=index,
+        level=part.level,
+        title=part.title,
+        start_page=part.start_page,
+        end_page=part.end_page,
+        filename=section_filename(index, part.title),
+        section_id=_section_id(),
+        toc_indexes=toc_indexes,
+        parts=(part,),
+    )
+
+
+def _merged_title(first_title: str, second_title: str, max_length: int = 96) -> str:
+    title = f"{first_title} + {second_title}"
+    if len(title) <= max_length:
+        return title
+    return f"{title[:max_length].rstrip()}..."
+
+
 def _clean_title(title: str) -> str:
     title = " ".join((title or "").split())
     return title or "Untitled section"
@@ -248,6 +376,10 @@ def _slug_filename(value: str, max_length: int = 72) -> str:
 
 def _clamp_page(page: int, total_pages: int) -> int:
     return max(1, min(page, total_pages))
+
+
+def _section_id() -> str:
+    return uuid.uuid4().hex
 
 
 def _unique_path(dirpath: str, filename: str) -> str:
