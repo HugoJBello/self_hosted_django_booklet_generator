@@ -19,10 +19,13 @@ from .services import (
     SplitSectionPart,
     TocEntry,
     available_levels,
+    build_sections_for_page_ranges,
     build_sections_for_level,
+    count_pdf_pages,
     extract_toc,
     merge_adjacent_sections,
     renumber_sections,
+    render_page_thumbnail_data_uri,
     section_can_split,
     split_section_for_preview,
     split_pdf_by_sections,
@@ -156,6 +159,8 @@ def _level_choices(toc_entries: list[TocEntry]) -> list[tuple[str, str]]:
 def _initial_from_state(state: dict[str, Any], selected_level: int | None = None) -> dict[str, Any]:
     initial = {
         "selected_level": selected_level or state.get("selected_level"),
+        "split_mode": state.get("split_mode", "toc"),
+        "page_ranges": state.get("page_ranges", ""),
         "apply_booklets": state.get("apply_booklets", False),
         "booklet_layout": state.get("booklet_layout", "side_by_side"),
         "max_pages_per_split": state.get("max_pages_per_split", 40),
@@ -178,11 +183,15 @@ def _context(request, form: SplitPdfForm | None = None, sections=None) -> dict[s
     state = _state(request)
     toc_entries = _toc_from_state(state)
     selected_level = state.get("selected_level")
+    split_mode = state.get("split_mode", "toc")
     if sections is None:
         sections = _sections_from_state(state)
-    if not sections and toc_entries and selected_level:
+    if not sections and state.get("pdf_path"):
         try:
-            sections = build_sections_for_level(toc_entries, int(state["total_pages"]), int(selected_level))
+            if split_mode == "ranges":
+                sections = build_sections_for_page_ranges(state.get("page_ranges", ""), int(state["total_pages"]))
+            elif toc_entries and selected_level:
+                sections = build_sections_for_level(toc_entries, int(state["total_pages"]), int(selected_level))
         except ValueError:
             sections = []
 
@@ -197,7 +206,16 @@ def _context(request, form: SplitPdfForm | None = None, sections=None) -> dict[s
         "toc_entries": toc_entries,
         "level_choices": _level_choices(toc_entries),
         "selected_level": int(selected_level) if selected_level else None,
-        "sections": _sections_for_template(sections, toc_entries, int(state["total_pages"]) if state.get("total_pages") else 0),
+        "split_mode": split_mode,
+        "page_ranges": state.get("page_ranges", ""),
+        "has_toc": bool(toc_entries),
+        "sections": _sections_for_template(
+            sections,
+            toc_entries,
+            int(state["total_pages"]) if state.get("total_pages") else 0,
+            split_mode=split_mode,
+            input_pdf_path=state.get("pdf_path", ""),
+        ),
         "section_count": len(sections),
         "final_page_count": sum(section.page_count for section in sections),
         "outputs": state.get("outputs", []),
@@ -226,13 +244,24 @@ def split_view(request):
                 pdf_path = _save_uploaded_file(uploaded_file)
                 toc_entries, total_pages = extract_toc(pdf_path)
                 levels = available_levels(toc_entries)
-                if not levels:
-                    raise ValueError("No table of contents was detected in this PDF.")
-                selected_level = levels[0]
-                sections = build_sections_for_level(toc_entries, total_pages, selected_level)
             except Exception as exc:
-                messages.error(request, f"Error detecting table of contents: {exc}")
-                return render(request, "splitpdf/split_form.html", _context(request, form=form))
+                try:
+                    total_pages = count_pdf_pages(pdf_path) if "pdf_path" in locals() else 0
+                except Exception:
+                    messages.error(request, f"Error reading PDF: {exc}")
+                    return render(request, "splitpdf/split_form.html", _context(request, form=form))
+                toc_entries = []
+                levels = []
+
+            selected_level = levels[0] if levels else None
+            if selected_level is None:
+                split_mode = "ranges"
+                page_ranges = f"1-{total_pages}" if total_pages else ""
+                sections = build_sections_for_page_ranges(page_ranges, total_pages) if page_ranges else []
+            else:
+                split_mode = "toc"
+                page_ranges = ""
+                sections = build_sections_for_level(toc_entries, total_pages, selected_level)
 
             state = {
                 "pdf_path": pdf_path,
@@ -240,11 +269,19 @@ def split_view(request):
                 "total_pages": total_pages,
                 "toc_entries": [entry.__dict__ for entry in toc_entries],
                 "selected_level": selected_level,
+                "split_mode": split_mode,
+                "page_ranges": page_ranges,
                 "preview_sections": _sections_to_state(sections),
                 "outputs": [],
             }
             _save_state(request, state)
-            messages.success(request, "Table of contents detected.")
+            if selected_level is None:
+                messages.warning(
+                    request,
+                    "No table of contents was detected. Page-range split mode is ready as an alternative.",
+                )
+            else:
+                messages.success(request, "Table of contents detected.")
             form = SplitPdfForm(level_choices=_level_choices(toc_entries), initial=_initial_from_state(state))
             return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
 
@@ -257,15 +294,19 @@ def split_view(request):
             if not form.is_valid():
                 return render(request, "splitpdf/split_form.html", _context(request, form=form))
 
+            split_mode = form.cleaned_data.get("split_mode", "toc")
             selected_level = form.cleaned_data.get("selected_level")
-            if not selected_level:
+            if split_mode == "toc" and not selected_level:
                 messages.error(request, "Select a table-of-contents level.")
                 return render(request, "splitpdf/split_form.html", _context(request, form=form))
 
             previous_level = state.get("selected_level")
+            previous_mode = state.get("split_mode", "toc")
             state.update(
                 {
                     "selected_level": selected_level,
+                    "split_mode": split_mode,
+                    "page_ranges": form.cleaned_data.get("page_ranges", ""),
                     "apply_booklets": bool(form.cleaned_data["apply_booklets"]),
                     "booklet_layout": form.cleaned_data["booklet_layout"],
                     "max_pages_per_split": form.cleaned_data["max_pages_per_split"],
@@ -285,7 +326,13 @@ def split_view(request):
             )
 
             try:
-                if action == "preview" or int(selected_level) != int(previous_level or selected_level):
+                if split_mode == "ranges":
+                    sections = build_sections_for_page_ranges(state.get("page_ranges", ""), int(state["total_pages"]))
+                elif (
+                    action == "preview"
+                    or previous_mode != split_mode
+                    or int(selected_level) != int(previous_level or selected_level)
+                ):
                     sections = build_sections_for_level(toc_entries, int(state["total_pages"]), selected_level)
                 else:
                     sections = _sections_from_state(state)
@@ -302,6 +349,9 @@ def split_view(request):
                 return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
 
             if action == "split_section":
+                if split_mode != "toc":
+                    messages.warning(request, "Interactive split is only available in table-of-contents mode.")
+                    return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
                 section_id = request.POST.get("section_id", "")
                 updated_sections = _split_preview_section(sections, section_id, toc_entries, int(state["total_pages"]))
                 if _section_ids(updated_sections) == _section_ids(sections):
@@ -315,6 +365,9 @@ def split_view(request):
                 return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
 
             if action == "merge_next":
+                if split_mode != "toc":
+                    messages.warning(request, "Interactive merge is only available in table-of-contents mode.")
+                    return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
                 section_id = request.POST.get("section_id", "")
                 updated_sections = _merge_preview_section(sections, section_id)
                 if _section_ids(updated_sections) == _section_ids(sections):
@@ -431,7 +484,21 @@ def _sections_for_template(
     sections: list[SplitSection],
     toc_entries: list[TocEntry],
     total_pages: int,
+    split_mode: str = "toc",
+    input_pdf_path: str = "",
 ) -> list[dict[str, Any]]:
+    thumbnail_cache: dict[int, str] = {}
+
+    def thumbnail(page_number: int) -> str:
+        if split_mode != "ranges" or not input_pdf_path:
+            return ""
+        if page_number not in thumbnail_cache:
+            try:
+                thumbnail_cache[page_number] = render_page_thumbnail_data_uri(input_pdf_path, page_number)
+            except Exception:
+                thumbnail_cache[page_number] = ""
+        return thumbnail_cache[page_number]
+
     return [
         {
             "section_id": section.section_id,
@@ -446,6 +513,8 @@ def _sections_for_template(
             "can_merge": idx < len(sections) - 1,
             "part_count": len(section.included_parts),
             "included_parts": section.included_parts,
+            "first_page_thumbnail": thumbnail(section.start_page),
+            "last_page_thumbnail": thumbnail(section.end_page),
         }
         for idx, section in enumerate(sections)
     ]

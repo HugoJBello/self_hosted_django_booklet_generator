@@ -17,6 +17,24 @@ class SplitPdfForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 
+    split_mode = forms.ChoiceField(
+        label="Split method",
+        required=False,
+        initial="toc",
+        choices=[
+            ("toc", "Detect chapters / sections"),
+            ("ranges", "Use page ranges"),
+        ],
+        widget=forms.RadioSelect,
+    )
+
+    page_ranges = forms.CharField(
+        label="Page ranges",
+        required=False,
+        help_text="Examples: 1-12, 13-24, 30",
+        widget=forms.HiddenInput,
+    )
+
     apply_booklets = forms.BooleanField(
         label="Apply booklet layout to generated PDFs",
         required=False,
@@ -125,6 +143,10 @@ class SplitPdfForm(forms.Form):
         if value in (None, ""):
             return None
         return int(value)
+
+    def clean_split_mode(self):
+        value = self.cleaned_data.get("split_mode") or "toc"
+        return value if value in {"toc", "ranges"} else "toc"
 
     def clean_max_pages_per_split(self):
         return self.cleaned_data.get("max_pages_per_split") or 40

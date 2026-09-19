@@ -14,6 +14,7 @@ from .forms import SplitPdfForm
 from .services import (
     SplitPdfJobOptions,
     SplitSection,
+    build_sections_for_page_ranges,
     build_sections_for_level,
     extract_toc,
     merge_adjacent_sections,
@@ -37,6 +38,16 @@ class SplitPdfServiceTests(SimpleTestCase):
 
             self.assertEqual([section.title for section in sections], ["Scope", "Details", "Results"])
             self.assertEqual([(section.start_page, section.end_page) for section in sections], [(2, 2), (3, 4), (5, 5)])
+
+    def test_build_sections_for_page_ranges(self):
+        sections = build_sections_for_page_ranges("1-2, 4, 5-5", total_pages=5)
+
+        self.assertEqual([section.title for section in sections], ["Pages 1-2", "Page 4", "Page 5"])
+        self.assertEqual([(section.start_page, section.end_page) for section in sections], [(1, 2), (4, 4), (5, 5)])
+
+    def test_page_ranges_validate_pdf_length(self):
+        with self.assertRaisesMessage(ValueError, "exceeds the PDF length"):
+            build_sections_for_page_ranges("1-6", total_pages=5)
 
     def test_single_section_is_split_by_source_page_range(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -171,6 +182,77 @@ class SplitPdfViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Table of contents detected")
+
+    def test_upload_without_toc_offers_page_range_mode(self):
+        client = Client()
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf(source_path, page_count=3)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+
+        response = client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+
+        self.assertEqual(response.status_code, 200)
+        state = client.session["splitpdf_state"]
+        self.assertEqual(state["split_mode"], "ranges")
+        self.assertEqual(state["page_ranges"], "1-3")
+        self.assertContains(response, "Page ranges mode")
+
+    def test_page_range_preview_from_view(self):
+        client = Client()
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf_with_toc(source_path)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+
+        detect_response = client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+        self.assertEqual(detect_response.status_code, 200)
+
+        response = client.post(
+            reverse("splitpdf:form"),
+            {
+                "action": "preview",
+                "split_mode": "ranges",
+                "page_ranges": "1-2, 5",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        preview = client.session["splitpdf_state"]["preview_sections"]
+        self.assertEqual([section["title"] for section in preview], ["Pages 1-2", "Page 5"])
+        self.assertContains(response, "Page range preview")
+        self.assertContains(response, "First page")
+        self.assertContains(response, "Last page")
+        self.assertContains(response, "data:image/png;base64")
+
+    def test_page_range_generate_writes_only_selected_ranges(self):
+        client = Client()
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf_with_toc(source_path)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+
+        detect_response = client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+        self.assertEqual(detect_response.status_code, 200)
+
+        response = client.post(
+            reverse("splitpdf:form"),
+            {
+                "action": "generate",
+                "split_mode": "ranges",
+                "page_ranges": "1-2, 5",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        outputs = client.session["splitpdf_state"]["outputs"]
+        self.assertEqual([(output["start_page"], output["end_page"], output["page_count"]) for output in outputs], [(1, 2, 2), (5, 5, 1)])
+        for output in outputs:
+            with fitz.open(output["path"]) as doc:
+                self.assertEqual(len(doc), output["page_count"])
 
     def test_preview_section_can_be_split_from_view(self):
         client = Client()

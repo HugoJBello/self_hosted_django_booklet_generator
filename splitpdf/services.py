@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import re
 import shutil
@@ -109,6 +110,22 @@ def extract_toc(input_pdf_path: str) -> tuple[list[TocEntry], int]:
     return entries, total_pages
 
 
+def count_pdf_pages(input_pdf_path: str) -> int:
+    with fitz.open(input_pdf_path) as doc:
+        return len(doc)
+
+
+def render_page_thumbnail_data_uri(input_pdf_path: str, page_number: int, target_width: int = 220) -> str:
+    with fitz.open(input_pdf_path) as doc:
+        if len(doc) == 0:
+            return ""
+        page = doc[_clamp_page(page_number, len(doc)) - 1]
+        scale = max(target_width / max(page.rect.width, 1), 0.1)
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+        encoded = base64.b64encode(pixmap.tobytes("png")).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
+
+
 def available_levels(toc_entries: list[TocEntry]) -> list[int]:
     return sorted({entry.level for entry in toc_entries})
 
@@ -161,6 +178,68 @@ def build_sections_for_level(
             )
         )
 
+    return sections
+
+
+def parse_page_ranges(raw_ranges: str, total_pages: int) -> list[tuple[int, int]]:
+    if total_pages < 1:
+        raise ValueError("The PDF has no pages.")
+
+    ranges: list[tuple[int, int]] = []
+    for raw_part in raw_ranges.replace("\n", ",").split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+
+        if "-" in part:
+            start_raw, end_raw = part.split("-", 1)
+        else:
+            start_raw = end_raw = part
+
+        try:
+            start_page = int(start_raw.strip())
+            end_page = int(end_raw.strip())
+        except ValueError as exc:
+            raise ValueError(f"Invalid page range: '{part}'.") from exc
+
+        if start_page < 1 or end_page < 1:
+            raise ValueError("Page ranges must start at page 1 or later.")
+        if start_page > end_page:
+            raise ValueError(f"Invalid page range '{part}': start page is after end page.")
+        if end_page > total_pages:
+            raise ValueError(f"Page range '{part}' exceeds the PDF length of {total_pages} pages.")
+
+        ranges.append((start_page, end_page))
+
+    if not ranges:
+        raise ValueError("Add at least one page range.")
+
+    return ranges
+
+
+def build_sections_for_page_ranges(raw_ranges: str, total_pages: int) -> list[SplitSection]:
+    sections = []
+    for idx, (start_page, end_page) in enumerate(parse_page_ranges(raw_ranges, total_pages), start=1):
+        title = f"Pages {start_page}-{end_page}" if start_page != end_page else f"Page {start_page}"
+        part = SplitSectionPart(
+            level=0,
+            title=title,
+            start_page=start_page,
+            end_page=end_page,
+            toc_index=None,
+        )
+        sections.append(
+            SplitSection(
+                index=idx,
+                level=0,
+                title=title,
+                start_page=start_page,
+                end_page=end_page,
+                filename=section_filename(idx, title),
+                section_id=_section_id(),
+                parts=(part,),
+            )
+        )
     return sections
 
 
