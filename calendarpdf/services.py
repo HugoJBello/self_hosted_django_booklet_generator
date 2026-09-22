@@ -291,6 +291,52 @@ def _extract_column(text: str, weekday: int) -> set[Event]:
     return events
 
 
+def _time_minutes(value: str) -> int | None:
+    try:
+        hour, minute = map(int, value.split(":"))
+    except (AttributeError, ValueError):
+        return None
+    return hour * 60 + minute if 0 <= hour <= 23 and 0 <= minute <= 59 else None
+
+
+def _event_identity(event: Event) -> tuple:
+    normalized = tuple(" ".join(value.casefold().split()) for value in (
+        event.subject, event.group, event.room, event.kind
+    ))
+    return (event.day, *normalized)
+
+
+def consolidate_events(events: set[Event]) -> set[Event]:
+    """Merge overlapping OCR blocks that describe the same dated class."""
+    grouped = defaultdict(list)
+    untouched = set()
+    for event in events:
+        start = _time_minutes(event.time)
+        end = _time_minutes(event.end_time)
+        if start is None or end is None or end <= start:
+            untouched.add(event)
+        else:
+            grouped[_event_identity(event)].append((start, end, event))
+
+    consolidated = set(untouched)
+    for entries in grouped.values():
+        entries.sort(key=lambda item: (item[0], item[1]))
+        current_start, current_end, current = entries[0]
+        for start, end, event in entries[1:]:
+            if start < current_end:
+                current_end = max(current_end, end)
+                current = Event(
+                    current.day, f"{current_start // 60:02d}:{current_start % 60:02d}",
+                    current.subject, current.group, current.room,
+                    f"{current_end // 60:02d}:{current_end % 60:02d}", current.kind,
+                )
+            else:
+                consolidated.add(current)
+                current_start, current_end, current = start, end, event
+        consolidated.add(current)
+    return consolidated
+
+
 def extract_events(data: bytes, filename: str) -> set[Event]:
     if Path(filename).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".pdf"}:
         raise ValueError("Unsupported file type. Use PNG, JPG, WEBP, TIFF or PDF.")
@@ -335,7 +381,7 @@ def extract_events(data: bytes, filename: str) -> set[Event]:
                 continue
             crop = image.crop((x0, 0, x1, image.height))
             events.update(_extract_column(_ocr(crop), weekday))
-    return events
+    return consolidate_events(events)
 
 
 def extract_uploaded_timetables(files) -> set[Event]:
@@ -356,10 +402,11 @@ def extract_uploaded_timetables(files) -> set[Event]:
                 "Check that the image is clear and contains dates, times and subjects."
             )
         events.update(extracted)
-    return events
+    return consolidate_events(events)
 
 
 def make_pdf(events: set[Event]) -> bytes:
+    events = consolidate_events(events)
     if not events:
         raise ValueError("No classes with a subject, time and valid dates were found.")
     first = min(event.day.replace(day=1) for event in events)

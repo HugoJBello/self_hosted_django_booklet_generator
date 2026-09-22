@@ -6,7 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase
 from PIL import Image
 
-from .services import Event, _column_bounds, _extract_column, make_pdf
+from .services import Event, _column_bounds, _extract_column, consolidate_events, make_pdf
 from .summary import category, hour_totals, overlapping_events
 
 
@@ -116,6 +116,18 @@ Espacio: Nave experimental «La Fábrica»
                         if drawing.get("fill") and abs(drawing["fill"][0] - 0.83) < .01
                         and abs(drawing["fill"][1] - 0.15) < .01]
             self.assertGreaterEqual(len(red_dots), 3)
+
+    def test_overlapping_blocks_for_the_same_class_are_consolidated(self):
+        day = date(2026, 10, 28)
+        outer = Event(day, "12:00", "MATEMÁTICAS Y COMPUTACIÓN", "1L",
+                      "AULA DE INFORMÁTICA 1-4", "14:00")
+        contained = Event(day, "13:00", " matemáticas y computación ", "1l",
+                          "AULA DE INFORMÁTICA 1-4", "14:00")
+        other_group = Event(day, "13:00", "MATEMÁTICAS Y COMPUTACIÓN", "2L",
+                            "AULA DE INFORMÁTICA 1-4", "14:00")
+        result = consolidate_events({outer, contained, other_group})
+        self.assertEqual(result, {outer, other_group})
+        self.assertEqual(overlapping_events(result), {outer, other_group})
 
     def test_weekend_classes_are_visible_in_month(self):
         events = {Event(date(2026, 9, 12), "09:00", "Workshop", end_time="11:00")}
