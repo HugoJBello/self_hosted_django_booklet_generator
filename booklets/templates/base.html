@@ -81,6 +81,10 @@
             Diary
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.resolver_match.app_name == 'calendarpdf' %}active{% endif %}"
+             href="{% url 'calendarpdf:form' %}">Calendar</a>
+        </li>
 
       </ul>
     </div>

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Class calendar · PDF Manager{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-9">
+    <h1 class="h3 mb-2">Class calendar</h1>
+    <p class="text-muted mb-4">Turn one or more compact timetables into a single monthly PDF, Monday through Friday.</p>
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <form method="post" enctype="multipart/form-data" id="calendar-form">
+          {% csrf_token %}
+          {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+          <label for="{{ form.images.id_for_label }}" class="form-label fw-semibold">{{ form.images.label }}</label>
+          <div id="dropzone" class="rounded-4 border border-2 p-4 bg-light mb-2">
+            <p class="mb-2">Drop your files here or choose them below.</p>
+            {{ form.images }}
+          </div>
+          <div class="form-text">{{ form.images.help_text }} PNG, JPG, WEBP, TIFF and PDF are supported. Up to 20 files, 25 MB each.</div>
+          {% for error in form.images.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
+          <div id="selection" class="small mt-3" aria-live="polite"></div>
+          <div id="download-error" class="alert alert-danger mt-3 d-none" role="alert"></div>
+          <button type="submit" class="btn btn-primary mt-4">Generate PDF</button>
+        </form>
+      </div>
+    </div>
+    <p class="text-muted small mt-3">Dates must be printed in the timetable cells, as in the examples. Check the generated PDF if a source image is blurry.</p>
+  </div>
+</div>
+<script>
+(() => {
+  const input = document.querySelector('#dropzone input[type="file"]');
+  const zone = document.getElementById('dropzone');
+  const selection = document.getElementById('selection');
+  const form = document.getElementById('calendar-form');
+  const button = form.querySelector('button[type="submit"]');
+  const errorBox = document.getElementById('download-error');
+  if (!input) return;
+  const refresh = () => { selection.textContent = Array.from(input.files).map(f => f.name).join(' · '); };
+  input.addEventListener('change', refresh);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('border-primary'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('border-primary'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('border-primary');
+    if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; refresh(); }
+  });
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!form.reportValidity() || button.disabled) return;
+    errorBox.classList.add('d-none');
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    const original = button.textContent;
+    button.textContent = 'Generating PDF…';
+    try {
+      const response = await fetch(form.action || location.href, { method: 'POST', body: new FormData(form) });
+      if (!response.ok || !response.headers.get('content-type')?.includes('application/pdf')) {
+        const html = await response.text();
+        const documentFromResponse = new DOMParser().parseFromString(html, 'text/html');
+        const message = documentFromResponse.querySelector('.alert-danger, .errorlist, .text-danger');
+        throw new Error(message?.textContent.trim() || 'The PDF could not be generated. Check the files and try again.');
+      }
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = 'class_calendar.pdf';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (error) {
+      errorBox.textContent = error.message || 'The PDF could not be generated.';
+      errorBox.classList.remove('d-none');
+    } finally {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = original;
+    }
+  });
+})();
+</script>
+{% endblock %}

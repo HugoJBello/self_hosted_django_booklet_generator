@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-eng \
     ghostscript \
     qpdf \
+    fonts-dejavu-core \
     texlive-latex-base \
     texlive-latex-recommended \
     texlive-latex-extra \

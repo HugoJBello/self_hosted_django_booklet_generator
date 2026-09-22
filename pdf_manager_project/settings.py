@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "joinpdf",
     "diary",
     "splitpdf",
+    "calendarpdf",
 ]
 
 RQ_QUEUES = {
