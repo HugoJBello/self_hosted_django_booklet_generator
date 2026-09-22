@@ -38,6 +38,7 @@ class Event:
     subject: str
     group: str = ""
     room: str = ""
+    end_time: str = ""
 
 
 def _ocr(image: Image.Image, psm: int = 6) -> str:
@@ -101,6 +102,7 @@ def _extract_column(text: str, weekday: int) -> set[Event]:
     group = ""
     room = ""
     hour = ""
+    end_hour = ""
     for raw in text.splitlines():
         line = raw.strip()
         match = SUBJECT_RE.search(line)
@@ -111,6 +113,7 @@ def _extract_column(text: str, weekday: int) -> set[Event]:
             group = ""
             room = ""
             hour = ""
+            end_hour = ""
         group_match = GROUP_RE.search(line.replace("Grupo;", "Grupo:"))
         if group_match:
             group = group_match.group(1).upper()
@@ -127,6 +130,7 @@ def _extract_column(text: str, weekday: int) -> set[Event]:
         time_match = TIME_RE.search(line)
         if time_match:
             hour = f"{int(time_match.group(1)):02d}:{time_match.group(2)}"
+            end_hour = f"{int(time_match.group(3)):02d}:{time_match.group(4)}"
         elif not hour and subject:
             start = START_RE.search(line)
             if start:
@@ -149,7 +153,7 @@ def _extract_column(text: str, weekday: int) -> set[Event]:
                 except ValueError:
                     pass
             if event_day.weekday() == weekday:
-                events.add(Event(event_day, hour, subject, group, room))
+                events.add(Event(event_day, hour, subject, group, room, end_hour))
     return events
 
 
@@ -241,6 +245,9 @@ def make_pdf(events: set[Event]) -> bytes:
                             room_label = room_label[:-1]
                         page.insert_text((box.x0, y + min(10, line_height / 2)), room_label,
                                          fontsize=room_size, fontname="dejavu", color=(0.35, 0.39, 0.46))
+    from .summary import add_weekly_summary
+
+    add_weekly_summary(doc, events, FONT_PATH)
     output = doc.tobytes(garbage=4, deflate=True)
     doc.close()
     return output
