@@ -52,6 +52,7 @@ class DiaryClassTests(SimpleTestCase):
                 self.assertNotIn("Statistics", plain[-1].get_text())
                 self.assertIn("Statistics", filled[-1].get_text())
                 self.assertIn("Room 14", filled[-1].get_text())
+                self.assertIn("8h → 9h", filled[-1].get_text())
                 self.assertIn("Workshop", filled[-1].get_text())
                 self.assertIn("Tutorial", filled[-1].get_text())
                 self.assertNotIn("Statistics", filled[1].get_text())
@@ -72,6 +73,7 @@ class DiaryClassTests(SimpleTestCase):
             with fitz.open(baseline.output_pdf_path) as plain, fitz.open(output) as filled:
                 self.assertEqual([page.rect for page in plain], [page.rect for page in filled])
                 self.assertIn("Physics", filled[-1].get_text())
+                self.assertIn("9h → 10h", filled[-1].get_text())
             crowded = {Event(date(2026, 9, 10), "09:00", f"Class {number}", end_time="10:00")
                        for number in range(5)}
             with self.assertRaisesRegex(ValueError, "Too many classes"):

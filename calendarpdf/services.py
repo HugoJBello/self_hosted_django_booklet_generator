@@ -373,6 +373,7 @@ def make_pdf(events: set[Event]) -> bytes:
 
     doc = fitz.open()
     font = fitz.Font(fontfile=str(FONT_PATH))
+    from .presentation import format_period
     from .summary import add_weekly_summary, overlapping_events
 
     overlaps = overlapping_events(events)
@@ -410,7 +411,7 @@ def make_pdf(events: set[Event]) -> bytes:
                 line_height = min(27, available / max(len(daily), 1))
                 for index, event in enumerate(daily):
                     y = top + 36 + index * line_height
-                    label = "  ".join(part for part in (event.time, event.subject, event.group) if part)
+                    label = "  ".join(part for part in (format_period(event), event.subject, event.group) if part)
                     dot_color = (0.83, 0.15, 0.18) if event in overlaps else (0.46, 0.29, 0.9)
                     page.draw_circle(fitz.Point(x + 11, y - 3), 2.4, fill=dot_color, color=None)
                     box = fitz.Rect(x + 19, y - 11, x + col_width - 5, y + max(5, line_height - 5))

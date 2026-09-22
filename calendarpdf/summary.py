@@ -9,6 +9,8 @@ import unicodedata
 
 import fitz
 
+from .presentation import format_dates, format_period_values
+
 if TYPE_CHECKING:
     from .services import Event
 
@@ -82,19 +84,48 @@ def _hours(minutes: int) -> str:
     return f"{hours} h" + (f" {remaining} min" if remaining else "")
 
 
-def _date_span(days: set[date]) -> str:
-    ordered = sorted(days)
-    first, last = ordered[0], ordered[-1]
-    if first == last:
-        return first.strftime("%d %b %Y")
-    return f"{first:%d %b %Y} - {last:%d %b %Y}"
-
-
 def _fit(page: fitz.Page, font: fitz.Font, label: str, x: float, y: float,
          width: float, size: float = 8, color=(0.18, 0.22, 0.28)) -> None:
     while label and font.text_length(label, fontsize=size) > width:
         label = label[:-1]
     page.insert_text((x, y), label, fontsize=size, fontname="dejavu", color=color)
+
+
+def _wrap(font: fitz.Font, value: str, width: float, size: float) -> list[str]:
+    """Wrap text without dropping content, including unusually long OCR tokens."""
+    lines: list[str] = []
+    current = ""
+    for word in value.split():
+        candidate = f"{current} {word}".strip()
+        if not current or font.text_length(candidate, fontsize=size) <= width:
+            current = candidate
+            continue
+        lines.append(current)
+        current = word
+        while font.text_length(current, fontsize=size) > width:
+            split_at = len(current) - 1
+            while split_at > 1 and font.text_length(current[:split_at], fontsize=size) > width:
+                split_at -= 1
+            lines.append(current[:split_at])
+            current = current[split_at:]
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+def _entry_layout(font: fitz.Font, key: tuple, days: set[date], width: float) -> list[tuple[str, float, tuple]]:
+    _, start_time, end_time, subject, group, room, kind = key
+    title = f"{subject} {group}".strip()
+    details = " | ".join(part for part in (format_period_values(start_time, end_time), room, kind) if part)
+    dates = f"Dates: {format_dates(days)}"
+    result: list[tuple[str, float, tuple]] = []
+    for value, size, color in (
+        (title, 8, (0.18, 0.22, 0.28)),
+        (details, 7, (0.18, 0.22, 0.28)),
+        (dates, 6.4, (0.38, 0.42, 0.48)),
+    ):
+        result.extend((line, size, color) for line in _wrap(font, value, width, size))
+    return result
 
 
 def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) -> None:
@@ -112,10 +143,26 @@ def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) 
             entries.sort(key=lambda item: item[0][3:])
 
     starts = sorted(by_slot)
-    row_heights = {
-        start: max(51, 12 + 39 * max((len(entries) for entries in by_slot[start].values()), default=0))
+    x0, time_width, day_width = 36, 76, (1118 - 76) / 7
+    font = fitz.Font(fontfile=str(font_path))
+    layouts = {
+        (start, weekday, key): _entry_layout(font, key, days, day_width - 12)
         for start in starts
+        for weekday, entries in by_slot[start].items()
+        for key, days in entries
     }
+    row_heights = {}
+    for start in starts:
+        tallest = max((sum(10 if size == 8 else 9 if size == 7 else 8
+                           for _, size, _ in layouts[(start, weekday, key)]) + 5
+                       for weekday, entries in by_slot[start].items()
+                       for key, _ in entries), default=0)
+        # Multiple entries in one weekday stack; calculate that column as a whole.
+        tallest = max((sum(sum(10 if size == 8 else 9 if size == 7 else 8
+                               for _, size, _ in layouts[(start, weekday, key)]) + 5
+                           for key, _ in entries)
+                       for weekday, entries in by_slot[start].items()), default=tallest)
+        row_heights[start] = max(51, 12 + tallest)
     table_top = 133
     table_bottom = table_top + 32 + sum(row_heights.values())
     totals = hour_totals(events)
@@ -125,7 +172,6 @@ def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) 
     page_height = max(841.89, table_bottom + 115 + footer_lines * 22)
     page = doc.new_page(width=1190.55, height=page_height)
     page.insert_font(fontname="dejavu", fontfile=str(font_path))
-    font = fitz.Font(fontfile=str(font_path))
     page.insert_text((36, 46), "Consolidated weekly timetable", fontsize=24,
                      fontname="dejavu", color=(0.12, 0.22, 0.38))
     first = min(event.day for event in events)
@@ -135,7 +181,6 @@ def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) 
     page.insert_text((36, 106), "Repeated classes are combined by day and time; counts use actual dated sessions.",
                      fontsize=9, fontname="dejavu", color=(0.35, 0.39, 0.46))
 
-    x0, time_width, day_width = 36, 76, (1118 - 76) / 7
     headers = ("Time",) + DAYS
     widths = (time_width,) + (day_width,) * 7
     x = x0
@@ -155,18 +200,14 @@ def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) 
             x = x0 + time_width + weekday * day_width
             page.draw_rect(fitz.Rect(x, y, x + day_width, y + row_height),
                            color=(0.82, 0.85, 0.89))
-            for index, (key, days) in enumerate(by_slot[start].get(weekday, [])):
+            entry_y = y + 15
+            for key, days in by_slot[start].get(weekday, []):
                 _, start_time, end_time, subject, group, room, kind = key
-                line_y = y + 15 + index * 39
-                title = f"{subject} {group}".strip()
-                _fit(page, font, title, x + 6, line_y, day_width - 12, 8)
-                details = " | ".join(part for part in (
-                    f"{start_time}-{end_time}" if end_time else start_time, room, kind
-                ) if part)
-                _fit(page, font, details, x + 6, line_y + 11, day_width - 12, 7)
-                _fit(page, font, f"{len(days)} dates | {_date_span(days)}",
-                     x + 6, line_y + 22, day_width - 12, 6.4,
-                     color=(0.38, 0.42, 0.48))
+                for line, size, color in layouts[(start, weekday, key)]:
+                    page.insert_text((x + 6, entry_y), line, fontsize=size,
+                                     fontname="dejavu", color=color)
+                    entry_y += 10 if size == 8 else 9 if size == 7 else 8
+                entry_y += 5
         y += row_height
 
     y = table_bottom + 35

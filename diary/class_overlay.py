@@ -8,6 +8,7 @@ from pathlib import Path
 import fitz
 
 from calendarpdf.services import Event, FONT_PATH
+from calendarpdf.presentation import format_period
 from calendarpdf.summary import overlapping_events
 
 
@@ -48,7 +49,7 @@ def _draw_list(page: fitz.Page, area: fitz.Rect, events: list[Event],
         page.draw_circle(fitz.Point(area.x0 + 3, y - 2), 2, fill=dot, color=None)
         x = area.x0 + 9
         width = area.x1 - x
-        time_label = f"{event.time}-{event.end_time}" if event.end_time else event.time
+        time_label = format_period(event)
         details = " · ".join(part for part in (event.group, event.room, event.kind) if part)
         if not compact and len(events) <= 4 and row_height >= 29:
             _text(page, font, time_label, x, y, width, font_size, color=SECONDARY)

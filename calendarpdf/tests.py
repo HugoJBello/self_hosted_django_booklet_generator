@@ -41,15 +41,28 @@ Grupo: 1A
             self.assertIn("Monday", document[0].get_text())
             self.assertIn("Mathematics I", document[0].get_text())
             self.assertIn("Room 14", document[0].get_text())
+            self.assertIn("10h → 11h", document[0].get_text())
             appendix = document[-1].get_text()
             self.assertIn("Consolidated weekly timetable", appendix)
             self.assertIn("Sunday", appendix)
-            self.assertIn("2 dates", appendix)
+            self.assertIn("Dates: 07 Sep 2026, 14 Sep 2026", appendix)
+            self.assertIn("10h → 11h", appendix)
             self.assertIn("Total scheduled hours: 5 h", appendix)
             self.assertIn("Laboratory: 2 h", appendix)
             self.assertIn("Theory: 2 h", appendix)
             self.assertIn("Classroom practice: 1 h", appendix)
         self.assertEqual(hour_totals(events)["Laboratory"], 120)
+
+    def test_summary_lists_every_date_without_clipping(self):
+        days = {date(2026, 9, day) for day in range(1, 29)}
+        events = {Event(day, "09:30", "A subject with a long arbitrary name",
+                        "Group-Z", "An unusually long classroom name", "12:00") for day in days}
+        with fitz.open(stream=make_pdf(events), filetype="pdf") as document:
+            appendix = document[-1].get_text()
+            normalized_appendix = " ".join(appendix.split())
+            for day in days:
+                self.assertIn(day.strftime("%d %b %Y"), normalized_appendix)
+            self.assertIn("9h30 → 12h", appendix)
 
     def test_variant_labels_dates_times_and_class_types(self):
         text = """Thursday
