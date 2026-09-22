@@ -13,11 +13,15 @@ if TYPE_CHECKING:
 
 
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-CATEGORIES = ("Theory", "Classroom practice", "Laboratory", "Other")
+CATEGORIES = ("Theory", "Classroom practice", "Laboratory", "Seminar", "Workshop", "Online", "Tutorial", "Exam", "Other")
 
 
 def category(event: Event) -> str:
     group = event.group.upper()
+    if event.kind:
+        return event.kind
+    if event.room.upper() == "ONLINE":
+        return "Online"
     if "LAB" in event.room.upper() or group.endswith("L"):
         return "Laboratory"
     if group.endswith("T"):
@@ -38,10 +42,36 @@ def duration_minutes(event: Event) -> int:
         return 60
 
 
+def _start_minutes(event: Event) -> int:
+    hour, minute = map(int, event.time.split(":"))
+    return hour * 60 + minute
+
+
+def overlapping_events(events: set[Event]) -> set[Event]:
+    """Find dated sessions with a positive-length time intersection."""
+    by_day: dict[date, list[Event]] = defaultdict(list)
+    for event in events:
+        by_day[event.day].append(event)
+    overlaps = set()
+    for daily in by_day.values():
+        ordered = sorted(daily, key=_start_minutes)
+        for index, event in enumerate(ordered):
+            start = _start_minutes(event)
+            end = start + duration_minutes(event)
+            for other in ordered[index + 1:]:
+                other_start = _start_minutes(other)
+                if other_start >= end:
+                    break
+                if other_start + duration_minutes(other) > start:
+                    overlaps.update((event, other))
+    return overlaps
+
+
 def hour_totals(events: set[Event]) -> dict[str, int]:
     totals = dict.fromkeys(CATEGORIES, 0)
     for event in events:
-        totals[category(event)] += duration_minutes(event)
+        label = category(event)
+        totals[label] = totals.get(label, 0) + duration_minutes(event)
     return totals
 
 
@@ -69,7 +99,7 @@ def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) 
     """Append exactly one page, expanding its height when the timetable is dense."""
     grouped: dict[tuple, set[date]] = defaultdict(set)
     for event in events:
-        key = (event.day.weekday(), event.time, event.end_time, event.subject, event.group, event.room)
+        key = (event.day.weekday(), event.time, event.end_time, event.subject, event.group, event.room, event.kind)
         grouped[key].add(event.day)
 
     by_slot: dict[str, dict[int, list[tuple[tuple, set[date]]]]] = defaultdict(lambda: defaultdict(list))
@@ -86,7 +116,11 @@ def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) 
     }
     table_top = 133
     table_bottom = table_top + 32 + sum(row_heights.values())
-    page_height = max(841.89, table_bottom + 116)
+    totals = hour_totals(events)
+    used_categories = [name for name in CATEGORIES if totals[name]]
+    used_categories.extend(sorted(name for name in totals if name not in CATEGORIES and totals[name]))
+    footer_lines = max(1, (len(used_categories) + 2) // 3)
+    page_height = max(841.89, table_bottom + 115 + footer_lines * 22)
     page = doc.new_page(width=1190.55, height=page_height)
     page.insert_font(fontname="dejavu", fontfile=str(font_path))
     font = fitz.Font(fontfile=str(font_path))
@@ -120,12 +154,12 @@ def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) 
             page.draw_rect(fitz.Rect(x, y, x + day_width, y + row_height),
                            color=(0.82, 0.85, 0.89))
             for index, (key, days) in enumerate(by_slot[start].get(weekday, [])):
-                _, start_time, end_time, subject, group, room = key
+                _, start_time, end_time, subject, group, room, kind = key
                 line_y = y + 15 + index * 39
                 title = f"{subject} {group}".strip()
                 _fit(page, font, title, x + 6, line_y, day_width - 12, 8)
                 details = " | ".join(part for part in (
-                    f"{start_time}-{end_time}" if end_time else start_time, room
+                    f"{start_time}-{end_time}" if end_time else start_time, room, kind
                 ) if part)
                 _fit(page, font, details, x + 6, line_y + 11, day_width - 12, 7)
                 _fit(page, font, f"{len(days)} dates | {_date_span(days)}",
@@ -133,12 +167,13 @@ def add_weekly_summary(doc: fitz.Document, events: set[Event], font_path: Path) 
                      color=(0.38, 0.42, 0.48))
         y += row_height
 
-    totals = hour_totals(events)
     y = table_bottom + 35
     page.insert_text((36, y), f"Total scheduled hours: {_hours(sum(totals.values()))}",
                      fontsize=15, fontname="dejavu", color=(0.12, 0.22, 0.38))
     y += 29
-    breakdown = "    |    ".join(f"{name}: {_hours(totals[name])}" for name in CATEGORIES)
-    _fit(page, font, breakdown, 36, y, 1118, 10)
-    page.insert_text((36, y + 22), "A missing or unreadable end time is counted as one hour.",
+    for index, name in enumerate(used_categories):
+        column, row = index % 3, index // 3
+        _fit(page, font, f"{name}: {_hours(totals[name])}", 36 + column * 372,
+             y + row * 22, 360, 10)
+    page.insert_text((36, y + footer_lines * 22 + 5), "A missing or unreadable end time is counted as one hour.",
                      fontsize=8, fontname="dejavu", color=(0.38, 0.42, 0.48))
