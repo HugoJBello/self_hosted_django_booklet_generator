@@ -3,11 +3,23 @@ from __future__ import annotations
 from django import forms
 from django.utils import timezone
 
+from calendarpdf.forms import ImageFilesField, MultiImageInput
+
 
 class DiaryForm(forms.Form):
     OUTPUT_PDF = "pdf"
     OUTPUT_SIDE_BY_SIDE = "side_by_side"
     OUTPUT_FLIPPED_A4 = "flipped_a4"
+
+    class_timetables = ImageFilesField(
+        label="Class timetables (optional)",
+        required=False,
+        widget=MultiImageInput(attrs={
+            "accept": ".png,.jpg,.jpeg,.webp,.tif,.tiff,.pdf",
+            "class": "form-control",
+        }),
+        help_text="Upload one or more dated class schedules. Classes appear only on the weekly diary pages.",
+    )
 
     start_date = forms.DateField(
         label="Start date",

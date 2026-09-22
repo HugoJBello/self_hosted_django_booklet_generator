@@ -7,6 +7,10 @@ class MultiImageInput(forms.FileInput):
 
 class ImageFilesField(forms.FileField):
     def clean(self, data, initial=None):
+        if not data:
+            if self.required:
+                super().clean(data, initial)
+            return []
         files = data if isinstance(data, (tuple, list)) else [data]
         return [super(ImageFilesField, self).clean(item, initial) for item in files]
 

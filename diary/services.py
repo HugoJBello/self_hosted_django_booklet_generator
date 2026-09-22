@@ -17,6 +17,9 @@ import matplotlib
 
 from booklets.flipped_a4 import FlippedA4Quality, FlippedA4SplitMode, build_flipped_a4_booklets_pipeline
 from booklets.services import SourcePdfSpec, build_booklets_pipeline
+from calendarpdf.services import Event
+
+from .class_overlay import add_classes_to_diary
 
 matplotlib.use("Agg")
 
@@ -320,6 +323,7 @@ def generate_diary_pdf(
     include_visible_planets: bool = False,
     latitude: float | None = None,
     longitude: float | None = None,
+    class_events: set[Event] | None = None,
 ) -> DiaryJobResult:
     job_id = uuid.uuid4().hex
     os.makedirs(final_output_dir, exist_ok=True)
@@ -339,6 +343,13 @@ def generate_diary_pdf(
             longitude if include_visible_planets else None,
         )
         generated_pdf = _compile_latex(tmp, tex_path)
+        if class_events:
+            annotated_pdf = os.path.join(tmp, "result_with_classes.pdf")
+            add_classes_to_diary(
+                generated_pdf, annotated_pdf, class_events, start_date,
+                number_of_weeks, calendar_mode,
+            )
+            generated_pdf = annotated_pdf
         shutil.copy2(generated_pdf, final_pdf)
 
     return DiaryJobResult(job_id=job_id, output_pdf_path=final_pdf)
@@ -362,6 +373,7 @@ def build_diary_pipeline(
     include_visible_planets: bool = False,
     latitude: float | None = None,
     longitude: float | None = None,
+    class_events: set[Event] | None = None,
 ) -> DiaryJobResult:
     diary = generate_diary_pdf(
         start_date=start_date,
@@ -372,6 +384,7 @@ def build_diary_pipeline(
         include_visible_planets=include_visible_planets,
         latitude=latitude,
         longitude=longitude,
+        class_events=class_events,
         final_output_dir=final_output_dir,
     )
 

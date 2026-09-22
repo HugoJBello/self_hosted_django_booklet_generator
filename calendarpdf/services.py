@@ -18,19 +18,6 @@ from PIL import Image, ImageOps, ImageSequence
 
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 MONTHS = ("", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
-SUBJECT_TRANSLATIONS = {
-    "ESTADÍSTICA": "Statistics",
-    "MATEMÁTICAS I": "Mathematics I",
-    "MATEMÁTICAS Y COMPUTACIÓN": "Mathematics and Computing",
-    "MATEMÁTICAS": "Mathematics",
-    "FÍSICA": "Physics",
-    "QUÍMICA": "Chemistry",
-    "BIOLOGÍA": "Biology",
-    "PROGRAMACIÓN": "Programming",
-    "INFORMÁTICA": "Computer Science",
-    "ÁLGEBRA": "Algebra",
-    "CÁLCULO": "Calculus",
-}
 FONT_PATH = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
 DATE_RE = re.compile(r"(?<!\d)([0-3]?\d)\s*[/.-]\s*([01]?\d)\s*[/.-]\s*(20\d\d|\d\d)(?!\d)")
 ISO_DATE_RE = re.compile(r"(?<!\d)(20\d\d)\s*[-/.]\s*([01]?\d)\s*[-/.]\s*([0-3]?\d)(?!\d)")
@@ -54,9 +41,14 @@ HOUR_RANGE_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*[-–—]\s*([01]?\d|2[0-
 START_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*[:.h]\s*([0-5]\d)(?!\d)", re.I)
 SUBJECT_RE = re.compile(r"\b\d{4,6}(?:\s*\([^)]*\))?\s*[-–—:]\s*(.+)", re.I)
 GROUP_RE = re.compile(r"\b(?:grupo|group|gr\.?)\s*[:;#-]?\s*([\w-]+(?:\s+[A-Za-z])?)", re.I)
-ROOM_RE = re.compile(r"\b(aula|sala|laboratorio|lab(?:oratory)?|room|classroom)\b\s*(?:de\s+)?[:#-]?\s*([^)]*)", re.I)
+ROOM_RE = re.compile(
+    r"\b((?:aula|sala|laboratorio|lab(?:oratory)?|room|classroom|espacio|ubicaci[oó]n|location|venue)(?:\s+de)?)\b"
+    r"\s*[:#-]?\s*([^)]*)",
+    re.I,
+)
 TYPE_RE = re.compile(r"\b(?:tipo|type|actividad|activity|modalidad)\s*[:;=-]\s*(.+)", re.I)
 DAY_NAMES = ("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo")
+ALL_DAY_NAMES = set(DAY_NAMES) | {name.lower() for name in WEEKDAYS}
 DAY_ABBREVIATIONS = {"lun": 0, "mar": 1, "mie": 2, "mier": 2, "jue": 3, "vie": 4, "sab": 5, "dom": 6}
 
 
@@ -143,13 +135,9 @@ def _column_bounds(image: Image.Image) -> list[tuple[int, int, int]]:
     return [(i, round(edges[i] + 2), round(edges[i + 1] - 2)) for i in range(count)]
 
 
-def _normalise_subject(raw: str) -> str:
-    subject = re.sub(r"\s+", " ", raw).strip(" -–—:()")
-    subject = re.sub(r"(?i)^MATEM[ÁA]TICAS\s+[1|I]$", "MATEMÁTICAS I", subject)
-    for source, translation in SUBJECT_TRANSLATIONS.items():
-        if _plain(subject) == _plain(source):
-            return translation
-    return subject
+def _clean_source_label(raw: str) -> str:
+    """Remove OCR spacing noise without translating or renaming source text."""
+    return re.sub(r"\s+", " ", raw).strip(" -–—:()")
 
 
 def _subject_from_line(line: str, allow_fallback: bool) -> str | None:
@@ -157,42 +145,34 @@ def _subject_from_line(line: str, allow_fallback: bool) -> str | None:
         return None
     match = SUBJECT_RE.search(line)
     if match:
-        return _normalise_subject(match.group(1))
+        return _clean_source_label(match.group(1))
     plain = _plain(line)
     if not allow_fallback or len(line) < 5:
         return None
     if GROUP_RE.search(line) or ROOM_RE.search(line) or TYPE_RE.search(line):
         return None
     if any(token in plain for token in (
-        "grupo", "group", "aula", "sala", "room", "laboratorio", "tipo", "type",
+        "grupo", "group", "aula", "sala", "room", "laboratorio", "espacio", "ubicacion",
+        "location", "venue", "tipo", "type",
         "actividad", "cuatrimestre", "semestre", "curso", "timetable", "hora de", "schedule"
-    )) or plain.strip(" .:-") in DAY_NAMES:
+    )) or plain.strip(" .:-") in ALL_DAY_NAMES:
         return None
     if DATE_RE.search(line) or ISO_DATE_RE.search(line) or START_RE.search(line):
         return None
     letters = [char for char in line if char.isalpha()]
-    if letters and sum(char.isupper() for char in letters) / len(letters) >= .75:
-        return _normalise_subject(line)
+    if len(letters) >= 3:
+        return _clean_source_label(line)
     return None
 
 
-def _normalise_room(raw_label: str, raw_detail: str) -> str:
-    label = _plain(raw_label)
+def _clean_room(raw_label: str, raw_detail: str) -> str:
+    """Keep the room wording from the upload while removing dates and OCR spacing noise."""
+    label = re.sub(r"\s+", " ", raw_label).strip(" ()-:.")
     detail = re.sub(r"\s+", " ", raw_detail).strip(" ()-:.")
     detail = DATE_RE.sub("", detail)
-    detail = ISO_DATE_RE.sub("", detail).strip(" ,-;.")
-    if "inform" in _plain(detail) or "ordenador" in _plain(detail) or "computer" in _plain(detail):
-        detail = re.sub(r"(?i)^INFORM[ÁA]TICA\s*", "", detail)
-        detail = re.sub(r"(?i)^ORDENADORES\s*", "", detail)
-        detail = re.sub(r"^1(?=-\d+$)", "I", detail)
-        return "Computer Lab" + (f" {detail}" if detail else "")
-    if label in ("laboratorio", "lab", "laboratory"):
-        return "Laboratory" + (f" {detail}" if detail else "")
-    if "virtual" in _plain(detail) or "online" in _plain(detail):
-        return "Online"
-    if label == "sala":
-        return "Room" + (f" {detail}" if detail else "")
-    return "Room" + (f" {detail}" if detail else "")
+    detail = ISO_DATE_RE.sub("", detail)
+    detail = NAMED_DATE_RE.sub("", detail).strip(" ,-;.")
+    return " ".join(part for part in (label, detail) if part)
 
 
 def _normalise_type(raw: str) -> str:
@@ -276,11 +256,9 @@ def _extract_column(text: str, weekday: int) -> set[Event]:
         group_match = GROUP_RE.search(line)
         if group_match:
             group = re.sub(r"\s+", "", group_match.group(1)).upper()
-            if group == "11" and subject == "Mathematics I":
-                group = "1T"
         room_match = ROOM_RE.search(line)
         if room_match and not new_subject and not TYPE_RE.search(line):
-            room = _normalise_room(room_match.group(1), room_match.group(2))
+            room = _clean_room(room_match.group(1), room_match.group(2))
         type_match = TYPE_RE.search(line)
         if type_match and not new_subject:
             kind = _normalise_type(type_match.group(1))
@@ -357,6 +335,27 @@ def extract_events(data: bytes, filename: str) -> set[Event]:
                 continue
             crop = image.crop((x0, 0, x1, image.height))
             events.update(_extract_column(_ocr(crop), weekday))
+    return events
+
+
+def extract_uploaded_timetables(files) -> set[Event]:
+    """Validate and merge uploaded schedules for Calendar and Diary."""
+    if len(files) > 20:
+        raise ValueError("Select no more than 20 timetable files.")
+    events = set()
+    for uploaded in files:
+        if uploaded.size > 25 * 1024 * 1024:
+            raise ValueError(f"{uploaded.name}: exceeds 25 MB.")
+        try:
+            extracted = extract_events(uploaded.read(), uploaded.name)
+        except ValueError as exc:
+            raise ValueError(f"{uploaded.name}: {exc}") from exc
+        if not extracted:
+            raise ValueError(
+                f"{uploaded.name}: no dated classes could be read. "
+                "Check that the image is clear and contains dates, times and subjects."
+            )
+        events.update(extracted)
     return events
 
 

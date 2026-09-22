@@ -54,7 +54,7 @@
 
       <div class="card shadow-sm">
         <div class="card-body">
-          <form method="post" id="diary-form">
+          <form method="post" enctype="multipart/form-data" id="diary-form">
             {% csrf_token %}
             {{ form.latitude }}
             {{ form.longitude }}
@@ -98,6 +98,15 @@
                 {% for e in form.calendar_mode.errors %}
                   <div class="text-danger small">{{ e }}</div>
                 {% endfor %}
+              </section>
+
+              <section class="settings-panel">
+                <div class="settings-panel-title">{{ form.class_timetables.label }}</div>
+                <div class="settings-panel-subtitle">Add classes to the existing weekly calendar boxes without changing their size. No summary page is added.</div>
+                {{ form.class_timetables }}
+                <div class="form-text">{{ form.class_timetables.help_text }} PNG, JPG, WEBP, TIFF or PDF; up to 20 files of 25 MB each.</div>
+                {% for e in form.class_timetables.errors %}<div class="text-danger small mt-2">{{ e }}</div>{% endfor %}
+                <div id="timetable-selection" class="small mt-2" aria-live="polite"></div>
               </section>
 
               <section class="settings-panel">
@@ -261,6 +270,12 @@
       const includePlanetsInput = document.getElementById("id_include_visible_planets");
       const latitudeInput = document.getElementById("id_latitude");
       const longitudeInput = document.getElementById("id_longitude");
+      const timetablesInput = document.getElementById("id_class_timetables");
+      const timetableSelection = document.getElementById("timetable-selection");
+
+      timetablesInput.addEventListener("change", () => {
+        timetableSelection.textContent = Array.from(timetablesInput.files).map((file) => file.name).join(" · ");
+      });
 
       const refreshPanels = () => {
         const selected = outputInputs.find((input) => input.checked)?.value || "pdf";

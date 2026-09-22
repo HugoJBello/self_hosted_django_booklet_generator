@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
+import unicodedata
 
 import fitz
 
@@ -18,11 +19,12 @@ CATEGORIES = ("Theory", "Classroom practice", "Laboratory", "Seminar", "Workshop
 
 def category(event: Event) -> str:
     group = event.group.upper()
+    room_key = unicodedata.normalize("NFKD", event.room).encode("ascii", "ignore").decode().upper()
     if event.kind:
         return event.kind
-    if event.room.upper() == "ONLINE":
+    if room_key == "ONLINE":
         return "Online"
-    if "LAB" in event.room.upper() or group.endswith("L"):
+    if any(term in room_key for term in ("LAB", "INFORMAT", "ORDENADOR", "COMPUTER")) or group.endswith("L"):
         return "Laboratory"
     if group.endswith("T"):
         return "Theory"

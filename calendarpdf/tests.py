@@ -24,8 +24,8 @@ Grupo: 1A
 14/09/26
 """
         events = _extract_column(text, 0)
-        self.assertIn(Event(date(2026, 9, 7), "10:00", "Mathematics I", "1T", "Room 14", "11:00"), events)
-        self.assertIn(Event(date(2026, 9, 14), "12:00", "Statistics", "1A", "Computer Lab I-4", "13:00"), events)
+        self.assertIn(Event(date(2026, 9, 7), "10:00", "MATEMÁTICAS I", "1T", "AULA 14", "11:00"), events)
+        self.assertIn(Event(date(2026, 9, 14), "12:00", "ESTADÍSTICA", "1A", "AULA DE INFORMÁTICA I-4", "13:00"), events)
         self.assertEqual(len(events), 3)
 
     def test_pdf_appends_one_consolidated_page_with_hours(self):
@@ -68,14 +68,28 @@ LABORATORIO QUÍMICA 2
 """
         events = _extract_column(text, 3)
         self.assertIn(Event(date(2026, 9, 10), "08:30", "PHYSICS", "2L",
-                            "Computer Lab 3", "10:00", "Seminar"), events)
-        self.assertIn(Event(date(2026, 9, 10), "10:00", "Chemistry", "1A",
-                            "Laboratory QUÍMICA 2", "12:00"), events)
-        self.assertIn(Event(date(2026, 9, 17), "10:00", "Chemistry", "1A",
-                            "Laboratory QUÍMICA 2", "12:00"), events)
+                            "SALA DE ORDENADORES 3", "10:00", "Seminar"), events)
+        self.assertIn(Event(date(2026, 9, 10), "10:00", "QUÍMICA", "1A",
+                            "LABORATORIO QUÍMICA 2", "12:00"), events)
+        self.assertIn(Event(date(2026, 9, 17), "10:00", "QUÍMICA", "1A",
+                            "LABORATORIO QUÍMICA 2", "12:00"), events)
         self.assertEqual(category(next(event for event in events if event.subject == "PHYSICS")), "Seminar")
         self.assertEqual(hour_totals(events)["Seminar"], 90)
         self.assertEqual(hour_totals(events)["Laboratory"], 240)
+        room_only = Event(date(2026, 9, 24), "10:00", "Diseño", room="AULA DE INFORMÁTICA I-4")
+        self.assertEqual(category(room_only), "Laboratory")
+        self.assertEqual(room_only.room, "AULA DE INFORMÁTICA I-4")
+
+    def test_arbitrary_mixed_case_subject_and_room_are_kept_verbatim(self):
+        text = """Taller de creación sonora avanzada
+16:30-18:15
+Grupo: Zeta-9
+Espacio: Nave experimental «La Fábrica»
+22/09/26
+"""
+        events = _extract_column(text, 1)
+        self.assertIn(Event(date(2026, 9, 22), "16:30", "Taller de creación sonora avanzada",
+                            "ZETA-9", "Espacio Nave experimental «La Fábrica»", "18:15"), events)
 
     def test_overlap_requires_shared_time_on_same_date(self):
         day = date(2026, 9, 7)
@@ -117,6 +131,6 @@ LABORATORIO QUÍMICA 2
         files = [SimpleUploadedFile(name, b"image", content_type="image/png")
                  for name in ("first.png", "second.png")]
         event = Event(date(2026, 9, 7), "10:00", "Mathematics")
-        with patch("calendarpdf.views.extract_events", side_effect=({event}, set())):
+        with patch("calendarpdf.services.extract_events", side_effect=({event}, set())):
             response = self.client.post("/pdf_manager/calendar/", {"images": files})
         self.assertContains(response, "second.png: no dated classes could be read")
