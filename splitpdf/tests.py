@@ -6,8 +6,9 @@ from unittest.mock import patch
 from zipfile import ZipFile
 
 import fitz
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from .forms import SplitPdfForm
@@ -165,8 +166,11 @@ class SplitPdfFormTests(SimpleTestCase):
 
 
 class SplitPdfViewTests(TestCase):
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_user("split-test"))
+
     def test_form_renders(self):
-        response = Client().get(reverse("splitpdf:form"))
+        response = self.client.get(reverse("splitpdf:form"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Split PDF by sections")
@@ -178,13 +182,13 @@ class SplitPdfViewTests(TestCase):
             with open(source_path, "rb") as source:
                 upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
 
-        response = Client().post(reverse("splitpdf:form"), {"input_pdf": upload})
+        response = self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Table of contents detected")
 
     def test_upload_without_toc_offers_page_range_mode(self):
-        client = Client()
+        client = self.client
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")
             _create_pdf(source_path, page_count=3)
@@ -200,7 +204,7 @@ class SplitPdfViewTests(TestCase):
         self.assertContains(response, "Page ranges mode")
 
     def test_page_range_preview_from_view(self):
-        client = Client()
+        client = self.client
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")
             _create_pdf_with_toc(source_path)
@@ -228,7 +232,7 @@ class SplitPdfViewTests(TestCase):
         self.assertContains(response, "data:image/png;base64")
 
     def test_page_range_generate_writes_only_selected_ranges(self):
-        client = Client()
+        client = self.client
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")
             _create_pdf_with_toc(source_path)
@@ -255,7 +259,7 @@ class SplitPdfViewTests(TestCase):
                 self.assertEqual(len(doc), output["page_count"])
 
     def test_preview_section_can_be_split_from_view(self):
-        client = Client()
+        client = self.client
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")
             _create_pdf_with_toc(source_path)
@@ -281,7 +285,7 @@ class SplitPdfViewTests(TestCase):
         self.assertEqual(preview_titles, ["Chapter One part 1", "Chapter One part 2", "Chapter Two"])
 
     def test_merged_preview_section_can_be_split_back_apart_from_view(self):
-        client = Client()
+        client = self.client
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")
             _create_pdf_with_toc(source_path)
@@ -317,7 +321,7 @@ class SplitPdfViewTests(TestCase):
         self.assertEqual(preview_titles, ["Chapter One", "Chapter Two"])
 
     def test_preview_sections_can_be_merged_from_view(self):
-        client = Client()
+        client = self.client
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")
             _create_pdf_with_toc(source_path)
@@ -344,7 +348,7 @@ class SplitPdfViewTests(TestCase):
         self.assertEqual(preview[0]["title"], "Chapter One + Chapter Two")
 
     def test_download_all_returns_zip_with_generated_pdfs(self):
-        client = Client()
+        client = self.client
         with tempfile.TemporaryDirectory() as tmp:
             first_path = os.path.join(tmp, "first.pdf")
             second_path = os.path.join(tmp, "second.pdf")
@@ -370,7 +374,7 @@ class SplitPdfViewTests(TestCase):
                 self.assertEqual(sorted(archive.namelist()), ["01_intro.pdf", "02_body.pdf"])
 
     def test_download_all_requires_generated_pdfs(self):
-        response = Client().get(reverse("splitpdf:download_all"))
+        response = self.client.get(reverse("splitpdf:download_all"))
 
         self.assertEqual(response.status_code, 404)
 

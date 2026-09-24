@@ -5,6 +5,7 @@ import shutil
 import tempfile
 
 import fitz
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -30,6 +31,7 @@ class JoinPdfViewTests(TestCase):
     def setUp(self):
         shutil.rmtree(TEST_MEDIA_ROOT, ignore_errors=True)
         os.makedirs(TEST_MEDIA_ROOT, exist_ok=True)
+        self.client.force_login(get_user_model().objects.create_user("join-test"))
 
     @classmethod
     def tearDownClass(cls):

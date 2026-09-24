@@ -6,8 +6,9 @@ from unittest import skipUnless
 from unittest.mock import patch
 
 import fitz
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase
+from django.test import TestCase
 
 from calendarpdf.services import Event
 from .class_overlay import _single_blocks, add_classes_to_diary
@@ -15,7 +16,10 @@ from .forms import DiaryForm
 from .services import generate_diary_pdf
 
 
-class DiaryClassTests(SimpleTestCase):
+class DiaryClassTests(TestCase):
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_user("diary-test"))
+
     def test_timetable_upload_is_optional(self):
         form = DiaryForm()
         self.assertFalse(form.fields["class_timetables"].required)

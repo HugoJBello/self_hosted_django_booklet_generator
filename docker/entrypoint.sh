@@ -39,10 +39,6 @@ echo "   Subpath : ${APP_SUBPATH}"
 echo "   URL     : (detrás del proxy) ${APP_SUBPATH}/booklets/  |  ${APP_SUBPATH}/split/  |  ${APP_SUBPATH}/ocr/"
 echo ""
 
-# Migraciones + collectstatic (para web y worker)
-python manage.py migrate --noinput
-python manage.py collectstatic --noinput || true
-
 # ------------------------------------------------------------
 # MODO WORKER: /entrypoint.sh rqworker default
 # ------------------------------------------------------------
@@ -53,6 +49,12 @@ if [ "${1:-}" = "rqworker" ]; then
   echo ""
   exec python manage.py rqworker "${QUEUE}"
 fi
+
+# La inicialización persistente pertenece únicamente al proceso web. Esto evita
+# escrituras simultáneas sobre SQLite durante el primer arranque.
+python manage.py migrate --noinput
+python manage.py ensure_admin
+python manage.py collectstatic --noinput || true
 
 # ------------------------------------------------------------
 # MODO WEB (por defecto): gunicorn

@@ -2,15 +2,19 @@ from datetime import date
 from unittest.mock import patch
 
 import fitz
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase
+from django.test import TestCase
 from PIL import Image
 
 from .services import Event, _column_bounds, _extract_column, consolidate_events, make_pdf
 from .summary import category, hour_totals, overlapping_events
 
 
-class CalendarTests(SimpleTestCase):
+class CalendarTests(TestCase):
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_user("calendar-test"))
+
     def test_dates_follow_their_own_subject(self):
         text = """41953 (445) - MATEMÁTICAS I
 10:00-11:00
