@@ -9,6 +9,9 @@ from django.http import FileResponse, Http404
 from django.shortcuts import render
 from django.urls import reverse
 
+from activity.services import persist_uploads, record_activity
+from activity.models import Artifact
+
 from calendarpdf.services import extract_uploaded_timetables
 
 from .forms import DiaryForm
@@ -31,6 +34,7 @@ def diary_view(request):
         if form.is_valid():
             class_events = set()
             files = form.cleaned_data["class_timetables"]
+            saved_inputs = persist_uploads(files, "diary") if files else []
             if files:
                 try:
                     class_events = extract_uploaded_timetables(files)
@@ -83,10 +87,16 @@ def diary_view(request):
                     messages.error(request, f"Error generating diary: {exc}")
                 else:
                     messages.success(request, "Diary generated successfully.")
-                    result_download_url = reverse("diary:download", kwargs={"job_id": result.job_id})
+                    options = {key: value for key, value in form.cleaned_data.items() if key != "class_timetables"}
+                    activity = record_activity(
+                        owner=request.user, tool="diary", title=f"Diary from {form.cleaned_data['start_date']}", options=options,
+                        inputs=saved_inputs, outputs=[{"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path}],
+                        restore_state={"form_initial": options},
+                    )
+                    result_download_url = reverse("activity:file", kwargs={"public_id": activity.artifacts.get(kind="output").public_id})
                     form = _initial_form(form)
     else:
-        form = DiaryForm()
+        form = DiaryForm(initial=request.session.pop("activity_initial_diary", None))
 
     return render(
         request,
@@ -109,6 +119,11 @@ def download_diary(request, job_id: str):
     for filename in candidates:
         pdf_path = os.path.join(outputs_dir, filename)
         if os.path.isfile(pdf_path):
+            allowed = Artifact.objects.filter(kind="output", path=pdf_path)
+            if not request.user.is_staff:
+                allowed = allowed.filter(activity__owner=request.user)
+            if not allowed.exists():
+                continue
             return FileResponse(
                 open(pdf_path, "rb"),
                 as_attachment=True,

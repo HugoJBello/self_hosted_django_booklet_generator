@@ -1,0 +1,13 @@
+<section class="card shadow-sm mb-4 border-0" aria-labelledby="recent-activity-title">
+  <div class="card-body py-3 px-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+      <h2 class="h6 fw-bold mb-0" id="recent-activity-title">Recent activity</h2>
+      <a class="small text-decoration-none" href="{% url 'activity:list' %}">View history</a>
+    </div>
+    <div class="d-flex gap-2 overflow-x-auto pb-1">
+      {% for item in recent_tool_activities %}
+        <a class="btn btn-sm btn-outline-secondary text-nowrap" href="{% url 'activity:detail' item.pk %}">{{ item.created_at|date:"M j, H:i" }} · {{ item.title|truncatechars:30 }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</section>

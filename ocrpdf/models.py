@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 from django.db import models
+from django.conf import settings
 
 
 class OcrJob(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ocr_jobs", null=True)
+    activity = models.ForeignKey("activity.Activity", on_delete=models.CASCADE, related_name="ocr_jobs", null=True)
     STATUS_CHOICES = [
         ("queued", "Queued"),
         ("running", "Running"),
@@ -31,4 +34,3 @@ class OcrJob(models.Model):
 
     def __str__(self) -> str:
         return f"{self.job_id} ({self.status})"
-

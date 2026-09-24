@@ -10,6 +10,9 @@ from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from activity.services import record_activity
+from activity.models import Artifact
+
 from .forms import BookletForm
 from .flipped_a4 import build_flipped_a4_booklets_pipeline
 from .services import SourcePdfSpec, build_booklets_pipeline
@@ -219,6 +222,7 @@ def booklets_view(request):
         outputs_dir = os.path.join(settings.MEDIA_ROOT, "booklets_outputs")
         _ensure_dir(outputs_dir)
 
+        generated_outputs = []
         try:
             items = _items_from_request(request, files)
             _save_items(request, items)
@@ -262,6 +266,7 @@ def booklets_view(request):
                         "download_url": reverse("booklets:download", kwargs={"job_id": result.job_id}),
                     }
                 )
+                generated_outputs.append({"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path})
                 messages.success(request, "Combined booklet generated successfully.")
             else:
                 for item, spec in zip(items, specs):
@@ -286,9 +291,21 @@ def booklets_view(request):
                             "download_url": reverse("booklets:download", kwargs={"job_id": result.job_id}),
                         }
                     )
+                    generated_outputs.append({"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path})
                 messages.success(request, f"Generated booklets for {len(results)} file(s).")
         except Exception as exc:
             messages.error(request, f"Error generating booklets: {exc}")
+
+        if generated_outputs:
+            options = {key: value for key, value in form.cleaned_data.items() if key != "input_pdf"}
+            activity = record_activity(
+                owner=request.user, tool="booklets", title=f"{len(items)} source PDF(s)", options=options,
+                inputs=[{"name": item.get("name"), "path": item["path"]} for item in items], outputs=generated_outputs,
+                restore_state={"session_key": SESSION_KEY, "session_value": items, "form_initial": options},
+            )
+            output_artifacts = list(activity.artifacts.filter(kind="output"))
+            for result_item, artifact in zip(results, output_artifacts):
+                result_item["download_url"] = reverse("activity:file", kwargs={"public_id": artifact.public_id})
 
         return render(
             request,
@@ -300,10 +317,11 @@ def booklets_view(request):
             },
         )
 
+    initial = request.session.pop("activity_initial_booklets", None)
     return render(
         request,
         "booklets/booklets_form.html",
-        {"form": BookletForm(), "results": results, "booklet_items": _items_for_template(items)},
+        {"form": BookletForm(initial=initial), "results": results, "booklet_items": _items_for_template(items)},
     )
 
 
@@ -320,6 +338,12 @@ def download_booklets(request, job_id: str):
         pdf_path = os.path.join(outputs_dir, f"{job_id}_flipped_a4_booklets_for_printing.pdf")
 
     if not os.path.isfile(pdf_path):
+        raise Http404("File not found")
+
+    allowed = Artifact.objects.filter(kind="output", path=pdf_path)
+    if not request.user.is_staff:
+        allowed = allowed.filter(activity__owner=request.user)
+    if not allowed.exists():
         raise Http404("File not found")
 
     return FileResponse(

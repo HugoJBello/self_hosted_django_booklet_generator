@@ -12,6 +12,8 @@ from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from activity.services import record_activity
+
 from .forms import SplitPdfForm
 from .services import (
     SplitPdfJobOptions,
@@ -418,6 +420,15 @@ def split_view(request):
                 }
                 for output in outputs
             ]
+            options_data = {key: value for key, value in form.cleaned_data.items() if key != "input_pdf"}
+            activity = record_activity(
+                owner=request.user, tool="splitpdf", title=f"Split {state.get('pdf_name', 'PDF')} into {len(outputs)} file(s)",
+                options=options_data, inputs=[{"name": state.get("pdf_name"), "path": state["pdf_path"]}],
+                outputs=[{"name": output.filename, "path": output.path} for output in outputs],
+                restore_state={"session_key": SESSION_KEY, "session_value": state, "form_initial": options_data},
+            )
+            for output_state, artifact in zip(state["outputs"], activity.artifacts.filter(kind="output")):
+                output_state["download_url"] = reverse("activity:file", kwargs={"public_id": artifact.public_id})
             _save_state(request, state)
             messages.success(request, f"Generated {len(outputs)} PDF(s).")
             return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=final_sections))

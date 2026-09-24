@@ -22,6 +22,19 @@ python manage.py ensure_admin
 
 Los administradores pueden crear usuarios, borrar usuarios y restablecer contraseñas desde **Users**. Los usuarios normales solo pueden cambiar su propia contraseña.
 
+## Historial de actividad
+
+Cada ejecución de Booklets, Join, Split, OCR, Diary y Calendar conserva en la base de datos:
+
+- El usuario propietario y la fecha.
+- Las opciones elegidas.
+- Los archivos de entrada y los resultados generados.
+- El estado necesario para reabrir el trabajo en su herramienta.
+
+Cada herramienta muestra las últimas actividades del usuario. **View history** permite consultar su historial completo. Los administradores disponen además de **All activity** en el menú de usuario para auditar la actividad de todos los usuarios.
+
+Las descargas se sirven mediante rutas autenticadas: un usuario solo puede consultar sus propios archivos; los administradores pueden consultar todos. Los archivos históricos viven bajo el volumen persistente configurado como `DJANGO_MEDIA_ROOT`, por lo que hay que incluir dicho volumen en las copias de seguridad junto con la base de datos.
+
 ## En local
 
 en una terminal a parte

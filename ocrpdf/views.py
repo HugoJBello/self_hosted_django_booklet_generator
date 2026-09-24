@@ -11,6 +11,8 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 
+from activity.services import record_activity
+
 from .forms import OcrPdfForm
 from .models import OcrJob
 from .tasks import run_ocr_job
@@ -57,16 +59,26 @@ def ocr_view(request):
                 return render(request, "ocrpdf/ocr_form.html", {"form": form, "jobs": []})
 
             q = django_rq.get_queue("default")
+            saved_inputs = []
+            queued_data = []
             for f in files:
                 upload_path = _unique_path(uploads_dir, f.name)
                 with open(upload_path, "wb") as out:
                     for chunk in f.chunks():
                         out.write(chunk)
 
+                saved_inputs.append({"name": f.name, "path": upload_path})
+                queued_data.append((f.name, upload_path))
+
+            options = {"language": language, "deskew": deskew, "rotate_pages": rotate_pages, "force_ocr": force_ocr, "optimize": optimize}
+            activity = record_activity(owner=request.user, tool="ocrpdf", title=f"OCR for {len(saved_inputs)} PDF(s)", options=options, inputs=saved_inputs, restore_state={"form_initial": options}, status="queued")
+            for original_name, upload_path in queued_data:
                 job_id = uuid.uuid4().hex
                 job = OcrJob.objects.create(
+                    owner=request.user,
+                    activity=activity,
                     job_id=job_id,
-                    original_name=f.name,
+                    original_name=original_name,
                     input_path=upload_path,
                     status="queued",
                     language=language,
@@ -107,12 +119,15 @@ def ocr_view(request):
 
         return render(request, "ocrpdf/ocr_form.html", {"form": form, "jobs": []})
 
-    form = OcrPdfForm()
+    form = OcrPdfForm(initial=request.session.pop("activity_initial_ocrpdf", None))
     return render(request, "ocrpdf/ocr_form.html", {"form": form, "jobs": []})
 
 
 def ocr_status(request, job_id: str):
-    job = OcrJob.objects.filter(job_id=job_id).first()
+    jobs = OcrJob.objects.filter(job_id=job_id)
+    if not request.user.is_staff:
+        jobs = jobs.filter(owner=request.user)
+    job = jobs.first()
     if job is None:
         return JsonResponse({"status": "not_found"}, status=404)
 
@@ -125,7 +140,10 @@ def ocr_status(request, job_id: str):
 
 
 def download_ocr(request, job_id: str):
-    job = OcrJob.objects.filter(job_id=job_id).first()
+    jobs = OcrJob.objects.filter(job_id=job_id)
+    if not request.user.is_staff:
+        jobs = jobs.filter(owner=request.user)
+    job = jobs.first()
     if job is None:
         raise Http404("Job not found")
 

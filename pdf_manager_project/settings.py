@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "splitpdf",
     "calendarpdf",
     "accounts",
+    "activity",
 ]
 
 RQ_QUEUES = {
@@ -101,6 +102,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "activity.context_processors.recent_activity",
             ],
         },
     }

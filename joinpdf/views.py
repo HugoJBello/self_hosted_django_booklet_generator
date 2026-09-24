@@ -10,6 +10,9 @@ from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from activity.services import record_activity
+from activity.models import Artifact
+
 from .forms import JoinUploadForm, JoinRunForm
 from .services import build_join_pipeline
 
@@ -70,7 +73,7 @@ def join_view(request):
 
     items = _get_items(request)
     upload_form = JoinUploadForm()
-    run_form = JoinRunForm()
+    run_form = JoinRunForm(initial=request.session.pop("activity_initial_joinpdf", None))
 
     if request.method == "POST":
         action = request.POST.get("action", "").strip()
@@ -150,6 +153,14 @@ def join_view(request):
                 # Keep the list intact in case the user wants to join again with different options.
                 messages.success(request, "Joined PDF generated successfully.")
                 download_url = reverse("joinpdf:download", kwargs={"job_id": result.job_id})
+                options = {"preserve_parity": preserve_parity, "generate_cover": generate_cover}
+                activity = record_activity(
+                    owner=request.user, tool="joinpdf", title=f"Joined {len(items)} PDF(s)", options=options,
+                    inputs=[{"name": item.get("name"), "path": item["path"]} for item in items],
+                    outputs=[{"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path}],
+                    restore_state={"session_key": SESSION_KEY, "session_value": items, "form_initial": options},
+                )
+                download_url = reverse("activity:file", kwargs={"public_id": activity.artifacts.get(kind="output").public_id})
 
                 return render(
                     request,
@@ -205,6 +216,12 @@ def join_download(request, job_id: str):
     pdf_path = os.path.join(outputs_dir, f"{job_id}_joined.pdf")
 
     if not os.path.isfile(pdf_path):
+        raise Http404("File not found")
+
+    allowed = Artifact.objects.filter(kind="output", path=pdf_path)
+    if not request.user.is_staff:
+        allowed = allowed.filter(activity__owner=request.user)
+    if not allowed.exists():
         raise Http404("File not found")
 
     return FileResponse(
