@@ -61,6 +61,30 @@ class ActivitySecurityTests(TestCase):
         self.assertEqual(session["booklets_items"][0]["path"], self.path)
         self.assertEqual(session["activity_initial_booklets"]["margin_cm"], 1.5)
 
+    def test_normal_tool_entry_clears_stale_workspace_but_keeps_history(self):
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["booklets_items"] = [{"id": "old", "name": "old.pdf", "path": self.path, "size": 11}]
+        session.save()
+
+        response = self.client.get(reverse("booklets:form"))
+
+        self.assertNotContains(response, "old.pdf")
+        self.assertContains(response, "Private run")
+        self.assertNotIn("booklets_items", self.client.session)
+
+    def test_reopened_workspace_survives_target_get_only(self):
+        self.client.force_login(self.owner)
+        self.client.post(reverse("activity:reopen", args=[self.activity.pk]))
+
+        reopened = self.client.get(reverse("booklets:form"))
+        self.assertContains(reopened, os.path.basename(self.path))
+        self.assertIn("booklets_items", self.client.session)
+
+        fresh = self.client.get(reverse("booklets:form"))
+        self.assertNotContains(fresh, os.path.basename(self.path))
+        self.assertNotIn("booklets_items", self.client.session)
+
     def test_reopen_requires_post(self):
         self.client.force_login(self.owner)
         self.assertEqual(self.client.get(reverse("activity:reopen", args=[self.activity.pk])).status_code, 405)

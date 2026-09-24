@@ -9,6 +9,7 @@ from django.shortcuts import render
 from django.utils.translation import override
 
 from activity.services import persist_uploads, record_activity
+from activity.workspaces import prepare_workspace
 
 from .forms import CalendarForm
 from .services import extract_uploaded_timetables, make_pdf
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 @override("en")
 def calendar_view(request):
+    prepare_workspace(request, "calendarpdf")
     form = CalendarForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
         saved_inputs = persist_uploads(form.cleaned_data["images"], "calendarpdf")

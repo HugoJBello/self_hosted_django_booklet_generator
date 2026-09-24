@@ -13,6 +13,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from activity.services import record_activity
+from activity.workspaces import continue_workspace, prepare_workspace
 
 from .forms import SplitPdfForm
 from .services import (
@@ -225,6 +226,7 @@ def _context(request, form: SplitPdfForm | None = None, sections=None) -> dict[s
 
 
 def split_view(request):
+    prepare_workspace(request, "splitpdf", SESSION_KEY)
     if request.method == "POST":
         action = request.POST.get("action", "").strip()
         if not action and request.FILES.get("input_pdf"):

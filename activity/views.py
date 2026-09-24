@@ -34,7 +34,7 @@ def activity_reopen(request, activity_id):
     if state.get("session_key"):
         request.session[state["session_key"]] = state.get("session_value", {})
     request.session[f"activity_initial_{activity.tool}"] = state.get("form_initial", activity.options)
-    request.session["reopened_activity_id"] = activity.pk
+    request.session["activity_reopen_tool"] = activity.tool
     return redirect(TOOL_URLS[activity.tool])
 
 

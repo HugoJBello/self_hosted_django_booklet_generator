@@ -12,6 +12,7 @@ from django.shortcuts import render
 from django.urls import reverse
 
 from activity.services import record_activity
+from activity.workspaces import prepare_workspace
 
 from .forms import OcrPdfForm
 from .models import OcrJob
@@ -36,6 +37,7 @@ def _unique_path(dirpath: str, filename: str) -> str:
 
 
 def ocr_view(request):
+    prepare_workspace(request, "ocrpdf")
     created_jobs = []
 
     if request.method == "POST":

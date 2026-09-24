@@ -33,6 +33,8 @@ Cada ejecución de Booklets, Join, Split, OCR, Diary y Calendar conserva en la b
 
 Cada herramienta muestra las últimas actividades del usuario. **View history** permite consultar su historial completo. Los administradores disponen además de **All activity** en el menú de usuario para auditar la actividad de todos los usuarios.
 
+Entrar normalmente en una herramienta desde la navegación abre siempre un espacio de trabajo vacío. El estado anterior solo se carga cuando el usuario selecciona explícitamente una actividad y pulsa **Reopen**; las redirecciones internas de un mismo flujo conservan el trabajo mientras se está editando.
+
 Las descargas se sirven mediante rutas autenticadas: un usuario solo puede consultar sus propios archivos; los administradores pueden consultar todos. Los archivos históricos viven bajo el volumen persistente configurado como `DJANGO_MEDIA_ROOT`, por lo que hay que incluir dicho volumen en las copias de seguridad junto con la base de datos.
 
 ## En local

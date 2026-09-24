@@ -11,6 +11,7 @@ from django.urls import reverse
 
 from activity.services import persist_uploads, record_activity
 from activity.models import Artifact
+from activity.workspaces import prepare_workspace
 
 from calendarpdf.services import extract_uploaded_timetables
 
@@ -27,6 +28,7 @@ def _initial_form(form: DiaryForm) -> DiaryForm:
 
 
 def diary_view(request):
+    prepare_workspace(request, "diary")
     result_download_url = None
 
     if request.method == "POST":

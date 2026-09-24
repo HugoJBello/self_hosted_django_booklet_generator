@@ -12,6 +12,7 @@ from django.urls import reverse
 
 from activity.services import record_activity
 from activity.models import Artifact
+from activity.workspaces import continue_workspace, prepare_workspace
 
 from .forms import JoinUploadForm, JoinRunForm
 from .services import build_join_pipeline
@@ -66,6 +67,7 @@ def _apply_requested_order(items: list[dict[str, Any]], request) -> list[dict[st
 
 
 def join_view(request):
+    prepare_workspace(request, "joinpdf", SESSION_KEY)
     uploads_dir = os.path.join(settings.MEDIA_ROOT, "join_uploads")
     outputs_dir = os.path.join(settings.MEDIA_ROOT, "join_outputs")
     _ensure_dir(uploads_dir)
@@ -111,6 +113,7 @@ def join_view(request):
 
                 _save_items(request, items)
                 messages.success(request, f"Added {added} PDF(s) to the list.")
+                continue_workspace(request, "joinpdf")
                 return redirect("joinpdf:form")
 
             return render(
@@ -202,6 +205,7 @@ def join_remove(request, idx: int):
         messages.success(request, f"Removed: {removed.get('name','(unnamed)')}")
     else:
         messages.error(request, "Invalid index.")
+    continue_workspace(request, "joinpdf")
     return redirect("joinpdf:form")
 
 

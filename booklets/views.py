@@ -12,6 +12,7 @@ from django.urls import reverse
 
 from activity.services import record_activity
 from activity.models import Artifact
+from activity.workspaces import prepare_workspace
 
 from .forms import BookletForm
 from .flipped_a4 import build_flipped_a4_booklets_pipeline
@@ -192,6 +193,7 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
 
 
 def booklets_view(request):
+    prepare_workspace(request, "booklets", SESSION_KEY)
     results = []
     items = _get_items(request)
 
