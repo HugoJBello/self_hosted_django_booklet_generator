@@ -24,6 +24,13 @@ class Activity(models.Model):
     def __str__(self):
         return f"{self.owner}: {self.get_tool_display()} - {self.title}"
 
+    @property
+    def icon_class(self):
+        return {
+            "booklets": "bi-book-half", "joinpdf": "bi-intersect", "splitpdf": "bi-scissors",
+            "ocrpdf": "bi-textarea-t", "diary": "bi-journal-text", "calendarpdf": "bi-calendar3",
+        }.get(self.tool, "bi-file-earmark-pdf")
+
 
 class Artifact(models.Model):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)

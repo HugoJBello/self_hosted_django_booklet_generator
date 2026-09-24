@@ -1,7 +1,71 @@
 {% load static %}
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#172554"><title>{% block title %}PDF Manager{% endblock %}</title><link rel="icon" type="image/svg+xml" href="{% static 'booklets/favicon.svg' %}"><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<style>:root{--ink:#172033;--brand:#3659d9;--surface:#f4f6fb}body{color:var(--ink);background:var(--surface);min-height:100vh}.app-navbar{background:linear-gradient(110deg,#111b38,#243b68);box-shadow:0 3px 18px #0f172a2e}.navbar-brand{font-weight:750;letter-spacing:-.02em}.brand-mark{display:inline-grid;place-items:center;width:2rem;height:2rem;margin-right:.55rem;border-radius:.65rem;background:#fff;color:#243b98;font-size:.8rem}.navbar .nav-link{border-radius:.6rem;padding:.45rem .7rem!important;color:#ffffffc7}.navbar .nav-link:hover,.navbar .nav-link.active{color:#fff;background:#ffffff1f}.dropdown-menu{border:0;box-shadow:0 12px 35px #0f172a29;border-radius:.8rem}.card{border:1px solid #1e293b17;border-radius:1rem}.btn{border-radius:.65rem;font-weight:600}.btn-primary{background:var(--brand);border-color:var(--brand)}.form-control,.form-select{border-radius:.65rem;min-height:2.65rem}.btn-loading{pointer-events:none}.btn-loading .btn-loading-spinner{display:inline-block}.btn-loading-spinner{display:none;width:1rem;height:1rem;vertical-align:-.125em}@media(max-width:991.98px){.navbar-collapse{padding-top:1rem}.navbar-nav{gap:.2rem}}</style>{% block extra_head %}{% endblock %}</head><body>
-{% if request.user.is_authenticated %}<nav class="navbar navbar-expand-lg navbar-dark app-navbar sticky-top"><div class="container-xl"><a class="navbar-brand d-flex align-items-center" href="{% url 'accounts:home' %}"><span class="brand-mark">PDF</span>Manager</a><button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavigation" aria-controls="mainNavigation" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button><div class="collapse navbar-collapse" id="mainNavigation"><ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-lg-1">
-<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" href="{% url 'accounts:home' %}">Home</a></li><li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'booklets' %}active{% endif %}" href="{% url 'booklets:form' %}">Booklets</a></li><li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'ocrpdf' %}active{% endif %}" href="{% url 'ocrpdf:form' %}">OCR</a></li><li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'joinpdf' %}active{% endif %}" href="{% url 'joinpdf:form' %}">Join</a></li><li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'splitpdf' %}active{% endif %}" href="{% url 'splitpdf:form' %}">Split</a></li><li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'diary' %}active{% endif %}" href="{% url 'diary:form' %}">Diary</a></li><li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'calendarpdf' %}active{% endif %}" href="{% url 'calendarpdf:form' %}">Calendar</a></li></ul>
-<div class="dropdown"><button class="btn btn-sm btn-outline-light dropdown-toggle px-3" data-bs-toggle="dropdown" aria-expanded="false">{{ request.user.username }}</button><ul class="dropdown-menu dropdown-menu-end mt-2"><li><span class="dropdown-item-text text-muted small">Signed in as <strong class="text-dark">{{ request.user.username }}</strong></span></li><li><a class="dropdown-item" href="{% url 'accounts:password_change' %}">Change password</a></li>{% if request.user.is_staff %}<li><a class="dropdown-item" href="{% url 'accounts:user_list' %}">Users</a></li><li><a class="dropdown-item" href="{% url 'activity:list' %}">All activity</a></li>{% endif %}<li><hr class="dropdown-divider"></li><li><form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="dropdown-item text-danger" type="submit">Log out</button></form></li></ul></div></div></div></nav>{% endif %}
-<main class="container-xl py-4 py-md-5">{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }} alert-dismissible fade show" role="alert">{{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endfor %}{% endif %}{% if recent_tool_activities %}{% include "activity/recent.html" %}{% endif %}{% block content %}{% endblock %}</main><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script><script>(()=>{document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',event=>{const submitter=event.submitter||form.querySelector('button[type="submit"],input[type="submit"]');if(event.defaultPrevented||!form.checkValidity()||!submitter||submitter.disabled||submitter.dataset.loadingStarted==='true')return;submitter.dataset.loadingStarted='true';submitter.classList.add('btn-loading');submitter.setAttribute('aria-busy','true');submitter.disabled=true;if(submitter.tagName==='BUTTON'){const spinner=document.createElement('span');spinner.className='spinner-border spinner-border-sm btn-loading-spinner me-2';spinner.setAttribute('aria-hidden','true');submitter.prepend(spinner)}}))})();</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172554">
+  <title>{% block title %}PDF Manager{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'booklets/favicon.svg' %}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    :root { --ink:#172033; --brand:#3659d9; --surface:#f4f6fb; }
+    body { color:var(--ink); background:var(--surface); min-height:100vh; }
+    .app-navbar { background:linear-gradient(110deg,#111b38,#243b68); box-shadow:0 3px 18px #0f172a2e; }
+    .navbar-brand { font-weight:750; letter-spacing:-.02em; }
+    .brand-mark { display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.55rem; border-radius:.65rem; background:#fff; color:#243b98; }
+    .navbar .nav-link { border-radius:.6rem; padding:.45rem .7rem!important; color:#ffffffc7; }
+    .navbar .nav-link:hover,.navbar .nav-link.active { color:#fff; background:#ffffff1f; }
+    .dropdown-menu { border:0; box-shadow:0 12px 35px #0f172a29; border-radius:.8rem; }
+    .card { border:1px solid #1e293b17; border-radius:1rem; }
+    .btn { border-radius:.65rem; font-weight:600; }
+    .btn-primary { background:var(--brand); border-color:var(--brand); }
+    .form-control,.form-select { border-radius:.65rem; min-height:2.65rem; }
+    .tool-icon { display:inline-grid; place-items:center; width:2.7rem; height:2.7rem; border-radius:.8rem; font-size:1.3rem; }
+    .btn-loading { pointer-events:none; }
+    .btn-loading .btn-loading-spinner { display:inline-block; }
+    .btn-loading-spinner { display:none; width:1rem; height:1rem; vertical-align:-.125em; }
+    @media(max-width:991.98px) { .navbar-collapse{padding-top:1rem}.navbar-nav{gap:.2rem} }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+{% if request.user.is_authenticated %}
+<nav class="navbar navbar-expand-lg navbar-dark app-navbar sticky-top">
+  <div class="container-xl">
+    <a class="navbar-brand d-flex align-items-center" href="{% url 'accounts:home' %}"><span class="brand-mark"><i class="bi bi-file-earmark-pdf-fill"></i></span>Manager</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavigation" aria-controls="mainNavigation" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
+    <div class="collapse navbar-collapse" id="mainNavigation">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-lg-1">
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" href="{% url 'accounts:home' %}"><i class="bi bi-grid-fill me-1"></i>Home</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'booklets' %}active{% endif %}" href="{% url 'booklets:form' %}"><i class="bi bi-book-half me-1"></i>Booklets</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'ocrpdf' %}active{% endif %}" href="{% url 'ocrpdf:form' %}"><i class="bi bi-textarea-t me-1"></i>OCR</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'joinpdf' %}active{% endif %}" href="{% url 'joinpdf:form' %}"><i class="bi bi-intersect me-1"></i>Join</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'splitpdf' %}active{% endif %}" href="{% url 'splitpdf:form' %}"><i class="bi bi-scissors me-1"></i>Split</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'diary' %}active{% endif %}" href="{% url 'diary:form' %}"><i class="bi bi-journal-text me-1"></i>Diary</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'calendarpdf' %}active{% endif %}" href="{% url 'calendarpdf:form' %}"><i class="bi bi-calendar3 me-1"></i>Calendar</a></li>
+      </ul>
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-light dropdown-toggle px-3" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-person-circle me-1"></i>{{ request.user.username }}</button>
+        <ul class="dropdown-menu dropdown-menu-end mt-2">
+          <li><span class="dropdown-item-text text-muted small">Signed in as <strong class="text-dark">{{ request.user.username }}</strong></span></li>
+          <li><a class="dropdown-item" href="{% url 'accounts:password_change' %}"><i class="bi bi-key me-2"></i>Change password</a></li>
+          {% if request.user.is_staff %}<li><a class="dropdown-item" href="{% url 'accounts:user_list' %}"><i class="bi bi-people me-2"></i>Users</a></li><li><a class="dropdown-item" href="{% url 'activity:list' %}"><i class="bi bi-clock-history me-2"></i>All activity</a></li>{% endif %}
+          <li><hr class="dropdown-divider"></li>
+          <li><form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="dropdown-item text-danger" type="submit"><i class="bi bi-box-arrow-right me-2"></i>Log out</button></form></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</nav>
+{% endif %}
+<main class="container-xl py-4 py-md-5">
+  {% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }} alert-dismissible fade show" role="alert">{{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endfor %}{% endif %}
+  {% if recent_tool_activities %}{% include "activity/recent.html" %}{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>(()=>{document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',event=>{const submitter=event.submitter||form.querySelector('button[type="submit"],input[type="submit"]');if(event.defaultPrevented||!form.checkValidity()||!submitter||submitter.disabled||submitter.dataset.loadingStarted==='true')return;submitter.dataset.loadingStarted='true';submitter.classList.add('btn-loading');submitter.setAttribute('aria-busy','true');submitter.disabled=true;if(submitter.tagName==='BUTTON'){const spinner=document.createElement('span');spinner.className='spinner-border spinner-border-sm btn-loading-spinner me-2';spinner.setAttribute('aria-hidden','true');submitter.prepend(spinner)}}))})();</script>
+</body>
+</html>
