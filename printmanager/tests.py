@@ -76,7 +76,7 @@ class PrintingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["defaults"], {"media": "A4"})
 
-    def test_print_page_selects_first_connected_printer_and_disables_offline(self):
+    def test_print_page_prefers_connected_printer_but_allows_offline(self):
         offline = Printer.objects.create(name="offline", device_uri="ipp://offline/ipp/print", is_default=True)
         self.availability.side_effect = None
         self.availability.return_value = [
@@ -85,9 +85,25 @@ class PrintingViewsTests(TestCase):
         ]
         self.client.force_login(self.user)
         response = self.client.get(reverse("printmanager:print"))
-        self.assertContains(response, f'id="printer-{offline.pk}" disabled')
-        self.assertContains(response, f'id="printer-{self.printer.pk}"  checked')
+        self.assertContains(response, f'id="printer-{offline.pk}"')
+        self.assertNotContains(response, f'id="printer-{offline.pk}" disabled')
+        self.assertContains(response, f'id="printer-{self.printer.pk}" checked')
         self.assertContains(response, "Ready")
+
+    @patch("printmanager.views.submit_pdf", side_effect=CupsError("still offline"))
+    def test_user_can_attempt_an_offline_printer(self, submit):
+        self.availability.side_effect = None
+        self.availability.return_value = [
+            {"printer": self.printer, "connected": False, "state": "offline", "label": "Offline", "detail": "Timed out."},
+        ]
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("printmanager:print"), {
+            "printer": self.printer.pk, "source": "upload", "copies": 1,
+            "document": SimpleUploadedFile("attempt.pdf", b"%PDF", content_type="application/pdf"),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(PrintJob.objects.get().error_message, "still offline")
+        submit.assert_called_once()
 
     @patch("printmanager.views.submit_pdf", return_value=("request id is office-1", {"media": "A4"}, {"media": "A4"}))
     def test_user_can_submit_uploaded_pdf(self, submit):

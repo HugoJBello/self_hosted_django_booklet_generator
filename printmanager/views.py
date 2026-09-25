@@ -171,10 +171,10 @@ def print_document(request):
     enabled_printers = list(Printer.objects.filter(is_enabled=True).order_by("-is_default", "name"))
     printer_choices = printer_availabilities(enabled_printers)
     connected_printers = [item["printer"] for item in printer_choices if item["connected"]]
-    default_printer = connected_printers[0] if connected_printers else None
+    default_printer = connected_printers[0] if connected_printers else (enabled_printers[0] if enabled_printers else None)
     if request.method == "POST":
         form = PrintForm(request.POST, request.FILES, artifacts=artifacts)
-        form.fields["printer"].queryset = Printer.objects.filter(pk__in=[printer.pk for printer in connected_printers])
+        form.fields["printer"].queryset = Printer.objects.filter(pk__in=[printer.pk for printer in enabled_printers])
         if form.is_valid():
             data = form.cleaned_data
             if data["source"] == "upload":
@@ -223,6 +223,6 @@ def print_document(request):
         "artifacts": artifacts,
         "artifacts_page": artifacts_page,
         "printer_choices": printer_choices,
-        "has_connected_printers": bool(connected_printers),
+        "has_enabled_printers": bool(enabled_printers),
         "printer_capabilities": printer_capabilities,
     })
