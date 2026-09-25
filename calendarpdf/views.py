@@ -4,8 +4,8 @@ import uuid
 
 import fitz
 from django.conf import settings
-from django.http import HttpResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils.translation import override
 
 from activity.services import persist_uploads, record_activity
@@ -37,11 +37,15 @@ def calendar_view(request):
             output_path = os.path.join(outputs_dir, f"{uuid.uuid4().hex}_class_calendar.pdf")
             with open(output_path, "wb") as output_file:
                 output_file.write(pdf)
-            record_activity(
+            activity = record_activity(
                 owner=request.user, tool="calendarpdf", title=f"Calendar from {len(saved_inputs)} timetable(s)", options={},
                 inputs=saved_inputs, outputs=[{"name": "class_calendar.pdf", "path": output_path}], restore_state={"form_initial": {}},
             )
-            response = HttpResponse(pdf, content_type="application/pdf")
-            response["Content-Disposition"] = 'attachment; filename="class_calendar.pdf"'
-            return response
+            artifact = activity.artifacts.get(kind="output")
+            return render(request, "calendarpdf/form.html", {
+                "form": CalendarForm(),
+                "result_download_url": reverse("activity:file", kwargs={"public_id": artifact.public_id}),
+                "result_preview_url": reverse("activity:preview", kwargs={"public_id": artifact.public_id}),
+                "result_artifact_id": artifact.pk,
+            })
     return render(request, "calendarpdf/form.html", {"form": form})

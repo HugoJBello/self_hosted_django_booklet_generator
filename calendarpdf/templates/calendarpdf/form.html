@@ -20,6 +20,7 @@
           <div id="selection" class="small mt-3" aria-live="polite"></div>
           <div id="download-error" class="alert alert-danger mt-3 d-none" role="alert"></div>
           <button type="submit" class="btn btn-primary mt-4">Generate PDF</button>
+          {% if result_download_url %}<div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">{% include "activity/pdf_actions.html" with preview_url=result_preview_url download_url=result_download_url pdf_name="Class calendar" artifact_id=result_artifact_id %}</div>{% endif %}
         </form>
       </div>
     </div>
@@ -32,8 +33,6 @@
   const zone = document.getElementById('dropzone');
   const selection = document.getElementById('selection');
   const form = document.getElementById('calendar-form');
-  const button = form.querySelector('button[type="submit"]');
-  const errorBox = document.getElementById('download-error');
   if (!input) return;
   const refresh = () => { selection.textContent = Array.from(input.files).map(f => f.name).join(' · '); };
   input.addEventListener('change', refresh);
@@ -43,39 +42,6 @@
     e.preventDefault();
     zone.classList.remove('border-primary');
     if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; refresh(); }
-  });
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    if (!form.reportValidity() || button.disabled) return;
-    errorBox.classList.add('d-none');
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'true');
-    const original = button.textContent;
-    button.textContent = 'Generating PDF…';
-    try {
-      const response = await fetch(form.action || location.href, { method: 'POST', body: new FormData(form) });
-      if (!response.ok || !response.headers.get('content-type')?.includes('application/pdf')) {
-        const html = await response.text();
-        const documentFromResponse = new DOMParser().parseFromString(html, 'text/html');
-        const message = documentFromResponse.querySelector('.alert-danger, .errorlist, .text-danger');
-        throw new Error(message?.textContent.trim() || 'The PDF could not be generated. Check the files and try again.');
-      }
-      const blobUrl = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = 'class_calendar.pdf';
-      document.body.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-    } catch (error) {
-      errorBox.textContent = error.message || 'The PDF could not be generated.';
-      errorBox.classList.remove('d-none');
-    } finally {
-      button.disabled = false;
-      button.removeAttribute('aria-busy');
-      button.textContent = original;
-    }
   });
 })();
 </script>

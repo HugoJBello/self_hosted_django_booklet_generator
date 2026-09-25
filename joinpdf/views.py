@@ -163,7 +163,9 @@ def join_view(request):
                     outputs=[{"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path}],
                     restore_state={"session_key": SESSION_KEY, "session_value": items, "form_initial": options},
                 )
-                download_url = reverse("activity:file", kwargs={"public_id": activity.artifacts.get(kind="output").public_id})
+                output_artifact = activity.artifacts.get(kind="output")
+                download_url = reverse("activity:file", kwargs={"public_id": output_artifact.public_id})
+                preview_url = reverse("activity:preview", kwargs={"public_id": output_artifact.public_id})
 
                 return render(
                     request,
@@ -177,7 +179,9 @@ def join_view(request):
                             }
                         ),
                         "items": items,
-                        "result_download_url": download_url,
+                            "result_download_url": download_url,
+                            "result_preview_url": preview_url,
+                            "result_artifact_id": output_artifact.pk,
                     },
                 )
 

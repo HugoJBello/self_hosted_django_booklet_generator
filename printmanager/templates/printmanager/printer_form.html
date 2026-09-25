@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{% if printer.pk %}Edit{% else %}Add{% endif %} printer · PDF Manager{% endblock %}
+{% block content %}
+<div class="tool-page mx-auto"><div class="mb-4"><a class="text-decoration-none" href="{% url 'printmanager:printers' %}"><i class="bi bi-arrow-left me-1"></i>Printers</a><h1 class="h2 mt-3">{% if printer.pk %}Edit {{ printer.name }}{% else %}Add a CUPS printer{% endif %}</h1></div>
+{% if not printer.pk %}
+<section class="card shadow-sm mb-4" aria-labelledby="discovery-title"><div class="card-body">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div><h2 class="h5 mb-1" id="discovery-title"><i class="bi bi-radar text-primary me-2"></i>Automatic discovery</h2><p class="text-muted mb-0">Find printers announced to CUPS and fill in their connection automatically.</p></div>
+    <button class="btn btn-outline-primary" id="discover-printers" type="button"><i class="bi bi-search me-2"></i>Find printers</button>
+  </div>
+  <div id="discovery-status" class="mt-3" role="status" aria-live="polite"></div>
+  <div id="discovered-printers" class="row g-3 mt-0"></div>
+  <div id="printer-capabilities" class="mt-4" hidden>
+    <hr><div class="d-flex flex-wrap justify-content-between gap-2 align-items-center mb-3"><div><h3 class="h6 fw-bold mb-1"><i class="bi bi-sliders me-2"></i>Detected printer options</h3><p class="small text-muted mb-0">These selections become the saved defaults. You can change them now or later.</p></div><span id="capability-count" class="badge text-bg-light"></span></div>
+    <div id="capability-fields" class="row g-3"></div>
+  </div>
+</div></section>
+{% endif %}
+<form method="post" class="card shadow-sm"><div class="card-body">{% csrf_token %}
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+<div class="row g-3">{% for field in form %}{% if field.name != 'device_uri' and field.name != 'driver' %}{% if field.field.widget.input_type == 'checkbox' %}<div class="col-md-4"><div class="form-check mt-4">{{ field }} <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label></div>{{ field.errors }}</div>{% else %}<div class="{% if field.name == 'default_options_text' %}col-12{% else %}col-md-6{% endif %}"><label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{{ field.errors }}</div>{% endif %}{% endif %}{% endfor %}
+<div class="col-12"><details><summary class="small text-muted">Connection details (advanced)</summary><div class="row g-3 mt-1">{% for field in form %}{% if field.name == 'device_uri' or field.name == 'driver' %}<div class="col-md-6"><label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{{ field.errors }}</div>{% endif %}{% endfor %}</div></details></div></div>
+{% if printer.supported_options %}<hr><details><summary class="fw-semibold">Options reported by CUPS ({{ printer.supported_options|length }})</summary><pre class="bg-light p-3 rounded mt-3 mb-0">{{ printer.supported_options }}</pre></details>{% endif %}
+</div><div class="card-footer bg-white border-0 px-4 pb-4"><button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle me-2"></i>Save and apply to CUPS</button></div></form></div>
+{% if not printer.pk %}<script>
+(()=>{
+  const button=document.getElementById('discover-printers'),status=document.getElementById('discovery-status'),list=document.getElementById('discovered-printers'),capabilities=document.getElementById('printer-capabilities'),capabilityFields=document.getElementById('capability-fields'),capabilityCount=document.getElementById('capability-count');
+  const fields={name:document.getElementById('id_name'),description:document.getElementById('id_description'),location:document.getElementById('id_location'),device_uri:document.getElementById('id_device_uri'),driver:document.getElementById('id_driver')};
+  const optionsField=document.getElementById('id_default_options_text');
+  const csrfToken=document.querySelector('form.card [name="csrfmiddlewaretoken"]')?.value||'';
+  async function readJson(response){const contentType=response.headers.get('content-type')||'';if(!contentType.includes('application/json')){const body=await response.text();throw new Error(response.redirected?'Your session expired. Sign in again and retry.':`Server returned HTML instead of JSON (HTTP ${response.status}). ${body.includes('CSRF')?'Reload the page to refresh its security token.':''}`)}return response.json()}
+  const text=(tag,value,className='')=>{const node=document.createElement(tag);node.textContent=value;if(className)node.className=className;return node};
+  function syncDefaults(){const defaults={};capabilityFields.querySelectorAll('select[data-option]').forEach(select=>{if(select.value)defaults[select.dataset.option]=select.value});optionsField.value=JSON.stringify(defaults,null,2)}
+  function renderCapabilities(options){
+    capabilityFields.replaceChildren();const entries=Object.entries(options);capabilityCount.textContent=`${entries.length} options`;capabilities.hidden=false;
+    entries.forEach(([name,spec])=>{const column=document.createElement('div');column.className='col-md-6 col-lg-4';const label=text('label',name.replace(/[-_]/g,' '),'form-label small fw-semibold text-capitalize');const select=document.createElement('select');select.className='form-select';select.dataset.option=name;select.setAttribute('aria-label',name);(spec.choices||[]).forEach(value=>{const option=document.createElement('option');option.value=value;option.textContent=value;option.selected=value===spec.selected;select.append(option)});select.addEventListener('change',syncDefaults);column.append(label,select);capabilityFields.append(column)});syncDefaults();
+  }
+  async function inspectDevice(device,use){
+    use.disabled=true;use.innerHTML='<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Reading options…';
+    try{const body=new URLSearchParams({uri:device.uri,driver:device.driver});const response=await fetch('{% url "printmanager:printer_probe" %}',{method:'POST',credentials:'same-origin',headers:{'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':csrfToken},body});const data=await readJson(response);if(!response.ok)throw new Error(data.error||'Could not read printer options.');fields.name.value=data.queue_name||device.queue_name||device.name;fields.description.value=data.description||data.model||device.description;fields.location.value=data.location||device.location||'';fields.device_uri.value=device.uri;fields.driver.value=device.driver;renderCapabilities(data.options);capabilities.scrollIntoView({behavior:'smooth',block:'nearest'});use.textContent='Selected and configured';}
+    catch(error){status.textContent=`Printer selected, but its options could not be read: ${error.message}`;status.className='alert alert-warning mt-3';use.textContent='Retry options';use.disabled=false;}
+  }
+  function renderDevice(device){
+    const column=document.createElement('div');column.className='col-md-6';
+    const card=document.createElement('div');card.className='border rounded-3 p-3 h-100';
+    const title=text('div',device.description||device.model||device.name,'fw-bold');
+    const meta=text('div',[device.name,device.model,device.state?`State: ${device.state}`:null].filter(Boolean).join(' · '),'small text-muted mb-2');
+    const use=text('button',device.configured?'Already configured':'Use this printer',device.configured?'btn btn-sm btn-outline-secondary':'btn btn-sm btn-primary');
+    use.type='button';use.disabled=device.configured;
+    use.addEventListener('click',()=>{Object.entries(fields).forEach(([key,input])=>input.value=device[key]||'');inspectDevice(device,use);});
+    card.append(title,meta);
+    if(device.options&&Object.keys(device.options).length)card.append(text('div',`${Object.keys(device.options).length} print options detected; defaults loaded automatically.`,'small text-success mb-3'));
+    else if(device.probe_error)card.append(text('div','Printer found; print options will be checked when selected.','small text-warning mb-3'));
+    card.append(use);
+    if(!device.driverless)card.append(text('div','This connection may need a model-specific driver. Review the driver field before saving.','small text-warning mt-2'));
+    column.append(card);return column;
+  }
+  button.addEventListener('click',async()=>{
+    button.disabled=true;list.replaceChildren();status.className='mt-3 text-muted';status.innerHTML='<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Searching through CUPS…';
+    try{
+      const response=await fetch('{% url "printmanager:printer_discover" %}',{credentials:'same-origin',headers:{'Accept':'application/json'}});const data=await readJson(response);
+      if(!response.ok)throw new Error(data.error||'Discovery failed.');
+      status.textContent=data.devices.length?`${data.devices.length} printer connection${data.devices.length===1?'':'s'} found.`:'No printers were discovered. You can still enter the connection manually.';
+      status.className=`mt-3 ${data.devices.length?'text-success':'text-warning'}`;data.devices.forEach(device=>list.append(renderDevice(device)));
+    }catch(error){status.textContent=`Could not query CUPS: ${error.message}`;status.className='alert alert-danger mt-3 mb-0';}
+    finally{button.disabled=false;}
+  });
+})();
+</script>{% endif %}
+{% endblock %}

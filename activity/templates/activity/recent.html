@@ -6,7 +6,7 @@
     </div>
     <div class="d-flex gap-2 overflow-x-auto pb-1">
       {% for item in recent_tool_activities %}
-        <a class="btn btn-sm btn-outline-secondary text-nowrap" href="{% url 'activity:detail' item.pk %}"><i class="bi {{ item.icon_class }} me-1"></i>{{ item.created_at|date:"M j, H:i" }} · {{ item.title|truncatechars:30 }}</a>
+        <div class="btn-group btn-group-sm flex-shrink-0"><a class="btn btn-outline-secondary text-nowrap" href="{% url 'activity:detail' item.pk %}"><i class="bi {{ item.icon_class }} me-1"></i>{{ item.created_at|date:"M j, H:i" }} · {{ item.title|truncatechars:30 }}</a>{% for artifact in item.artifacts.all %}{% if artifact.kind == 'output' and artifact.content_type == 'application/pdf' %}<button class="btn btn-outline-secondary pdf-preview-trigger" type="button" data-pdf-preview="{% url 'activity:preview' artifact.public_id %}" data-pdf-download="{% url 'activity:file' artifact.public_id %}" data-pdf-name="{{ artifact.name }}" title="Preview {{ artifact.name }}"><i class="bi bi-eye"></i></button><a class="btn btn-outline-secondary" href="{% url 'printmanager:print' %}?artifact={{ artifact.pk }}" title="Print {{ artifact.name }}"><i class="bi bi-printer"></i></a>{% endif %}{% endfor %}</div>
       {% endfor %}
     </div>
   </div>

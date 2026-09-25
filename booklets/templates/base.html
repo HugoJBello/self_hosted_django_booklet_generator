@@ -32,6 +32,18 @@
     .btn-loading-spinner { display:none; width:1rem; height:1rem; vertical-align:-.125em; }
     @media(max-width:991.98px) { .navbar-collapse{padding-top:1rem}.navbar-nav{gap:.2rem} }
     @media(max-width:575.98px) { .tool-page > .card > .card-body{padding:1.1rem} }
+    .pdf-preview-modal-content { height:min(92dvh,900px); overflow:hidden; box-shadow:0 24px 70px #0f172a52; }
+    .pdf-preview-modal-content .modal-header,.pdf-preview-toolbar { flex:0 0 auto; position:relative; z-index:3; }
+    .pdf-preview-modal-content .modal-header > .min-w-0 { min-width:0; flex:1 1 auto; }
+    .pdf-preview-modal-content .modal-body { min-height:0; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+    .pdf-preview-pages { display:flex; flex-direction:column; align-items:center; gap:1rem; padding:1rem; min-width:100%; }
+    .pdf-preview-page { position:relative; width:min(100%,1100px); aspect-ratio:210/297; flex:none; margin:0; background:#fff; box-shadow:0 4px 22px #0f172a35; transition:width .15s ease; }
+    .pdf-preview-page img { display:block; width:100%; height:auto; background:#fff; }
+    .pdf-preview-page-number { position:absolute; right:.5rem; bottom:.5rem; padding:.2rem .45rem; border-radius:.4rem; color:#fff; background:#111827b8; font-size:.72rem; }
+    .pdf-preview-frame { display:block; width:100%; height:100%; border:0; background:#525659; }
+    .pdf-preview-toolbar { background:#f8fafc; }
+    .pdf-preview-trigger { white-space:nowrap; }
+    @media(max-width:991.98px) { .pdf-preview-modal-content{height:100dvh;border-radius:0}.pdf-preview-modal-content .modal-header{padding-top:max(.65rem,env(safe-area-inset-top))}.pdf-preview-pages{padding:.65rem;gap:.65rem}.pdf-preview-page{box-shadow:0 2px 12px #0f172a30}.pdf-preview-frame{min-height:0} }
   </style>
   {% block extra_head %}{% endblock %}
 </head>
@@ -50,6 +62,13 @@
         <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'splitpdf' %}active{% endif %}" href="{% url 'splitpdf:form' %}"><i class="bi bi-scissors me-1"></i>Split</a></li>
         <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'diary' %}active{% endif %}" href="{% url 'diary:form' %}"><i class="bi bi-journal-text me-1"></i>Diary</a></li>
         <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'calendarpdf' %}active{% endif %}" href="{% url 'calendarpdf:form' %}"><i class="bi bi-calendar3 me-1"></i>Calendar</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if request.resolver_match.app_name == 'printmanager' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-printer me-1"></i>Print</a>
+          <ul class="dropdown-menu mt-2">
+            <li><a class="dropdown-item" href="{% url 'printmanager:print' %}"><i class="bi bi-file-earmark-arrow-up me-2"></i>Print PDF</a></li>
+            {% if request.user.is_staff %}<li><a class="dropdown-item" href="{% url 'printmanager:printers' %}"><i class="bi bi-gear me-2"></i>Configure printers</a></li>{% endif %}
+          </ul>
+        </li>
       </ul>
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-light dropdown-toggle px-3" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-person-circle me-1"></i>{{ request.user.username }}</button>
@@ -70,7 +89,18 @@
   {% if recent_tool_activities %}{% include "activity/recent.html" %}{% endif %}
   {% block content %}{% endblock %}
 </main>
+{% if request.user.is_authenticated %}{% include "activity/pdf_preview_modal.html" %}{% endif %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>(()=>{
+const el=document.getElementById('pdfPreviewModal');if(!el)return;
+const modal=bootstrap.Modal.getOrCreateInstance(el),body=el.querySelector('.modal-body'),pagesBox=el.querySelector('.pdf-preview-pages'),frame=el.querySelector('.pdf-preview-frame'),loading=el.querySelector('.pdf-preview-loading'),error=el.querySelector('.pdf-preview-error'),title=el.querySelector('.modal-title'),open=el.querySelector('.pdf-preview-open'),download=el.querySelector('.pdf-preview-download'),counter=el.querySelector('.pdf-preview-counter'),previous=el.querySelector('.pdf-preview-previous'),next=el.querySelector('.pdf-preview-next'),zoomOut=el.querySelector('.pdf-preview-zoom-out'),zoomIn=el.querySelector('.pdf-preview-zoom-in'),zoomLabel=el.querySelector('.pdf-preview-zoom-label');
+let base='',page=1,pages=1,zoom=1,loadObserver=null,pageObserver=null;
+function controls(){counter.textContent=`Page ${page} of ${pages}`;previous.disabled=page<=1;next.disabled=page>=pages;zoomLabel.textContent=`${Math.round(zoom*100)}%`;pagesBox.querySelectorAll('.pdf-preview-page').forEach(item=>item.style.width=`${zoom*100}%`)}
+function goTo(number,behavior='smooth'){const target=pagesBox.querySelector(`[data-page="${number}"]`);if(target)target.scrollIntoView({behavior,block:'start'});page=Math.min(Math.max(number,1),pages);controls()}
+function buildPages(){pagesBox.replaceChildren();loadObserver?.disconnect();pageObserver?.disconnect();loadObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(!entry.isIntersecting)return;const img=entry.target.querySelector('img');if(!img.src)img.src=img.dataset.src;loadObserver.unobserve(entry.target)}),{root:body,rootMargin:'900px 0px'});pageObserver=new IntersectionObserver(entries=>{const visible=entries.filter(entry=>entry.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio)[0];if(visible){page=Number(visible.target.dataset.page);controls()}},{root:body,threshold:[.2,.5,.8]});for(let number=1;number<=pages;number++){const sheet=document.createElement('figure');sheet.className='pdf-preview-page';sheet.dataset.page=number;const img=document.createElement('img');img.alt=`Page ${number}`;img.dataset.src=`${base}page/${number}/`;img.addEventListener('load',()=>{if(number===1)loading.hidden=true});img.addEventListener('error',()=>{sheet.classList.add('border','border-danger')});const badge=document.createElement('figcaption');badge.className='pdf-preview-page-number';badge.textContent=number;sheet.append(img,badge);pagesBox.append(sheet);loadObserver.observe(sheet);pageObserver.observe(sheet)}controls()}
+document.addEventListener('click',async event=>{const trigger=event.target.closest('[data-pdf-preview]');if(!trigger)return;event.preventDefault();const url=trigger.dataset.pdfPreview;if(!url)return;title.textContent=trigger.dataset.pdfName||'PDF document';open.href=url;download.href=trigger.dataset.pdfDownload||url;modal.show();base='';page=1;pages=1;zoom=1;body.scrollTop=0;pagesBox.replaceChildren();pagesBox.hidden=false;frame.hidden=true;error.hidden=true;loading.hidden=false;if(url.endsWith('/preview/')){base=url;try{const response=await fetch(`${base}info/`,{credentials:'same-origin'});if(!response.ok)throw new Error();const info=await response.json();pages=Math.max(1,info.pages||1);buildPages()}catch(_){loading.hidden=true;error.hidden=false}}else{pagesBox.hidden=true;frame.hidden=false;frame.src=url}});
+frame.addEventListener('load',()=>{loading.hidden=true});previous.addEventListener('click',()=>goTo(page-1));next.addEventListener('click',()=>goTo(page+1));zoomOut.addEventListener('click',()=>{zoom=Math.max(.5,zoom-.25);controls()});zoomIn.addEventListener('click',()=>{zoom=Math.min(2.5,zoom+.25);controls()});el.addEventListener('hidden.bs.modal',()=>{loadObserver?.disconnect();pageObserver?.disconnect();pagesBox.replaceChildren();frame.src='about:blank';base=''})})();
+</script>
 <script>(()=>{document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',event=>{const submitter=event.submitter||form.querySelector('button[type="submit"],input[type="submit"]');if(event.defaultPrevented||!form.checkValidity()||!submitter||submitter.disabled||submitter.dataset.loadingStarted==='true')return;submitter.dataset.loadingStarted='true';submitter.classList.add('btn-loading');submitter.setAttribute('aria-busy','true');submitter.disabled=true;if(submitter.tagName==='BUTTON'){const spinner=document.createElement('span');spinner.className='spinner-border spinner-border-sm btn-loading-spinner me-2';spinner.setAttribute('aria-hidden','true');submitter.prepend(spinner)}}))})();</script>
 </body>
 </html>

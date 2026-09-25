@@ -249,7 +249,7 @@
             <div class="d-flex gap-2 mt-4">
               <button class="btn btn-primary" type="submit">Generate diary</button>
               {% if result_download_url %}
-                <a class="btn btn-success" href="{{ result_download_url }}">Download result</a>
+                {% include "activity/pdf_actions.html" with preview_url=result_preview_url download_url=result_download_url pdf_name="Diary PDF" artifact_id=result_artifact_id %}
               {% endif %}
             </div>
           </form>

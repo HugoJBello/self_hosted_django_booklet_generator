@@ -49,7 +49,14 @@ INSTALLED_APPS = [
     "calendarpdf",
     "accounts",
     "activity",
+    "printmanager",
 ]
+
+# CUPS can be local (Unix socket/default client configuration) or remote.
+CUPS_SERVER = os.environ.get("CUPS_SERVER", "").strip()
+CUPS_COMMAND_TIMEOUT = int(os.environ.get("CUPS_COMMAND_TIMEOUT", "20"))
+CUPS_CONVERSION_TIMEOUT = int(os.environ.get("CUPS_CONVERSION_TIMEOUT", "300"))
+CUPS_DISCOVERY_FILE = os.environ.get("CUPS_DISCOVERY_FILE", "").strip()
 
 RQ_QUEUES = {
     "default": {

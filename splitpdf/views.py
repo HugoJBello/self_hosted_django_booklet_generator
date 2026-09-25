@@ -431,6 +431,8 @@ def split_view(request):
             )
             for output_state, artifact in zip(state["outputs"], activity.artifacts.filter(kind="output")):
                 output_state["download_url"] = reverse("activity:file", kwargs={"public_id": artifact.public_id})
+                output_state["preview_url"] = reverse("activity:preview", kwargs={"public_id": artifact.public_id})
+                output_state["artifact_id"] = artifact.pk
             _save_state(request, state)
             messages.success(request, f"Generated {len(outputs)} PDF(s).")
             return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=final_sections))

@@ -30,6 +30,8 @@ def _initial_form(form: DiaryForm) -> DiaryForm:
 def diary_view(request):
     prepare_workspace(request, "diary")
     result_download_url = None
+    result_preview_url = None
+    result_artifact_id = None
 
     if request.method == "POST":
         form = DiaryForm(request.POST, request.FILES)
@@ -95,7 +97,10 @@ def diary_view(request):
                         inputs=saved_inputs, outputs=[{"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path}],
                         restore_state={"form_initial": options},
                     )
-                    result_download_url = reverse("activity:file", kwargs={"public_id": activity.artifacts.get(kind="output").public_id})
+                    output_artifact = activity.artifacts.get(kind="output")
+                    result_download_url = reverse("activity:file", kwargs={"public_id": output_artifact.public_id})
+                    result_preview_url = reverse("activity:preview", kwargs={"public_id": output_artifact.public_id})
+                    result_artifact_id = output_artifact.pk
                     form = _initial_form(form)
     else:
         form = DiaryForm(initial=request.session.pop("activity_initial_diary", None))
@@ -106,6 +111,8 @@ def diary_view(request):
         {
             "form": form,
             "result_download_url": result_download_url,
+            "result_preview_url": result_preview_url,
+            "result_artifact_id": result_artifact_id,
         },
     )
 

@@ -134,7 +134,7 @@
                 Join PDF
               </button>
               {% if result_download_url %}
-                <a class="btn btn-primary" href="{{ result_download_url }}">Download result</a>
+                {% include "activity/pdf_actions.html" with preview_url=result_preview_url download_url=result_download_url pdf_name="Joined PDF" artifact_id=result_artifact_id %}
               {% endif %}
             </div>
           </div>

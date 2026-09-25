@@ -10,4 +10,4 @@ def recent_activity(request):
     tool = getattr(getattr(request, "resolver_match", None), "app_name", None)
     if tool not in SUPPORTED_TOOLS:
         return {}
-    return {"recent_tool_activities": Activity.objects.filter(owner=request.user, tool=tool)[:5], "current_activity_tool": tool}
+    return {"recent_tool_activities": Activity.objects.filter(owner=request.user, tool=tool).prefetch_related("artifacts")[:5], "current_activity_tool": tool}

@@ -10,6 +10,7 @@ from django.contrib import messages
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from activity.services import record_activity
 from activity.workspaces import prepare_workspace
@@ -138,9 +139,20 @@ def ocr_status(request, job_id: str):
         "original_name": job.original_name,
         "error_message": job.error_message,
     }
+    if job.status == "done":
+        artifact = job.activity.artifacts.filter(kind="output", path=job.output_path).first()
+        if artifact:
+            payload.update({
+                "preview_url": reverse("activity:preview", kwargs={"public_id": artifact.public_id}),
+                "download_url": reverse("activity:file", kwargs={"public_id": artifact.public_id}),
+                "print_url": f'{reverse("printmanager:print")}?artifact={artifact.pk}',
+            })
+        else:
+            payload["status"] = "running"
     return JsonResponse(payload)
 
 
+@xframe_options_sameorigin
 def download_ocr(request, job_id: str):
     jobs = OcrJob.objects.filter(job_id=job_id)
     if not request.user.is_staff:
@@ -154,7 +166,7 @@ def download_ocr(request, job_id: str):
 
     return FileResponse(
         open(job.output_path, "rb"),
-        as_attachment=True,
+        as_attachment=request.GET.get("preview") != "1",
         filename=os.path.basename(job.output_path),
         content_type="application/pdf",
     )

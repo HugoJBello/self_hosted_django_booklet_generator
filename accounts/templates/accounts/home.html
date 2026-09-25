@@ -8,12 +8,13 @@
   </div>
 </section>
 <div class="row g-3 g-md-4">
-  {% url 'booklets:form' as u1 %}{% url 'ocrpdf:form' as u2 %}{% url 'joinpdf:form' as u3 %}{% url 'splitpdf:form' as u4 %}{% url 'diary:form' as u5 %}{% url 'calendarpdf:form' as u6 %}
+  {% url 'booklets:form' as u1 %}{% url 'ocrpdf:form' as u2 %}{% url 'joinpdf:form' as u3 %}{% url 'splitpdf:form' as u4 %}{% url 'diary:form' as u5 %}{% url 'calendarpdf:form' as u6 %}{% url 'printmanager:print' as u7 %}
   {% include "accounts/tool_card.html" with title="Booklets" description="Arrange documents into print-ready booklet layouts." href=u1 accent="#3659d9" icon="bi-book-half" %}
   {% include "accounts/tool_card.html" with title="OCR" description="Make scanned PDF documents searchable." href=u2 accent="#0f8a72" icon="bi-textarea-t" %}
   {% include "accounts/tool_card.html" with title="Join PDFs" description="Combine and reorder multiple PDF files." href=u3 accent="#b86613" icon="bi-intersect" %}
   {% include "accounts/tool_card.html" with title="Split PDF" description="Extract sections by outline, range or page." href=u4 accent="#9b3fb5" icon="bi-scissors" %}
   {% include "accounts/tool_card.html" with title="Diary" description="Build a personalized printable diary." href=u5 accent="#cf3d65" icon="bi-journal-text" %}
   {% include "accounts/tool_card.html" with title="Class calendar" description="Turn timetables into clear monthly calendars." href=u6 accent="#1877a8" icon="bi-calendar3" %}
+  {% include "accounts/tool_card.html" with title="Print PDF" description="Send an uploaded or recent PDF to a configured CUPS printer." href=u7 accent="#52606d" icon="bi-printer" %}
 </div>
 {% endblock %}

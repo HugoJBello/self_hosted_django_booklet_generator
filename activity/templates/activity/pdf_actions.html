@@ -1,0 +1,6 @@
+{% url 'printmanager:print' as print_url %}
+<div class="btn-group btn-group-sm pdf-actions" role="group" aria-label="Actions for {{ pdf_name }}">
+  <button class="btn btn-outline-primary pdf-preview-trigger" type="button" data-pdf-preview="{{ preview_url }}" data-pdf-download="{{ download_url }}" data-pdf-name="{{ pdf_name }}"><i class="bi bi-eye me-1"></i>Preview</button>
+  <a class="btn btn-outline-primary" href="{{ print_url }}?artifact={{ artifact_id }}"><i class="bi bi-printer me-1"></i>Print</a>
+  <a class="btn btn-outline-secondary" href="{{ download_url }}"><i class="bi bi-download me-1"></i>Download</a>
+</div>

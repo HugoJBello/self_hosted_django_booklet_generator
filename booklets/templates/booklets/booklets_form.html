@@ -263,7 +263,7 @@
                       <thead class="table-light">
                         <tr>
                           <th scope="col">File</th>
-                          <th scope="col" style="width: 1%;">Download</th>
+                          <th scope="col" style="width: 1%;">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -271,7 +271,7 @@
                           <tr>
                             <td class="text-break">{{ r.original_name }}</td>
                             <td class="text-nowrap">
-                              <a class="btn btn-sm btn-success" href="{{ r.download_url }}">Download</a>
+                              {% include "activity/pdf_actions.html" with preview_url=r.preview_url download_url=r.download_url pdf_name=r.original_name artifact_id=r.artifact_id %}
                             </td>
                           </tr>
                         {% endfor %}

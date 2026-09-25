@@ -51,3 +51,37 @@ en otra term
 ## En Docker
 
  docker compose up -d --build --force-recreate
+
+## Impresión mediante CUPS
+
+La sección **Print** permite enviar un PDF subido o un resultado del historial a una
+cola persistida en Django. Solo los administradores pueden crear o modificar
+impresoras. Al guardar, la configuración se aplica a CUPS y se consultan las
+opciones que anuncia el driver. Cada trabajo conserva usuario, documento, opciones,
+resultado e identificador CUPS.
+
+El despliegue incluye su propio servicio CUPS: no utiliza ni exige modificar el
+CUPS del host. El servicio comparte un socket privado con Django y usa red de host
+para recibir anuncios mDNS/Bonjour y alcanzar impresoras IPP de la LAN. Sus colas,
+PPD, trabajos y caché persisten bajo `data/cups/`. No publica la administración
+CUPS en ningún puerto de red.
+
+La detección automática funciona con impresoras que anuncian IPP/IPP Everywhere,
+Bonjour o un backend reconocido por CUPS. Las impresoras en otra VLAN que bloquee
+mDNS pueden añadirse igualmente con su URI `ipp://` o `ipps://`.
+
+## Persistencia y copias de seguridad
+
+Todo el estado persistente vive en `./data`: la base de datos en `data/db.sqlite3`,
+los PDFs en `data/media` y Redis en `data/redis`. El directorio completo está
+excluido de Git. Para una copia consistente:
+
+```bash
+docker compose stop
+tar -czf pdf-manager-backup-$(date +%F).tar.gz data/
+docker compose start
+```
+
+Para restaurar, detenga los contenedores, sustituya `data/` por el contenido del
+archivo y vuelva a iniciarlos. El backup incluye documentos, impresoras,
+configuraciones e historial.

@@ -308,6 +308,8 @@ def booklets_view(request):
             output_artifacts = list(activity.artifacts.filter(kind="output"))
             for result_item, artifact in zip(results, output_artifacts):
                 result_item["download_url"] = reverse("activity:file", kwargs={"public_id": artifact.public_id})
+                result_item["preview_url"] = reverse("activity:preview", kwargs={"public_id": artifact.public_id})
+                result_item["artifact_id"] = artifact.pk
 
         return render(
             request,

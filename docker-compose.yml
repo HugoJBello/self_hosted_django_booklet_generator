@@ -7,6 +7,7 @@ services:
       - "8010:8000"
     volumes:
       - ./data:/app/data
+      - ./data/cups/run:/run/cups
     environment:
       # ----------------------------------------------------
       # Django (MUY PERMISIVO)
@@ -24,6 +25,9 @@ services:
       # Persistencia
       DJANGO_DB_PATH: "/app/data/db.sqlite3"
       DJANGO_MEDIA_ROOT: "/app/data/media"
+      # Socket del CUPS privado incluido en este despliegue.
+      CUPS_SERVER: "/run/cups/cups.sock"
+      CUPS_DISCOVERY_FILE: "/run/cups/discovered-printers.txt"
 
       # Proxy / Cloudflare / HTTPS (MUY PERMISIVO)
       DJANGO_CSRF_TRUSTED_ORIGINS: "https://api-android18.hjbello.org,https://*.hjbello.org,https://*"
@@ -44,6 +48,7 @@ services:
 
     depends_on:
       - redis
+      - cups
 
   pdf_manager_worker:
     build: .
@@ -80,3 +85,17 @@ services:
     volumes:
       - ./data/redis:/data
     command: ["redis-server", "--appendonly", "yes"]
+
+  cups:
+    build:
+      context: .
+      dockerfile: docker/cups/Dockerfile
+    container_name: pdf_manager_cups
+    restart: unless-stopped
+    # Necesario para recibir anuncios mDNS/Bonjour de impresoras de la LAN.
+    network_mode: host
+    volumes:
+      - ./data/cups/etc:/etc/cups
+      - ./data/cups/spool:/var/spool/cups
+      - ./data/cups/cache:/var/cache/cups
+      - ./data/cups/run:/run/cups

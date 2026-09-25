@@ -69,7 +69,7 @@
                   <tr>
                     <th>File</th>
                     <th style="width: 1%;">Status</th>
-                    <th style="width: 1%;">Download</th>
+                    <th style="width: 1%;">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -80,7 +80,7 @@
                         <span class="badge text-bg-secondary job-status">queued</span>
                       </td>
                       <td class="text-nowrap">
-                        <a class="btn btn-sm btn-success job-download d-none" href="{{ j.download_url }}">Download</a>
+                        <div class="btn-group btn-group-sm job-download d-none"><button class="btn btn-outline-primary pdf-preview-trigger job-preview" type="button" data-pdf-preview="{{ j.download_url }}?preview=1" data-pdf-download="{{ j.download_url }}" data-pdf-name="{{ j.original_name }}"><i class="bi bi-eye me-1"></i>Preview</button><a class="btn btn-outline-primary job-print" href="#"><i class="bi bi-printer me-1"></i>Print</a><a class="btn btn-outline-secondary job-file-download" href="{{ j.download_url }}"><i class="bi bi-download me-1"></i>Download</a></div>
                         <span class="text-muted small job-wait">—</span>
                       </td>
                     </tr>
@@ -126,6 +126,12 @@
                   setBadge(badge, data.status);
 
                   if (data.status === "done") {
+                    const preview = tr.querySelector(".job-preview");
+                    const print = tr.querySelector(".job-print");
+                    const download = tr.querySelector(".job-file-download");
+                    if (data.preview_url) preview.dataset.pdfPreview = data.preview_url;
+                    if (data.download_url) { preview.dataset.pdfDownload = data.download_url; download.href = data.download_url; }
+                    if (data.print_url) print.href = data.print_url;
                     btn.classList.remove("d-none");
                     wait.classList.add("d-none");
                   } else if (data.status === "error") {

@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-pictures \
     # utilidades comunes
     curl \
+    cups-client \
+    cups-ipp-utils \
  && rm -rf /var/lib/apt/lists/*
 
 # Instalar deps Python

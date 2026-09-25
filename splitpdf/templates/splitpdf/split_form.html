@@ -626,7 +626,7 @@
                             <th scope="col">Section</th>
                             <th scope="col">Pages</th>
                             <th scope="col">Output</th>
-                            <th scope="col" style="width: 1%;">Download</th>
+                            <th scope="col" style="width: 1%;">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -641,7 +641,7 @@
                                 {% endif %}
                               </td>
                               <td>
-                                <a class="btn btn-sm btn-success" href="{{ output.download_url }}">Download</a>
+                                {% include "activity/pdf_actions.html" with preview_url=output.preview_url download_url=output.download_url pdf_name=output.filename artifact_id=output.artifact_id %}
                               </td>
                             </tr>
                           {% endfor %}
