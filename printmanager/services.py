@@ -2,6 +2,7 @@ import os
 import re
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -162,10 +163,39 @@ def parse_ipp_attributes(output, uri=""):
     }
 
 
-def inspect_ipp_printer(uri):
+def inspect_ipp_printer(uri, *, timeout=None):
     template = "/usr/share/cups/ipptool/get-printer-attributes.test"
-    output = _run(["ipptool", "-tv", uri, template])
+    output = _run(["ipptool", "-tv", uri, template], timeout=timeout)
     return parse_ipp_attributes(output, uri)
+
+
+def printer_availability(printer):
+    """Return a small, UI-safe live status without changing printer state."""
+    try:
+        identity = inspect_ipp_printer(
+            printer.device_uri,
+            timeout=settings.CUPS_STATUS_TIMEOUT,
+        )
+    except CupsError as exc:
+        return {"connected": False, "state": "offline", "label": "Offline", "detail": str(exc)}
+    state = str(identity.get("state") or "idle").lower()
+    if state in {"5", "stopped"}:
+        return {"connected": True, "state": "stopped", "label": "Needs attention", "detail": "The printer is reachable but stopped."}
+    if state in {"4", "processing"}:
+        return {"connected": True, "state": "processing", "label": "Printing", "detail": "Connected and processing a job."}
+    return {"connected": True, "state": "ready", "label": "Ready", "detail": "Connected and ready."}
+
+
+def printer_availabilities(printers):
+    """Probe multiple printers concurrently so offline devices do not stack delays."""
+    if not printers:
+        return []
+    with ThreadPoolExecutor(max_workers=min(len(printers), 8)) as executor:
+        statuses = executor.map(printer_availability, printers)
+    return [
+        {"printer": printer, **status}
+        for printer, status in zip(printers, statuses)
+    ]
 
 
 def discover_printers():

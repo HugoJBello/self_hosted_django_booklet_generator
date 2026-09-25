@@ -29,10 +29,14 @@ class CupsParsingTests(TestCase):
     @patch("printmanager.services._run")
     @patch("printmanager.services.discover_printers", return_value=[{"uri": "ipp://office/ipp/print"}])
     def test_probe_reads_options_and_removes_temporary_queue(self, discover, run):
-        run.side_effect = ["", "PageSize: *A4 Letter\nDuplex: None *DuplexNoTumble", ""]
-        options = probe_printer("ipp://office/ipp/print")
-        self.assertEqual(options["PageSize"]["selected"], "A4")
-        self.assertEqual(run.call_args_list[-1].args[0][0:2], ["lpadmin", "-x"])
+        run.return_value = """media-default (keyword) = iso_a4_210x297mm
+media-supported (1setOf keyword) = iso_a4_210x297mm, na_letter_8.5x11in
+sides-default (keyword) = two-sided-long-edge
+sides-supported (1setOf keyword) = one-sided, two-sided-long-edge"""
+        identity = probe_printer("ipp://office/ipp/print")
+        self.assertEqual(identity["options"]["media"]["selected"], "iso_a4_210x297mm")
+        self.assertEqual(identity["options"]["sides"]["selected"], "two-sided-long-edge")
+        self.assertEqual(run.call_args.args[0][0], "ipptool")
 
 
 @override_settings(MEDIA_ROOT=tempfile.gettempdir())
@@ -43,6 +47,12 @@ class PrintingViewsTests(TestCase):
         self.other = User.objects.create_user("other", password="x")
         self.admin = User.objects.create_user("admin", password="x", is_staff=True)
         self.printer = Printer.objects.create(name="office", device_uri="ipp://printer/ipp/print")
+        self.availability = patch("printmanager.views.printer_availabilities").start()
+        self.availability.side_effect = lambda printers: [
+            {"printer": printer, "connected": True, "state": "ready", "label": "Ready", "detail": "Connected and ready."}
+            for printer in printers
+        ]
+        self.addCleanup(patch.stopall)
 
     def test_only_staff_can_configure_printers(self):
         self.client.force_login(self.user)
@@ -57,16 +67,29 @@ class PrintingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["devices"][0]["configured"])
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get(reverse("printmanager:printer_discover")).status_code, 302)
+        self.assertEqual(self.client.get(reverse("printmanager:printer_discover")).status_code, 403)
 
-    @patch("printmanager.views.probe_printer", return_value={"PageSize": {"choices": ["A4", "Letter"], "selected": "A4"}})
+    @patch("printmanager.views.probe_printer", return_value={"options": {"media": {"choices": ["A4", "Letter"], "selected": "A4"}}, "defaults": {"media": "A4"}})
     def test_staff_can_load_interactive_printer_options(self, probe):
         self.client.force_login(self.admin)
         response = self.client.post(reverse("printmanager:printer_probe"), {"uri": "ipp://new/ipp/print", "driver": "everywhere"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["defaults"], {"PageSize": "A4"})
+        self.assertEqual(response.json()["defaults"], {"media": "A4"})
 
-    @patch("printmanager.views.submit_pdf", return_value=("request id is office-1", {"media": "A4"}))
+    def test_print_page_selects_first_connected_printer_and_disables_offline(self):
+        offline = Printer.objects.create(name="offline", device_uri="ipp://offline/ipp/print", is_default=True)
+        self.availability.side_effect = None
+        self.availability.return_value = [
+            {"printer": offline, "connected": False, "state": "offline", "label": "Offline", "detail": "Timed out."},
+            {"printer": self.printer, "connected": True, "state": "ready", "label": "Ready", "detail": "Connected and ready."},
+        ]
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("printmanager:print"))
+        self.assertContains(response, f'id="printer-{offline.pk}" disabled')
+        self.assertContains(response, f'id="printer-{self.printer.pk}"  checked')
+        self.assertContains(response, "Ready")
+
+    @patch("printmanager.views.submit_pdf", return_value=("request id is office-1", {"media": "A4"}, {"media": "A4"}))
     def test_user_can_submit_uploaded_pdf(self, submit):
         self.client.force_login(self.user)
         response = self.client.post(reverse("printmanager:print"), {

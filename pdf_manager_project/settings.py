@@ -55,6 +55,7 @@ INSTALLED_APPS = [
 # CUPS can be local (Unix socket/default client configuration) or remote.
 CUPS_SERVER = os.environ.get("CUPS_SERVER", "").strip()
 CUPS_COMMAND_TIMEOUT = int(os.environ.get("CUPS_COMMAND_TIMEOUT", "20"))
+CUPS_STATUS_TIMEOUT = int(os.environ.get("CUPS_STATUS_TIMEOUT", "4"))
 CUPS_CONVERSION_TIMEOUT = int(os.environ.get("CUPS_CONVERSION_TIMEOUT", "300"))
 CUPS_DISCOVERY_FILE = os.environ.get("CUPS_DISCOVERY_FILE", "").strip()
 

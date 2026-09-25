@@ -15,7 +15,7 @@ from activity.models import Artifact
 
 from .forms import PrinterForm, PrintForm
 from .models import Printer, PrintJob
-from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, probe_printer, submit_pdf
+from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, printer_availabilities, probe_printer, submit_pdf
 
 
 def staff_json_required(view):
@@ -168,8 +168,13 @@ def print_document(request):
     artifacts = list(artifacts_page.object_list)
     if requested_artifact and all(item.pk != requested_artifact.pk for item in artifacts):
         artifacts.insert(0, requested_artifact)
+    enabled_printers = list(Printer.objects.filter(is_enabled=True).order_by("-is_default", "name"))
+    printer_choices = printer_availabilities(enabled_printers)
+    connected_printers = [item["printer"] for item in printer_choices if item["connected"]]
+    default_printer = connected_printers[0] if connected_printers else None
     if request.method == "POST":
         form = PrintForm(request.POST, request.FILES, artifacts=artifacts)
+        form.fields["printer"].queryset = Printer.objects.filter(pk__in=[printer.pk for printer in connected_printers])
         if form.is_valid():
             data = form.cleaned_data
             if data["source"] == "upload":
@@ -205,6 +210,7 @@ def print_document(request):
         form = PrintForm(artifacts=artifacts, initial={
             "source": "recent" if requested_artifact or request.GET.get("page") else "upload",
             "artifact": str(requested_artifact.pk) if requested_artifact else "",
+            "printer": default_printer.pk if default_printer else None,
         })
     jobs = PrintJob.objects.select_related("printer").filter(owner=request.user)[:20]
     printer_capabilities = {
@@ -216,5 +222,7 @@ def print_document(request):
         "jobs": jobs,
         "artifacts": artifacts,
         "artifacts_page": artifacts_page,
+        "printer_choices": printer_choices,
+        "has_connected_printers": bool(connected_printers),
         "printer_capabilities": printer_capabilities,
     })
