@@ -10,10 +10,16 @@ from django.urls import reverse
 from activity.models import Activity, Artifact
 
 from .models import Printer, PrintJob
-from .services import CupsError, parse_devices, parse_option_lines, probe_printer
+from .services import CupsError, parse_devices, parse_ipp_attributes, parse_option_lines, probe_printer
 
 
 class CupsParsingTests(TestCase):
+    def test_printer_state_reasons_become_actionable_alerts(self):
+        identity = parse_ipp_attributes("""printer-state (enum) = processing
+printer-state-reasons (1setOf keyword) = media-jam-error, media-empty-warning, toner-empty-error""")
+        self.assertEqual([alert["title"] for alert in identity["alerts"]], ["Paper jam", "Out of paper", "Toner is empty"])
+        self.assertTrue(all(alert["severity"] == "danger" for alert in identity["alerts"]))
+
     def test_parses_supported_options(self):
         parsed = parse_option_lines("PageSize/Media Size: *A4 Letter\nDuplex/Duplex: None *DuplexNoTumble")
         self.assertEqual(parsed["PageSize"]["selected"], "A4")

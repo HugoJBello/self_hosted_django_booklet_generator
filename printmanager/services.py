@@ -108,7 +108,8 @@ IPP_ATTRIBUTES = (
     "copies-supported", "output-bin-default", "output-bin-supported",
     "finishings-default", "finishings-supported", "media-col-default",
     "document-format-default", "document-format-preferred", "document-format-supported",
-    "printer-state-reasons", "marker-names", "marker-colors", "marker-types",
+    "printer-state-reasons", "printer-state-message", "printer-alert", "printer-alert-description",
+    "marker-names", "marker-colors", "marker-types",
     "marker-levels", "marker-low-levels", "marker-high-levels",
 )
 
@@ -164,6 +165,7 @@ def parse_ipp_attributes(output, uri=""):
         "preferred_document_format": raw.get("document-format-preferred", ""),
         "supplies": _parse_supplies(raw),
         "state_reasons": values("printer-state-reasons"),
+        "alerts": _printer_alerts(values("printer-state-reasons"), raw),
     }
 
 
@@ -172,6 +174,28 @@ def _parse_supplies(raw):
     levels = [v.strip() for v in raw.get("marker-levels", "").split(",") if v.strip()]
     types = [v.strip() for v in raw.get("marker-types", "").split(",") if v.strip()]
     return [{"name": name, "level": levels[i] if i < len(levels) else "", "type": types[i] if i < len(types) else ""} for i, name in enumerate(names)]
+
+
+def _printer_alerts(reasons, raw=None):
+    """Turn standard IPP printer-state-reasons into actionable UI alerts."""
+    raw = raw or {}
+    known = (
+        (("media-jam",), "Paper jam", "Remove the jammed paper and check the paper path.", "danger", "bi-exclamation-octagon-fill"),
+        (("media-empty", "media-needed"), "Out of paper", "Load paper in the requested tray.", "danger", "bi-file-earmark-x-fill"),
+        (("toner-empty", "marker-supply-empty"), "Toner is empty", "Replace the empty toner or ink supply.", "danger", "bi-droplet-fill"),
+        (("toner-low", "marker-supply-low"), "Toner is low", "Printing can continue, but the supply should be replaced soon.", "warning", "bi-droplet-half"),
+    )
+    alerts = []
+    normalized = [(reason, re.sub(r"-(?:report|warning|error)$", "", reason.lower())) for reason in reasons if reason.lower() not in {"none", "paused"}]
+    for original, reason in normalized:
+        match = next((item for item in known if any(token in reason for token in item[0])), None)
+        if match:
+            _, title, guidance, severity, icon = match
+        else:
+            title, guidance, severity, icon = reason.replace("-", " ").title(), "Check the printer before continuing.", "warning", "bi-exclamation-triangle-fill"
+        description = raw.get("printer-alert-description") or raw.get("printer-state-message") or guidance
+        alerts.append({"code": original, "title": title, "description": description, "severity": severity, "icon": icon})
+    return alerts
 
 
 def inspect_ipp_printer(uri, *, timeout=None):
@@ -188,13 +212,13 @@ def printer_availability(printer):
             timeout=settings.CUPS_STATUS_TIMEOUT,
         )
     except CupsError as exc:
-        return {"connected": False, "state": "offline", "label": "Offline", "detail": str(exc), "supplies": [], "state_reasons": []}
+        return {"connected": False, "state": "offline", "label": "Offline", "detail": str(exc), "supplies": [], "state_reasons": [], "alerts": []}
     state = str(identity.get("state") or "idle").lower()
     if state in {"5", "stopped"}:
-        return {"connected": True, "state": "stopped", "label": "Needs attention", "detail": "The printer is reachable but stopped.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", [])}
+        return {"connected": True, "state": "stopped", "label": "Needs attention", "detail": "The printer is reachable but stopped.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", []), "alerts": identity.get("alerts", [])}
     if state in {"4", "processing"}:
-        return {"connected": True, "state": "processing", "label": "Printing", "detail": "Connected and processing a job.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", [])}
-    return {"connected": True, "state": "ready", "label": "Ready", "detail": "Connected and ready.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", [])}
+        return {"connected": True, "state": "processing", "label": "Printing", "detail": "Connected and processing a job.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", []), "alerts": identity.get("alerts", [])}
+    return {"connected": True, "state": "ready", "label": "Ready", "detail": "Connected and ready.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", []), "alerts": identity.get("alerts", [])}
 
 
 def printer_availabilities(printers):
