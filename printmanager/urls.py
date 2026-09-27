@@ -5,6 +5,7 @@ from . import views
 app_name = "printmanager"
 urlpatterns = [
     path("", views.print_document, name="print"),
+    path("jobs/", views.job_list, name="jobs"),
     path("printers/", views.printer_list, name="printers"),
     path("printers/new/", views.printer_edit, name="printer_new"),
     path("printers/discover/", views.printer_discover, name="printer_discover"),

@@ -108,6 +108,8 @@ IPP_ATTRIBUTES = (
     "copies-supported", "output-bin-default", "output-bin-supported",
     "finishings-default", "finishings-supported", "media-col-default",
     "document-format-default", "document-format-preferred", "document-format-supported",
+    "printer-state-reasons", "marker-names", "marker-colors", "marker-types",
+    "marker-levels", "marker-low-levels", "marker-high-levels",
 )
 
 
@@ -160,7 +162,16 @@ def parse_ipp_attributes(output, uri=""):
         "defaults": {name: spec["selected"] for name, spec in options.items() if spec.get("selected")},
         "document_formats": values("document-format-supported"),
         "preferred_document_format": raw.get("document-format-preferred", ""),
+        "supplies": _parse_supplies(raw),
+        "state_reasons": values("printer-state-reasons"),
     }
+
+
+def _parse_supplies(raw):
+    names = [v.strip() for v in raw.get("marker-names", "").split(",") if v.strip()]
+    levels = [v.strip() for v in raw.get("marker-levels", "").split(",") if v.strip()]
+    types = [v.strip() for v in raw.get("marker-types", "").split(",") if v.strip()]
+    return [{"name": name, "level": levels[i] if i < len(levels) else "", "type": types[i] if i < len(types) else ""} for i, name in enumerate(names)]
 
 
 def inspect_ipp_printer(uri, *, timeout=None):
@@ -177,13 +188,13 @@ def printer_availability(printer):
             timeout=settings.CUPS_STATUS_TIMEOUT,
         )
     except CupsError as exc:
-        return {"connected": False, "state": "offline", "label": "Offline", "detail": str(exc)}
+        return {"connected": False, "state": "offline", "label": "Offline", "detail": str(exc), "supplies": [], "state_reasons": []}
     state = str(identity.get("state") or "idle").lower()
     if state in {"5", "stopped"}:
-        return {"connected": True, "state": "stopped", "label": "Needs attention", "detail": "The printer is reachable but stopped."}
+        return {"connected": True, "state": "stopped", "label": "Needs attention", "detail": "The printer is reachable but stopped.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", [])}
     if state in {"4", "processing"}:
-        return {"connected": True, "state": "processing", "label": "Printing", "detail": "Connected and processing a job."}
-    return {"connected": True, "state": "ready", "label": "Ready", "detail": "Connected and ready."}
+        return {"connected": True, "state": "processing", "label": "Printing", "detail": "Connected and processing a job.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", [])}
+    return {"connected": True, "state": "ready", "label": "Ready", "detail": "Connected and ready.", "supplies": identity.get("supplies", []), "state_reasons": identity.get("state_reasons", [])}
 
 
 def printer_availabilities(printers):
@@ -400,6 +411,22 @@ def _effective_ipp_options(output):
     return effective
 
 
+def read_job_status(job):
+    """Return normalized live IPP state and useful vendor-provided details."""
+    if not job.job_uri:
+        raise CupsError("This older job has no IPP tracking address.")
+    output = _ipp_job_operation(printer=job.printer, job_uri=job.job_uri, operation="Get-Job-Attributes")
+    raw = {}
+    for line in output.splitlines():
+        match = re.match(r"^\s*([a-z][a-z0-9-]+)\s+\([^)]*\)\s*=\s*(.*?)\s*$", line)
+        if match:
+            raw[match.group(1)] = match.group(2)
+    state = str(raw.get("job-state", "")).lower()
+    status = {"3": "queued", "pending": "queued", "4": "queued", "pending-held": "queued", "5": "processing", "processing": "processing", "6": "processing", "processing-stopped": "processing", "7": "canceled", "canceled": "canceled", "8": "error", "aborted": "error", "9": "completed", "completed": "completed"}.get(state, "submitted")
+    reasons = raw.get("job-state-reasons", "").replace(",", ", ")
+    return {"status": status, "detail": reasons, "attributes": {key: raw[key] for key in ("job-state", "job-state-reasons", "job-impressions", "job-impressions-completed", "job-media-sheets-completed", "time-at-creation", "time-at-processing", "time-at-completed") if key in raw}}
+
+
 def _verify_effective_options(requested, effective):
     orientation = {"3": "portrait", "4": "landscape", "5": "reverse-landscape", "6": "reverse-portrait"}
     checks = {
@@ -504,7 +531,7 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
                 pass
             raise
         accepted = f"IPP job {job_id.group(1)} accepted by {printer.name}"
-        return accepted, merged, effective
+        return accepted, merged, effective, job_uri.group(1)
     finally:
         if converted_path:
             converted_path.unlink(missing_ok=True)

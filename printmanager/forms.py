@@ -6,6 +6,16 @@ from django import forms
 from .models import Printer
 
 
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    def clean(self, data, initial=None):
+        clean_one = super().clean
+        return [clean_one(item, initial) for item in (data if isinstance(data, (list, tuple)) else [data]) if item]
+
+
 def _json_object(value):
     if not value.strip():
         return {}
@@ -50,8 +60,8 @@ class PrinterForm(forms.ModelForm):
 class PrintForm(forms.Form):
     printer = forms.ModelChoiceField(queryset=Printer.objects.none(), empty_label=None)
     source = forms.ChoiceField(choices=(("upload", "Upload a PDF"), ("recent", "Choose from recent activity")), widget=forms.RadioSelect)
-    document = forms.FileField(required=False, widget=forms.FileInput(attrs={"accept": "application/pdf,.pdf"}))
-    artifact = forms.ChoiceField(required=False, choices=())
+    document = MultipleFileField(required=False, widget=MultipleFileInput(attrs={"accept": "application/pdf,.pdf"}))
+    artifact = forms.MultipleChoiceField(required=False, choices=(), widget=forms.SelectMultiple(attrs={"size": 8}))
     copies = forms.IntegerField(min_value=1, max_value=999, initial=1)
     page_ranges = forms.CharField(required=False, help_text="Examples: 1-4, 7, 10-12")
     media = forms.CharField(required=False)
@@ -87,7 +97,7 @@ class PrintForm(forms.Form):
             self.add_error("document", "Select a PDF to upload.")
         if source == "recent" and not data.get("artifact"):
             self.add_error("artifact", "Select a recent PDF.")
-        document = data.get("document")
-        if document and document.content_type not in ("application/pdf", "application/x-pdf") and not document.name.lower().endswith(".pdf"):
-            self.add_error("document", "Only PDF documents are accepted.")
+        for document in data.get("document") or []:
+            if document.content_type not in ("application/pdf", "application/x-pdf") and not document.name.lower().endswith(".pdf"):
+                self.add_error("document", "Only PDF documents are accepted.")
         return data

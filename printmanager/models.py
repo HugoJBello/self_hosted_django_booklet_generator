@@ -29,7 +29,11 @@ class Printer(models.Model):
 
 
 class PrintJob(models.Model):
-    STATUS_CHOICES = [("submitted", "Submitted"), ("error", "Error")]
+    STATUS_CHOICES = [
+        ("queued", "Queued"), ("processing", "Printing"),
+        ("completed", "Completed"), ("canceled", "Canceled"),
+        ("error", "Error"), ("submitted", "Submitted"),
+    ]
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="print_jobs")
     printer = models.ForeignKey(Printer, on_delete=models.PROTECT, related_name="jobs")
     document_name = models.CharField(max_length=255)
@@ -38,8 +42,14 @@ class PrintJob(models.Model):
     effective_options = models.JSONField(default=dict, blank=True)
     transport = models.CharField(max_length=32, blank=True)
     cups_job_id = models.CharField(max_length=255, blank=True)
+    job_uri = models.CharField(max_length=500, blank=True)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES)
     error_message = models.TextField(blank=True)
+    status_detail = models.TextField(blank=True)
+    status_data = models.JSONField(default=dict, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

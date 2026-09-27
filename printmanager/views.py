@@ -4,18 +4,22 @@ from functools import wraps
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import user_passes_test
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from activity.models import Artifact
 
 from .forms import PrinterForm, PrintForm
 from .models import Printer, PrintJob
-from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, printer_availabilities, probe_printer, submit_pdf
+from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, printer_availabilities, probe_printer, read_job_status, submit_pdf
+
+
+staff_required = user_passes_test(lambda user: user.is_staff, login_url=settings.LOGIN_URL)
 
 
 def staff_json_required(view):
@@ -47,9 +51,15 @@ def _save_upload(uploaded):
     return path, filename
 
 
-@staff_member_required
+@staff_required
 def printer_list(request):
-    return render(request, "printmanager/printer_list.html", {"printers": Printer.objects.all()})
+    printers = list(Printer.objects.prefetch_related("jobs").all())
+    live = {item["printer"].pk: item for item in printer_availabilities(printers)}
+    for printer in printers:
+        printer.live_status = live[printer.pk]
+        printer.job_count = printer.jobs.count()
+        printer.active_job_count = printer.jobs.filter(status__in=("queued", "processing", "submitted")).count()
+    return render(request, "printmanager/printer_list.html", {"printers": printers})
 
 
 @staff_json_required
@@ -92,7 +102,7 @@ def printer_probe(request):
     return JsonResponse(identity)
 
 
-@staff_member_required
+@staff_required
 def printer_edit(request, pk=None):
     printer = get_object_or_404(Printer, pk=pk) if pk else Printer()
     if request.method == "POST":
@@ -121,7 +131,7 @@ def printer_edit(request, pk=None):
     return render(request, "printmanager/printer_form.html", {"form": form, "printer": printer})
 
 
-@staff_member_required
+@staff_required
 def printer_sync(request, pk):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -141,7 +151,7 @@ def printer_sync(request, pk):
     return redirect("printmanager:printers")
 
 
-@staff_member_required
+@staff_required
 def printer_delete(request, pk):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -178,10 +188,10 @@ def print_document(request):
         if form.is_valid():
             data = form.cleaned_data
             if data["source"] == "upload":
-                path, name = _save_upload(data["document"])
+                documents = [_save_upload(upload) for upload in data["document"]]
             else:
-                artifact = get_object_or_404(artifact_queryset, pk=data["artifact"])
-                path, name = artifact.path, artifact.name
+                selected = list(artifact_queryset.filter(pk__in=data["artifact"]))
+                documents = [(artifact.path, artifact.name) for artifact in selected]
             options = dict(data["extra_options"])
             for key in ("media", "sides", "orientation_requested", "print_color_mode"):
                 value = data.get(key)
@@ -191,38 +201,82 @@ def print_document(request):
                 options["print-scaling"] = data["scaling"]
             if data.get("collate"):
                 options["Collate"] = "True"
-            job = PrintJob(owner=request.user, printer=data["printer"], document_name=name, document_path=path, options=options, status="error")
-            try:
-                result, merged, effective = submit_pdf(printer=data["printer"], path=path, title=name, copies=data["copies"], page_ranges=data["page_ranges"], options=options)
-                job.options = {"copies": data["copies"], "page_ranges": data["page_ranges"], **merged}
-                job.effective_options = effective
-                job.transport = "ipp-create-send"
-                job.cups_job_id = result
-                job.status = "submitted"
-                messages.success(request, f"CUPS accepted {name}: {result}")
-            except CupsError as exc:
-                job.error_message = str(exc)
-                messages.error(request, f"CUPS could not print the document: {exc}")
-            job.save()
-            if job.status == "submitted":
-                return redirect("printmanager:print")
+            jobs = []
+            for path, name in documents:
+                job = PrintJob(owner=request.user, printer=data["printer"], document_name=name, document_path=path, options=options, status="error")
+                try:
+                    response = submit_pdf(printer=data["printer"], path=path, title=name, copies=data["copies"], page_ranges=data["page_ranges"], options=options)
+                    result, merged, effective = response[:3]
+                    job.job_uri = response[3] if len(response) > 3 else ""
+                    job.options = {"copies": data["copies"], "page_ranges": data["page_ranges"], **merged}
+                    job.effective_options = effective
+                    job.transport = "ipp-create-send"
+                    job.cups_job_id = result
+                    job.status = "queued"
+                except CupsError as exc:
+                    job.error_message = str(exc)
+                job.save()
+                jobs.append(job)
+            accepted = sum(job.status != "error" for job in jobs)
+            if accepted:
+                messages.success(request, f"{accepted} document(s) accepted and queued.")
+                return redirect(f'{reverse("printmanager:jobs")}?printer={data["printer"].pk}&highlight={jobs[-1].pk}')
+            messages.error(request, "The printer did not accept the selected documents.")
     else:
         form = PrintForm(artifacts=artifacts, initial={
             "source": "recent" if requested_artifact or request.GET.get("page") else "upload",
-            "artifact": str(requested_artifact.pk) if requested_artifact else "",
+            "artifact": [str(requested_artifact.pk)] if requested_artifact else [],
             "printer": default_printer.pk if default_printer else None,
         })
-    jobs = PrintJob.objects.select_related("printer").filter(owner=request.user)[:20]
     printer_capabilities = {
         str(printer.pk): {"options": printer.supported_options, "defaults": printer.default_options}
         for printer in Printer.objects.filter(is_enabled=True)
     }
     return render(request, "printmanager/print_form.html", {
         "form": form,
-        "jobs": jobs,
         "artifacts": artifacts,
         "artifacts_page": artifacts_page,
         "printer_choices": printer_choices,
         "has_enabled_printers": bool(enabled_printers),
         "printer_capabilities": printer_capabilities,
     })
+
+
+def _visible_jobs(request):
+    jobs = PrintJob.objects.select_related("printer", "owner")
+    return jobs if request.user.is_staff else jobs.filter(owner=request.user)
+
+
+def _refresh_jobs(jobs):
+    now = timezone.now()
+    for job in jobs:
+        if job.status in {"completed", "canceled", "error"} or not job.job_uri:
+            continue
+        try:
+            live = read_job_status(job)
+            job.status = live["status"]
+            job.status_detail = live["detail"]
+            job.status_data = live["attributes"]
+            if job.status == "processing" and not job.started_at:
+                job.started_at = now
+            if job.status in {"completed", "canceled", "error"} and not job.completed_at:
+                job.completed_at = now
+            job.last_checked_at = now
+            job.save(update_fields=("status", "status_detail", "status_data", "started_at", "completed_at", "last_checked_at"))
+        except CupsError as exc:
+            job.status_detail = str(exc)
+            job.last_checked_at = now
+            job.save(update_fields=("status_detail", "last_checked_at"))
+
+
+def job_list(request):
+    printer_id = request.GET.get("printer", "")
+    jobs = _visible_jobs(request)
+    if printer_id.isdigit():
+        jobs = jobs.filter(printer_id=printer_id)
+    recent = list(jobs[:100])
+    _refresh_jobs(recent)
+    printers = list(Printer.objects.filter(pk__in=_visible_jobs(request).values("printer_id")).distinct())
+    statuses = printer_availabilities(printers)
+    counts = {key: jobs.filter(status=key).count() for key in ("queued", "processing", "completed", "error")}
+    return render(request, "printmanager/job_list.html", {"jobs": recent, "printers": printers, "printer_statuses": statuses, "selected_printer": printer_id, "counts": counts, "highlight": request.GET.get("highlight", "")})

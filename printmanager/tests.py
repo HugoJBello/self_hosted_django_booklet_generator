@@ -56,7 +56,8 @@ class PrintingViewsTests(TestCase):
 
     def test_only_staff_can_configure_printers(self):
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get(reverse("printmanager:printers")).status_code, 302)
+        response = self.client.get(reverse("printmanager:printers"))
+        self.assertRedirects(response, f'{reverse("accounts:login")}?next={reverse("printmanager:printers")}', fetch_redirect_response=False)
         self.client.force_login(self.admin)
         self.assertEqual(self.client.get(reverse("printmanager:printers")).status_code, 200)
 
@@ -113,9 +114,9 @@ class PrintingViewsTests(TestCase):
             "media": "A4", "sides": "one-sided", "collate": "on",
             "document": SimpleUploadedFile("test.pdf", b"%PDF-1.4", content_type="application/pdf"),
         })
-        self.assertRedirects(response, reverse("printmanager:print"))
         job = PrintJob.objects.get()
-        self.assertEqual((job.owner, job.status), (self.user, "submitted"))
+        self.assertRedirects(response, f'{reverse("printmanager:jobs")}?printer={self.printer.pk}&highlight={job.pk}', fetch_redirect_response=False)
+        self.assertEqual((job.owner, job.status), (self.user, "queued"))
         submit.assert_called_once()
         if os.path.exists(job.document_path):
             os.unlink(job.document_path)
@@ -140,3 +141,11 @@ class PrintingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(PrintJob.objects.exists())
         self.assertContains(response, "Select a recent PDF")
+
+    def test_job_history_is_private_for_regular_users(self):
+        PrintJob.objects.create(owner=self.other, printer=self.printer, document_name="private.pdf", document_path="/tmp/private.pdf", status="completed")
+        PrintJob.objects.create(owner=self.user, printer=self.printer, document_name="mine.pdf", document_path="/tmp/mine.pdf", status="completed")
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("printmanager:jobs"))
+        self.assertContains(response, "mine.pdf")
+        self.assertNotContains(response, "private.pdf")
