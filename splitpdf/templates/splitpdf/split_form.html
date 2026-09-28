@@ -361,7 +361,7 @@
 
   <div class="row justify-content-center">
     <div class="tool-page col-12 col-xl-10">
-      <h1 class="h3 mb-3"><i class="bi bi-scissors text-info me-2" aria-hidden="true"></i>Split PDF by sections</h1>
+      <h1 class="h3 mb-3"><i class="bi bi-scissors text-info me-2" aria-hidden="true"></i>Split PDF</h1>
 
       <div class="card shadow-sm mb-4">
         <div class="card-body">
@@ -415,6 +415,8 @@
                     {% endfor %}
                   </div>
 
+                  <div id="method-prompt" class="alert alert-primary mb-3"><i class="bi bi-cursor-fill me-2"></i>Choose a method to configure the split. Nothing is selected automatically.</div>
+
                   <div id="toc-settings">
                     {% if has_toc %}
                       <label class="form-label" for="{{ form.selected_level.id_for_label }}">{{ form.selected_level.label }}</label>
@@ -442,7 +444,7 @@
                   </div>
 
                   <div class="d-flex flex-wrap gap-2 mt-3">
-                    <button class="btn btn-outline-primary" type="submit" data-action="preview">Refresh preview</button>
+                    <button class="btn btn-outline-primary" type="submit" data-action="preview">Start / refresh preview</button>
                     <button class="btn btn-success" type="submit" data-action="generate">Generate PDFs</button>
                   </div>
                 </section>
@@ -541,7 +543,7 @@
                 </section>
               </div>
 
-              <div class="settings-grid mb-4">
+              {% if split_mode %}<div class="settings-grid mb-4">
                 <section id="toc-map-panel">
                   <h2 class="h5 mb-2">Contents map</h2>
                   <div class="toc-map">
@@ -689,7 +691,7 @@
                     </div>
                   {% endif %}
                 </section>
-              </div>
+              </div>{% endif %}
 
               {% if outputs %}
                 <section class="mb-2">
@@ -760,7 +762,9 @@
       const rangePreviewList = document.getElementById("range-preview-list");
       const addRangeRowButton = document.getElementById("add-range-row");
       const selectedLevel = form.querySelector('select[name="selected_level"]');
+      const methodPrompt = document.getElementById("method-prompt");
       const totalPages = Number("{{ total_pages|default:'0' }}");
+      const thumbnailUrl = "{% url 'splitpdf:thumbnail' 999999 %}";
 
       const refreshBookletUI = () => {
         if (!bookletOptions || !applyBooklets) {
@@ -820,7 +824,7 @@
         row.querySelector(".remove-range").addEventListener("click", () => {
           row.remove();
           if (rangeList.children.length === 0) {
-            createRangeRow("1", totalPages ? String(totalPages) : "");
+            createRangeRow("", "");
           }
           syncRangesFromRows();
         });
@@ -836,13 +840,11 @@
           const start = Number(range.start);
           const end = Number(range.end);
           const item = document.createElement("div");
-          item.className = "range-preview-item";
+          item.className = "range-output-card";
           const valid = Number.isInteger(start) && Number.isInteger(end) && start >= 1 && end >= start && (!totalPages || end <= totalPages);
           const pageCount = valid ? end - start + 1 : 0;
-          item.innerHTML = `
-            <span><strong>PDF ${index + 1}</strong> · pages ${range.start || "?"}-${range.end || "?"}</span>
-            <span class="${valid ? "text-muted" : "text-danger"}">${valid ? `${pageCount} page${pageCount === 1 ? "" : "s"}` : "Invalid range"}</span>
-          `;
+          const pageImage = page => thumbnailUrl.replace("999999", String(page));
+          item.innerHTML = `<div class="range-output-head"><div><strong>PDF ${index + 1}</strong><div class="small text-muted">Pages ${range.start || "?"}-${range.end || "?"}</div></div><span class="badge ${valid ? "text-bg-primary" : "text-bg-danger"}">${valid ? `${pageCount} page${pageCount === 1 ? "" : "s"}` : "Invalid range"}</span></div>${valid ? `<div class="range-thumbnail-grid mb-0"><div class="range-thumbnail"><img loading="lazy" src="${pageImage(start)}" alt="First page ${start}"><div class="range-thumbnail-caption">First page · ${start}</div></div><div class="range-thumbnail"><img loading="lazy" src="${pageImage(end)}" alt="Last page ${end}"><div class="range-thumbnail-caption">Last page · ${end}</div></div></div>` : `<div class="small text-danger">Use page numbers between 1 and ${totalPages}, with the last page equal to or after the first.</div>`}`;
           rangePreviewList.appendChild(item);
         });
       };
@@ -870,7 +872,7 @@
         rangeList.innerHTML = "";
         const ranges = splitRangeValue(pageRangesInput?.value || "");
         if (ranges.length === 0) {
-          createRangeRow("1", totalPages ? String(totalPages) : "");
+          createRangeRow("", "");
         } else {
           ranges.forEach((range) => createRangeRow(range.start, range.end));
         }
@@ -878,13 +880,14 @@
       };
 
       const refreshSplitModeUI = () => {
-        const mode = methodInputs.find((input) => input.checked)?.value || "toc";
+        const mode = methodInputs.find((input) => input.checked)?.value || "";
         const usingToc = mode === "toc";
+        const usingRanges = mode === "ranges";
         if (tocSettings) {
           tocSettings.style.display = usingToc ? "" : "none";
         }
         if (rangeSettings) {
-          rangeSettings.style.display = usingToc ? "none" : "";
+          rangeSettings.style.display = usingRanges ? "" : "none";
         }
         if (tocMapPanel) {
           tocMapPanel.style.display = usingToc ? "" : "none";
@@ -892,6 +895,7 @@
         if (selectedLevel) {
           selectedLevel.disabled = !usingToc;
         }
+        if (methodPrompt) methodPrompt.style.display = mode ? "none" : "";
       };
 
       if (dropzone && fileInput) {
@@ -927,14 +931,6 @@
       methodInputs.forEach((input) => input.addEventListener("change", () => {
         refreshSplitModeUI();
         syncRangesFromRows();
-        if (actionInput) {
-          actionInput.value = "preview";
-        }
-        if (form.requestSubmit) {
-          form.requestSubmit();
-        } else {
-          form.submit();
-        }
       }));
       if (addRangeRowButton) {
         addRangeRowButton.addEventListener("click", () => {

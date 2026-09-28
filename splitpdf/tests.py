@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
+from activity.models import Activity
 
 from .forms import SplitPdfForm
 from .services import (
@@ -173,7 +174,7 @@ class SplitPdfViewTests(TestCase):
         response = self.client.get(reverse("splitpdf:form"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Split PDF by sections")
+        self.assertContains(response, "Split PDF")
 
     def test_upload_without_action_falls_back_to_detect(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -185,9 +186,13 @@ class SplitPdfViewTests(TestCase):
         response = self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Table of contents detected")
+        self.assertContains(response, "Now choose how you want to split it")
+        state = self.client.session["splitpdf_state"]
+        self.assertEqual(state["split_mode"], "")
+        self.assertIsNone(state["selected_level"])
+        self.assertEqual(state["preview_sections"], [])
 
-    def test_upload_without_toc_offers_page_range_mode(self):
+    def test_upload_without_toc_waits_for_explicit_page_range_choice(self):
         client = self.client
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")
@@ -199,9 +204,9 @@ class SplitPdfViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         state = client.session["splitpdf_state"]
-        self.assertEqual(state["split_mode"], "ranges")
-        self.assertEqual(state["page_ranges"], "1-3")
-        self.assertContains(response, "Page ranges mode")
+        self.assertEqual(state["split_mode"], "")
+        self.assertEqual(state["page_ranges"], "")
+        self.assertContains(response, "choose page ranges to continue")
 
     def test_page_range_preview_from_view(self):
         client = self.client
@@ -257,6 +262,28 @@ class SplitPdfViewTests(TestCase):
         for output in outputs:
             with fitz.open(output["path"]) as doc:
                 self.assertEqual(len(doc), output["page_count"])
+        activity = Activity.objects.get(tool="splitpdf")
+        self.assertEqual(activity.restore_state["session_value"]["split_mode"], "ranges")
+        self.assertEqual(activity.restore_state["session_value"]["page_ranges"], "1-2, 5")
+        self.assertTrue(all(item.get("preview_url") for item in activity.restore_state["session_value"]["outputs"]))
+
+        client.get(reverse("splitpdf:clear"))
+        client.post(reverse("activity:reopen", args=[activity.pk]))
+        reopened = client.get(reverse("splitpdf:form"))
+        self.assertContains(reopened, "Page range preview")
+        self.assertContains(reopened, "data:image/png;base64")
+
+    def test_loaded_pdf_thumbnail_is_available_for_live_range_preview(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf(source_path, page_count=2)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+            self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+            response = self.client.get(reverse("splitpdf:thumbnail", args=[1]))
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Content-Type"], "image/png")
+            self.assertEqual(self.client.get(reverse("splitpdf:thumbnail", args=[3])).status_code, 404)
 
     def test_preview_section_can_be_split_from_view(self):
         client = self.client
@@ -268,6 +295,7 @@ class SplitPdfViewTests(TestCase):
 
         detect_response = client.post(reverse("splitpdf:form"), {"input_pdf": upload})
         self.assertEqual(detect_response.status_code, 200)
+        client.post(reverse("splitpdf:form"), {"action": "preview", "split_mode": "toc", "selected_level": "1"})
         state = client.session["splitpdf_state"]
         first_section_id = state["preview_sections"][0]["section_id"]
 
@@ -276,6 +304,7 @@ class SplitPdfViewTests(TestCase):
             {
                 "action": "split_section",
                 "section_id": first_section_id,
+                "split_mode": "toc",
                 "selected_level": "1",
             },
         )
@@ -294,6 +323,7 @@ class SplitPdfViewTests(TestCase):
 
         detect_response = client.post(reverse("splitpdf:form"), {"input_pdf": upload})
         self.assertEqual(detect_response.status_code, 200)
+        client.post(reverse("splitpdf:form"), {"action": "preview", "split_mode": "toc", "selected_level": "1"})
         first_section_id = client.session["splitpdf_state"]["preview_sections"][0]["section_id"]
 
         merge_response = client.post(
@@ -301,6 +331,7 @@ class SplitPdfViewTests(TestCase):
             {
                 "action": "merge_next",
                 "section_id": first_section_id,
+                "split_mode": "toc",
                 "selected_level": "1",
             },
         )
@@ -312,6 +343,7 @@ class SplitPdfViewTests(TestCase):
             {
                 "action": "split_section",
                 "section_id": merged_section_id,
+                "split_mode": "toc",
                 "selected_level": "1",
             },
         )
@@ -330,6 +362,7 @@ class SplitPdfViewTests(TestCase):
 
         detect_response = client.post(reverse("splitpdf:form"), {"input_pdf": upload})
         self.assertEqual(detect_response.status_code, 200)
+        client.post(reverse("splitpdf:form"), {"action": "preview", "split_mode": "toc", "selected_level": "1"})
         state = client.session["splitpdf_state"]
         first_section_id = state["preview_sections"][0]["section_id"]
 
@@ -338,6 +371,7 @@ class SplitPdfViewTests(TestCase):
             {
                 "action": "merge_next",
                 "section_id": first_section_id,
+                "split_mode": "toc",
                 "selected_level": "1",
             },
         )

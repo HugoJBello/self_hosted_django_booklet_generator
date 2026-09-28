@@ -8,11 +8,11 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.conf import settings
 from django.contrib import messages
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-from activity.services import record_activity
+from activity.services import json_safe, record_activity
 from activity.workspaces import continue_workspace, prepare_workspace
 
 from .forms import SplitPdfForm
@@ -152,7 +152,7 @@ def _sections_from_state(state: dict[str, Any]) -> list[SplitSection]:
 
 
 def _level_choices(toc_entries: list[TocEntry]) -> list[tuple[str, str]]:
-    choices = []
+    choices = [("", "Choose a table-of-contents level")]
     for level in available_levels(toc_entries):
         count = sum(1 for entry in toc_entries if entry.level == level)
         choices.append((str(level), f"Level {level} ({count} sections)"))
@@ -162,7 +162,7 @@ def _level_choices(toc_entries: list[TocEntry]) -> list[tuple[str, str]]:
 def _initial_from_state(state: dict[str, Any], selected_level: int | None = None) -> dict[str, Any]:
     initial = {
         "selected_level": selected_level or state.get("selected_level"),
-        "split_mode": state.get("split_mode", "toc"),
+        "split_mode": state.get("split_mode", ""),
         "page_ranges": state.get("page_ranges", ""),
         "apply_booklets": state.get("apply_booklets", False),
         "booklet_layout": state.get("booklet_layout", "side_by_side"),
@@ -186,7 +186,7 @@ def _context(request, form: SplitPdfForm | None = None, sections=None) -> dict[s
     state = _state(request)
     toc_entries = _toc_from_state(state)
     selected_level = state.get("selected_level")
-    split_mode = state.get("split_mode", "toc")
+    split_mode = state.get("split_mode", "")
     if sections is None:
         sections = _sections_from_state(state)
     if not sections and state.get("pdf_path"):
@@ -257,15 +257,10 @@ def split_view(request):
                 toc_entries = []
                 levels = []
 
-            selected_level = levels[0] if levels else None
-            if selected_level is None:
-                split_mode = "ranges"
-                page_ranges = f"1-{total_pages}" if total_pages else ""
-                sections = build_sections_for_page_ranges(page_ranges, total_pages) if page_ranges else []
-            else:
-                split_mode = "toc"
-                page_ranges = ""
-                sections = build_sections_for_level(toc_entries, total_pages, selected_level)
+            selected_level = None
+            split_mode = ""
+            page_ranges = ""
+            sections = []
 
             state = {
                 "pdf_path": pdf_path,
@@ -279,13 +274,13 @@ def split_view(request):
                 "outputs": [],
             }
             _save_state(request, state)
-            if selected_level is None:
+            if not levels:
                 messages.warning(
                     request,
-                    "No table of contents was detected. Page-range split mode is ready as an alternative.",
+                    "PDF loaded. No table of contents was detected, so choose page ranges to continue.",
                 )
             else:
-                messages.success(request, "Table of contents detected.")
+                messages.success(request, "PDF loaded. Now choose how you want to split it.")
             form = SplitPdfForm(level_choices=_level_choices(toc_entries), initial=_initial_from_state(state))
             return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
 
@@ -298,14 +293,17 @@ def split_view(request):
             if not form.is_valid():
                 return render(request, "splitpdf/split_form.html", _context(request, form=form))
 
-            split_mode = form.cleaned_data.get("split_mode", "toc")
+            split_mode = form.cleaned_data.get("split_mode", "")
             selected_level = form.cleaned_data.get("selected_level")
+            if not split_mode:
+                messages.error(request, "Choose a split method before starting the preview.")
+                return render(request, "splitpdf/split_form.html", _context(request, form=form))
             if split_mode == "toc" and not selected_level:
                 messages.error(request, "Select a table-of-contents level.")
                 return render(request, "splitpdf/split_form.html", _context(request, form=form))
 
             previous_level = state.get("selected_level")
-            previous_mode = state.get("split_mode", "toc")
+            previous_mode = state.get("split_mode", "")
             state.update(
                 {
                     "selected_level": selected_level,
@@ -435,6 +433,8 @@ def split_view(request):
                 output_state["download_url"] = reverse("activity:file", kwargs={"public_id": artifact.public_id})
                 output_state["preview_url"] = reverse("activity:preview", kwargs={"public_id": artifact.public_id})
                 output_state["artifact_id"] = artifact.pk
+            activity.restore_state = json_safe({"session_key": SESSION_KEY, "session_value": state, "form_initial": options_data})
+            activity.save(update_fields=["restore_state"])
             _save_state(request, state)
             messages.success(request, f"Generated {len(outputs)} PDF(s).")
             return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=final_sections))
@@ -449,6 +449,23 @@ def clear_split(request):
     _save_state(request, {})
     messages.success(request, "Split PDF state cleared.")
     return redirect("splitpdf:form")
+
+
+def split_thumbnail(request, page_number: int):
+    state = _state(request)
+    path = state.get("pdf_path")
+    total_pages = int(state.get("total_pages") or 0)
+    if not path or not os.path.isfile(path) or page_number < 1 or page_number > total_pages:
+        raise Http404("Preview page not found")
+    data_uri = render_page_thumbnail_data_uri(path, page_number, target_width=360)
+    try:
+        import base64
+        payload = base64.b64decode(data_uri.split(",", 1)[1])
+    except (IndexError, ValueError):
+        raise Http404("Preview could not be generated")
+    response = HttpResponse(payload, content_type="image/png")
+    response["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 def download_split(request, output_id: str):

@@ -7,7 +7,7 @@ class SplitPdfForm(forms.Form):
     input_pdf = forms.FileField(
         label="Upload PDF",
         required=False,
-        help_text="Upload a PDF with an embedded table of contents.",
+        help_text="Upload a PDF first, then choose chapters or page ranges.",
         widget=forms.FileInput(attrs={"class": "form-control", "accept": "application/pdf,.pdf"}),
     )
 
@@ -20,7 +20,7 @@ class SplitPdfForm(forms.Form):
     split_mode = forms.ChoiceField(
         label="Split method",
         required=False,
-        initial="toc",
+        initial=None,
         choices=[
             ("toc", "Detect chapters / sections"),
             ("ranges", "Use page ranges"),
@@ -145,8 +145,8 @@ class SplitPdfForm(forms.Form):
         return int(value)
 
     def clean_split_mode(self):
-        value = self.cleaned_data.get("split_mode") or "toc"
-        return value if value in {"toc", "ranges"} else "toc"
+        value = self.cleaned_data.get("split_mode") or ""
+        return value if value in {"toc", "ranges"} else ""
 
     def clean_max_pages_per_split(self):
         return self.cleaned_data.get("max_pages_per_split") or 40
