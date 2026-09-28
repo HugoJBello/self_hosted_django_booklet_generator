@@ -5,6 +5,7 @@ import os
 from django.conf import settings
 
 from activity.models import Artifact
+from activity.filenames import generated_pdf_name
 
 from .models import OcrJob
 from .services import build_ocr_pipeline
@@ -33,7 +34,7 @@ def run_ocr_job(job_id: str) -> None:
         job.status = "done"
         job.save(update_fields=["output_path", "status", "updated_at"])
         if job.activity_id:
-            Artifact.objects.create(activity=job.activity, kind="output", name=os.path.basename(job.output_path), path=job.output_path, size=os.path.getsize(job.output_path))
+            Artifact.objects.create(activity=job.activity, kind="output", name=generated_pdf_name(source_names=[job.original_name], tool="ocrpdf"), path=job.output_path, size=os.path.getsize(job.output_path))
             if not job.activity.ocr_jobs.exclude(status="done").exists():
                 job.activity.status = "done"
                 job.activity.save(update_fields=["status"])

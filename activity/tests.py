@@ -7,6 +7,30 @@ from django.urls import reverse
 
 from .models import Artifact
 from .services import record_activity
+from .filenames import generated_pdf_name, portable_stem
+
+
+class GeneratedFilenameTests(TestCase):
+    def test_name_is_descriptive_portable_and_bounded(self):
+        name = generated_pdf_name(source_names=["Mi informe: revisión?.PDF"], tool="ocrpdf")
+        self.assertEqual(name, "mi-informe-revision_ocr.pdf")
+        self.assertLessEqual(len(name), 120)
+
+    def test_windows_reserved_and_duplicate_names_are_safe(self):
+        self.assertEqual(portable_stem("CON.pdf"), "document")
+        used = set()
+        first = generated_pdf_name(source_names=["report.pdf"], tool="splitpdf", detail="01 Intro.pdf", index=1, used_names=used)
+        second = generated_pdf_name(source_names=["report.pdf"], tool="splitpdf", detail="01 Intro.pdf", index=1, used_names=used)
+        self.assertEqual(first, "report_split_01_intro.pdf")
+        self.assertEqual(second, "report_split_01_intro_2.pdf")
+
+    def test_activity_storage_path_stays_unique_and_independent_from_display_name(self):
+        activity = record_activity(owner=get_user_model().objects.create_user("namer"), tool="splitpdf", title="Split", options={},
+            inputs=[{"name": "source.pdf", "path": "/tmp/source.pdf"}],
+            outputs=[{"name": "01 Same.pdf", "path": "/tmp/opaque-a.pdf"}, {"name": "01 Same.pdf", "path": "/tmp/opaque-b.pdf"}], generated_names=True)
+        artifacts = list(activity.artifacts.filter(kind="output"))
+        self.assertEqual([item.name for item in artifacts], ["source_split_01_same.pdf", "source_split_02_same.pdf"])
+        self.assertEqual([item.path for item in artifacts], ["/tmp/opaque-a.pdf", "/tmp/opaque-b.pdf"])
 
 
 class ActivitySecurityTests(TestCase):

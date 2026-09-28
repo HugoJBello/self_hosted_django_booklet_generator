@@ -96,6 +96,7 @@ def diary_view(request):
                         owner=request.user, tool="diary", title=f"Diary from {form.cleaned_data['start_date']}", options=options,
                         inputs=saved_inputs, outputs=[{"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path}],
                         restore_state={"form_initial": options},
+                        generated_names=True,
                     )
                     output_artifact = activity.artifacts.get(kind="output")
                     result_download_url = reverse("activity:file", kwargs={"public_id": output_artifact.public_id})
@@ -131,12 +132,13 @@ def download_diary(request, job_id: str):
             allowed = Artifact.objects.filter(kind="output", path=pdf_path)
             if not request.user.is_staff:
                 allowed = allowed.filter(activity__owner=request.user)
-            if not allowed.exists():
+            artifact = allowed.first()
+            if not artifact:
                 continue
             return FileResponse(
                 open(pdf_path, "rb"),
                 as_attachment=True,
-                filename=os.path.basename(pdf_path),
+                filename=artifact.name,
                 content_type="application/pdf",
             )
 

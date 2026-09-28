@@ -304,6 +304,7 @@ def booklets_view(request):
                 owner=request.user, tool="booklets", title=f"{len(items)} source PDF(s)", options=options,
                 inputs=[{"name": item.get("name"), "path": item["path"]} for item in items], outputs=generated_outputs,
                 restore_state={"session_key": SESSION_KEY, "session_value": items, "form_initial": options},
+                generated_names=True,
             )
             output_artifacts = list(activity.artifacts.filter(kind="output"))
             for result_item, artifact in zip(results, output_artifacts):
@@ -347,12 +348,13 @@ def download_booklets(request, job_id: str):
     allowed = Artifact.objects.filter(kind="output", path=pdf_path)
     if not request.user.is_staff:
         allowed = allowed.filter(activity__owner=request.user)
-    if not allowed.exists():
+    artifact = allowed.first()
+    if not artifact:
         raise Http404("File not found")
 
     return FileResponse(
         open(pdf_path, "rb"),
         as_attachment=True,
-        filename=os.path.basename(pdf_path),
+        filename=artifact.name,
         content_type="application/pdf",
     )

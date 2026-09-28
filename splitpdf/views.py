@@ -428,8 +428,10 @@ def split_view(request):
                 options=options_data, inputs=[{"name": state.get("pdf_name"), "path": state["pdf_path"]}],
                 outputs=[{"name": output.filename, "path": output.path} for output in outputs],
                 restore_state={"session_key": SESSION_KEY, "session_value": state, "form_initial": options_data},
+                generated_names=True,
             )
             for output_state, artifact in zip(state["outputs"], activity.artifacts.filter(kind="output")):
+                output_state["filename"] = artifact.name
                 output_state["download_url"] = reverse("activity:file", kwargs={"public_id": artifact.public_id})
                 output_state["preview_url"] = reverse("activity:preview", kwargs={"public_id": artifact.public_id})
                 output_state["artifact_id"] = artifact.pk

@@ -40,6 +40,7 @@ def calendar_view(request):
             activity = record_activity(
                 owner=request.user, tool="calendarpdf", title=f"Calendar from {len(saved_inputs)} timetable(s)", options={},
                 inputs=saved_inputs, outputs=[{"name": "class_calendar.pdf", "path": output_path}], restore_state={"form_initial": {}},
+                generated_names=True,
             )
             artifact = activity.artifacts.get(kind="output")
             return render(request, "calendarpdf/form.html", {

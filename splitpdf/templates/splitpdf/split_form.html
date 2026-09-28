@@ -25,6 +25,7 @@
     }
 
     .settings-panel {
+      min-width: 0;
       border: 1px solid #dee2e6;
       border-radius: 0.75rem;
       padding: 1rem;
@@ -196,6 +197,16 @@
       vertical-align: middle;
     }
 
+    .settings-panel *, .range-output-card *, .toc-entry *, .output-table * {
+      min-width: 0;
+    }
+
+    .settings-panel code, .range-output-card code, .output-table code {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
     .preview-summary {
       display: flex;
       flex-wrap: wrap;
@@ -248,6 +259,74 @@
     }
 
     @media (max-width: 767.98px) {
+      .tool-page, .tool-page > .card, .tool-page .card-body {
+        min-width: 0;
+        max-width: 100%;
+      }
+
+      .tool-page > .card > .card-body, .settings-panel {
+        padding: 0.85rem;
+      }
+
+      .upload-dropzone {
+        padding: 1rem;
+      }
+
+      .mode-option, .range-output-card {
+        padding: 0.7rem;
+      }
+
+      .toc-entry {
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding-inline: 0.55rem;
+      }
+
+      .split-responsive-table,
+      .split-responsive-table tbody,
+      .split-responsive-table tr,
+      .split-responsive-table td {
+        display: block;
+        width: 100%;
+      }
+
+      .split-responsive-table thead {
+        display: none;
+      }
+
+      .split-responsive-table tbody {
+        padding: 0.65rem;
+      }
+
+      .split-responsive-table tr {
+        border: 1px solid #dee2e6;
+        border-radius: 0.75rem;
+        margin-bottom: 0.75rem;
+        padding: 0.75rem;
+        background: #fff;
+      }
+
+      .split-responsive-table tr:last-child { margin-bottom: 0; }
+      .split-responsive-table td {
+        border: 0;
+        padding: 0.35rem 0;
+        white-space: normal !important;
+      }
+
+      .split-responsive-table td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        color: #6c757d;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        margin-bottom: .15rem;
+      }
+
+      .split-responsive-table .preview-title { min-width: 0; }
+      .split-responsive-table .preview-actions,
+      .split-responsive-table .pdf-actions { justify-content: flex-start; width: 100%; flex-wrap: wrap; }
+      .split-responsive-table .pdf-actions > * { flex: 1 1 auto; }
       .preview-actions {
         justify-content: flex-start;
       }
@@ -541,7 +620,7 @@
                   {% else %}
                     <div class="border rounded-3 overflow-hidden">
                       <div class="table-responsive">
-                        <table class="table table-sm mb-0 align-middle">
+                        <table class="table table-sm mb-0 align-middle split-responsive-table">
                           <thead class="table-light">
                             <tr>
                               <th scope="col">PDF</th>
@@ -553,7 +632,7 @@
                           <tbody>
                             {% for section in sections %}
                               <tr>
-                                <td class="text-break preview-title">
+                                <td class="text-break preview-title" data-label="PDF">
                                   <div>
                                     <span class="fw-semibold">{{ section.index }}.</span>
                                     {{ section.title }}
@@ -574,9 +653,9 @@
                                     {% endfor %}
                                   </ul>
                                 </td>
-                                <td class="text-nowrap">{{ section.start_page }}-{{ section.end_page }} · {{ section.page_count }}</td>
-                                <td class="text-break"><code>{{ section.filename }}</code></td>
-                                <td>
+                                <td class="text-nowrap" data-label="Pages">{{ section.start_page }}-{{ section.end_page }} · {{ section.page_count }}</td>
+                                <td class="text-break" data-label="Filename"><code>{{ section.filename }}</code></td>
+                                <td data-label="Actions">
                                   <div class="preview-actions">
                                     <button
                                       class="btn btn-sm btn-outline-primary"
@@ -620,7 +699,7 @@
                   </div>
                   <div class="border rounded-3 overflow-hidden">
                     <div class="table-responsive">
-                      <table class="table mb-0 output-table">
+                      <table class="table mb-0 output-table split-responsive-table">
                         <thead class="table-light">
                           <tr>
                             <th scope="col">Section</th>
@@ -632,15 +711,15 @@
                         <tbody>
                           {% for output in outputs %}
                             <tr>
-                              <td class="text-break">{{ output.title }}</td>
-                              <td class="text-nowrap">{{ output.start_page }}-{{ output.end_page }} · {{ output.page_count }}</td>
-                              <td class="text-break">
+                              <td class="text-break" data-label="Section">{{ output.title }}</td>
+                              <td class="text-nowrap" data-label="Pages">{{ output.start_page }}-{{ output.end_page }} · {{ output.page_count }}</td>
+                              <td class="text-break" data-label="Output">
                                 <code>{{ output.filename }}</code>
                                 {% if output.booklet_applied %}
                                   <span class="badge text-bg-secondary ms-2">booklet</span>
                                 {% endif %}
                               </td>
-                              <td>
+                              <td data-label="Actions">
                                 {% include "activity/pdf_actions.html" with preview_url=output.preview_url download_url=output.download_url pdf_name=output.filename artifact_id=output.artifact_id %}
                               </td>
                             </tr>

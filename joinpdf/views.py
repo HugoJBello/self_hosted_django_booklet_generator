@@ -162,6 +162,7 @@ def join_view(request):
                     inputs=[{"name": item.get("name"), "path": item["path"]} for item in items],
                     outputs=[{"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path}],
                     restore_state={"session_key": SESSION_KEY, "session_value": items, "form_initial": options},
+                    generated_names=True,
                 )
                 output_artifact = activity.artifacts.get(kind="output")
                 download_url = reverse("activity:file", kwargs={"public_id": output_artifact.public_id})
@@ -229,12 +230,13 @@ def join_download(request, job_id: str):
     allowed = Artifact.objects.filter(kind="output", path=pdf_path)
     if not request.user.is_staff:
         allowed = allowed.filter(activity__owner=request.user)
-    if not allowed.exists():
+    artifact = allowed.first()
+    if not artifact:
         raise Http404("File not found")
 
     return FileResponse(
         open(pdf_path, "rb"),
         as_attachment=True,
-        filename=os.path.basename(pdf_path),
+        filename=artifact.name,
         content_type="application/pdf",
     )

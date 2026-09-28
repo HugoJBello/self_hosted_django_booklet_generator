@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from activity.services import record_activity
+from activity.models import Artifact
 from activity.workspaces import prepare_workspace
 
 from .forms import OcrPdfForm
@@ -140,7 +141,7 @@ def ocr_status(request, job_id: str):
         "error_message": job.error_message,
     }
     if job.status == "done":
-        artifact = job.activity.artifacts.filter(kind="output", path=job.output_path).first()
+        artifact = job.activity.artifacts.filter(kind="output", path=job.output_path).first() if job.activity_id else None
         if artifact:
             payload.update({
                 "preview_url": reverse("activity:preview", kwargs={"public_id": artifact.public_id}),
@@ -164,9 +165,10 @@ def download_ocr(request, job_id: str):
     if job.status != "done" or not job.output_path or not os.path.isfile(job.output_path):
         raise Http404("File is not available yet")
 
+    artifact = Artifact.objects.filter(activity__owner=job.owner, kind="output", path=job.output_path).first()
     return FileResponse(
         open(job.output_path, "rb"),
         as_attachment=request.GET.get("preview") != "1",
-        filename=os.path.basename(job.output_path),
+        filename=artifact.name if artifact else os.path.basename(job.output_path),
         content_type="application/pdf",
     )

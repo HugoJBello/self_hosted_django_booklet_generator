@@ -7,6 +7,7 @@ from pathlib import Path
 from django.conf import settings
 
 from .models import Activity, Artifact
+from .filenames import generated_pdf_name
 
 
 def json_safe(value):
@@ -25,13 +26,19 @@ def json_safe(value):
     return str(value)
 
 
-def record_activity(*, owner, tool, title, options, inputs=(), outputs=(), restore_state=None, status="done"):
+def record_activity(*, owner, tool, title, options, inputs=(), outputs=(), restore_state=None, status="done", generated_names=False):
+    inputs, outputs = list(inputs), list(outputs)
     activity = Activity.objects.create(owner=owner, tool=tool, title=title, options=json_safe(options), restore_state=json_safe(restore_state or {}), status=status)
     artifacts = []
+    source_names = [entry.get("name") for entry in inputs]
+    used_names = set()
     for kind, entries in (("input", inputs), ("output", outputs)):
-        for entry in entries:
+        for index, entry in enumerate(entries, start=1):
             path = str(entry["path"])
-            artifacts.append(Artifact(activity=activity, kind=kind, name=str(entry.get("name") or os.path.basename(path)), path=path, content_type=str(entry.get("content_type") or "application/pdf"), size=os.path.getsize(path) if os.path.isfile(path) else 0))
+            name = str(entry.get("name") or os.path.basename(path))
+            if generated_names and kind == "output" and str(entry.get("content_type") or "application/pdf") == "application/pdf":
+                name = generated_pdf_name(source_names=source_names, tool=tool, detail=name, index=index if len(entries) > 1 else None, used_names=used_names)
+            artifacts.append(Artifact(activity=activity, kind=kind, name=name, path=path, content_type=str(entry.get("content_type") or "application/pdf"), size=os.path.getsize(path) if os.path.isfile(path) else 0))
     Artifact.objects.bulk_create(artifacts)
     return activity
 
