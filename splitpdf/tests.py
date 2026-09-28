@@ -231,10 +231,9 @@ class SplitPdfViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         preview = client.session["splitpdf_state"]["preview_sections"]
         self.assertEqual([section["title"] for section in preview], ["Pages 1-2", "Page 5"])
-        self.assertContains(response, "Page range preview")
-        self.assertContains(response, "First page")
-        self.assertContains(response, "Last page")
-        self.assertContains(response, "data:image/png;base64")
+        self.assertContains(response, "Build your output PDFs")
+        self.assertContains(response, 'id="range-list"')
+        self.assertNotContains(response, "Page range preview")
 
     def test_page_range_generate_writes_only_selected_ranges(self):
         client = self.client
@@ -270,8 +269,8 @@ class SplitPdfViewTests(TestCase):
         client.get(reverse("splitpdf:clear"))
         client.post(reverse("activity:reopen", args=[activity.pk]))
         reopened = client.get(reverse("splitpdf:form"))
-        self.assertContains(reopened, "Page range preview")
-        self.assertContains(reopened, "data:image/png;base64")
+        self.assertContains(reopened, "Build your output PDFs")
+        self.assertContains(reopened, 'value="1-2, 5"')
 
     def test_loaded_pdf_thumbnail_is_available_for_live_range_preview(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -279,11 +278,16 @@ class SplitPdfViewTests(TestCase):
             _create_pdf(source_path, page_count=2)
             with open(source_path, "rb") as source:
                 upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
-            self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+            loaded = self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
             response = self.client.get(reverse("splitpdf:thumbnail", args=[1]))
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response["Content-Type"], "image/png")
             self.assertEqual(self.client.get(reverse("splitpdf:thumbnail", args=[3])).status_code, 404)
+
+            preview = reverse("activity:workspace_preview", args=["splitpdf", "source"])
+            self.assertContains(loaded, preview)
+            self.assertEqual(self.client.get(f"{preview}info/").json()["pages"], 2)
+            self.assertEqual(self.client.get(f"{preview}page/1/")["Content-Type"], "image/jpeg")
 
     def test_preview_section_can_be_split_from_view(self):
         client = self.client

@@ -8,6 +8,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from .models import Activity, Artifact
 from .selectors import accessible_activity
+from .workspace_files import workspace_pdf
 
 TOOL_URLS = {"booklets": "booklets:form", "joinpdf": "joinpdf:form", "splitpdf": "splitpdf:form", "ocrpdf": "ocrpdf:form", "diary": "diary:form", "calendarpdf": "calendarpdf:form"}
 
@@ -90,8 +91,12 @@ def artifact_preview_info(request, public_id):
 
 def artifact_preview_page(request, public_id, page_number):
     artifact = accessible_artifact(request, public_id)
+    return _pdf_page_response(artifact.path, page_number)
+
+
+def _pdf_page_response(path, page_number):
     try:
-        with fitz.open(artifact.path) as document:
+        with fitz.open(path) as document:
             if page_number < 1 or page_number > document.page_count:
                 raise Http404("PDF page does not exist")
             page = document.load_page(page_number - 1)
@@ -102,3 +107,28 @@ def artifact_preview_page(request, public_id, page_number):
             return response
     except (fitz.FileDataError, OSError) as exc:
         raise Http404("PDF cannot be opened") from exc
+
+
+def workspace_preview(request, tool, file_id):
+    source = workspace_pdf(request, tool, file_id)
+    if not source:
+        raise Http404("PDF is no longer available")
+    return FileResponse(open(source["path"], "rb"), as_attachment=False, filename=source["name"], content_type="application/pdf")
+
+
+def workspace_preview_info(request, tool, file_id):
+    source = workspace_pdf(request, tool, file_id)
+    if not source:
+        raise Http404("PDF is no longer available")
+    try:
+        with fitz.open(source["path"]) as document:
+            return JsonResponse({"name": source["name"], "pages": document.page_count})
+    except (fitz.FileDataError, OSError) as exc:
+        raise Http404("PDF cannot be opened") from exc
+
+
+def workspace_preview_page(request, tool, file_id, page_number):
+    source = workspace_pdf(request, tool, file_id)
+    if not source:
+        raise Http404("PDF is no longer available")
+    return _pdf_page_response(source["path"], page_number)

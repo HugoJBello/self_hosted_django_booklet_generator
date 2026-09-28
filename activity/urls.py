@@ -11,4 +11,7 @@ urlpatterns = [
     path("file/<uuid:public_id>/preview/", views.artifact_preview, name="preview"),
     path("file/<uuid:public_id>/preview/info/", views.artifact_preview_info, name="preview_info"),
     path("file/<uuid:public_id>/preview/page/<int:page_number>/", views.artifact_preview_page, name="preview_page"),
+    path("workspace/<str:tool>/<str:file_id>/preview/", views.workspace_preview, name="workspace_preview"),
+    path("workspace/<str:tool>/<str:file_id>/preview/info/", views.workspace_preview_info, name="workspace_preview_info"),
+    path("workspace/<str:tool>/<str:file_id>/preview/page/<int:page_number>/", views.workspace_preview_page, name="workspace_preview_page"),
 ]

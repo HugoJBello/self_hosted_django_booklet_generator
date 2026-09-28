@@ -13,9 +13,14 @@
       <div class="d-flex flex-wrap gap-2 mt-3">
         {% for artifact in artifacts %}
           {% if artifact.kind == 'input' %}
-            <a class="btn btn-sm btn-outline-secondary text-break" href="{% url 'activity:file' artifact.public_id %}" title="Download original input">
-              <i class="bi bi-download me-1"></i>{{ artifact.name }}
-            </a>
+            {% if artifact.content_type == 'application/pdf' %}
+              <div class="btn-group btn-group-sm" role="group" aria-label="Actions for {{ artifact.name }}">
+                <button class="btn btn-outline-primary pdf-preview-trigger" type="button" data-pdf-preview="{% url 'activity:preview' artifact.public_id %}" data-pdf-download="{% url 'activity:file' artifact.public_id %}" data-pdf-name="{{ artifact.name }}"><i class="bi bi-eye me-1"></i>{{ artifact.name }}</button>
+                <a class="btn btn-outline-secondary" href="{% url 'activity:file' artifact.public_id %}" title="Download original input"><i class="bi bi-download"></i></a>
+              </div>
+            {% else %}
+              <a class="btn btn-sm btn-outline-secondary text-break" href="{% url 'activity:file' artifact.public_id %}" title="Download original input"><i class="bi bi-download me-1"></i>{{ artifact.name }}</a>
+            {% endif %}
           {% endif %}
         {% endfor %}
       </div>

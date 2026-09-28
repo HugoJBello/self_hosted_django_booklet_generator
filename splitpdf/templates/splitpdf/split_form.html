@@ -86,82 +86,12 @@
       gap: 0.75rem;
     }
 
-    .range-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-      gap: 0.5rem;
-      align-items: end;
-      padding: 0.75rem;
-      border: 1px solid #dee2e6;
-      border-radius: 0.5rem;
-      background: #f8f9fa;
-    }
-
-    .range-preview-list {
-      display: grid;
-      gap: 0.5rem;
-      margin-top: 0.75rem;
-    }
-
-    .range-preview-item {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 0.5rem;
-      padding: 0.5rem 0.75rem;
-      border: 1px solid #e9ecef;
-      border-radius: 0.5rem;
-      background: #fff;
-    }
-
-    .range-output-grid {
-      display: grid;
-      gap: 0.75rem;
-    }
-
-    .range-output-card {
-      border: 1px solid #dee2e6;
-      border-radius: 0.75rem;
-      background: #fff;
-      padding: 0.9rem;
-    }
-
-    .range-output-head {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 0.75rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .range-output-pages {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .range-output-metric {
-      border: 1px solid #e9ecef;
-      border-radius: 0.5rem;
-      background: #f8f9fa;
-      padding: 0.55rem 0.65rem;
-    }
-
-    .range-output-label {
-      display: block;
-      color: #6c757d;
-      font-size: 0.76rem;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .range-output-value {
-      display: block;
-      font-weight: 700;
-      line-height: 1.25;
-    }
-
+    .range-row { padding: 1rem; border: 1px solid #dee2e6; border-radius: .75rem; background: #fff; }
+    .range-row.is-valid { border-color: #9ec5fe; box-shadow: 0 0 0 .15rem #0d6efd12; }
+    .range-row.is-invalid { border-color: #f1aeb5; }
+    .range-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .65rem; align-items: end; }
+    .range-arrow { padding-bottom: .6rem; color: #6c757d; }
+    .range-live-preview { margin-top: .85rem; }
     .range-thumbnail-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -197,11 +127,11 @@
       vertical-align: middle;
     }
 
-    .settings-panel *, .range-output-card *, .toc-entry *, .output-table * {
+    .settings-panel *, .toc-entry *, .output-table * {
       min-width: 0;
     }
 
-    .settings-panel code, .range-output-card code, .output-table code {
+    .settings-panel code, .output-table code {
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: break-word;
@@ -272,7 +202,7 @@
         padding: 1rem;
       }
 
-      .mode-option, .range-output-card {
+      .mode-option {
         padding: 0.7rem;
       }
 
@@ -340,12 +270,11 @@
       }
 
       .range-row {
-        grid-template-columns: 1fr;
+        padding: .8rem;
       }
 
-      .range-output-pages {
-        grid-template-columns: 1fr;
-      }
+      .range-fields { grid-template-columns: 1fr; }
+      .range-arrow { display: none; }
 
       .range-thumbnail-grid {
         grid-template-columns: 1fr;
@@ -392,11 +321,10 @@
                   <div class="fw-semibold text-break">{{ pdf_name }}</div>
                   <div class="text-muted small">{{ total_pages }} pages · {{ toc_entries|length }} table-of-contents entries</div>
                 </div>
-                {% if split_mode == "toc" and selected_level %}
-                  <span class="badge text-bg-primary align-self-start">Current split level: {{ selected_level }}</span>
-                {% elif split_mode == "ranges" %}
-                  <span class="badge text-bg-primary align-self-start">Page ranges mode</span>
-                {% endif %}
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  <button class="btn btn-sm btn-outline-primary pdf-preview-trigger" type="button" data-pdf-preview="{% url 'activity:workspace_preview' 'splitpdf' 'source' %}" data-pdf-name="{{ pdf_name }}"><i class="bi bi-eye me-1"></i>Preview source</button>
+                  {% if split_mode == "toc" and selected_level %}<span class="badge text-bg-primary">Current split level: {{ selected_level }}</span>{% elif split_mode == "ranges" %}<span class="badge text-bg-primary">Page ranges mode</span>{% endif %}
+                </div>
               </div>
 
               <div class="settings-grid mb-4">
@@ -431,20 +359,23 @@
 
                   <div id="range-settings">
                     {{ form.page_ranges }}
-                    <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                       <div>
-                        <div class="fw-semibold">Page ranges</div>
-                        <div class="text-muted small">Each row becomes one generated PDF before optional booklet processing.</div>
+                        <div class="fw-semibold">Build your output PDFs</div>
+                        <div class="text-muted small">Add a card for each PDF. Its result updates immediately as you type.</div>
                       </div>
-                      <button class="btn btn-sm btn-outline-primary" type="button" id="add-range-row">Add range</button>
+                      <button class="btn btn-sm btn-primary" type="button" id="add-range-row"><i class="bi bi-plus-lg me-1"></i>Add PDF range</button>
                     </div>
                     <div class="range-list" id="range-list"></div>
-                    <div class="range-preview-list" id="range-preview-list"></div>
-                    <div class="form-text mt-2">PDF has {{ total_pages }} pages. Ranges can overlap if you intentionally need duplicate pages in different outputs.</div>
+                    <div class="d-flex flex-wrap gap-2 mt-3" aria-live="polite">
+                      <span class="badge text-bg-primary" id="range-pdf-count">0 PDFs</span>
+                      <span class="badge text-bg-light border" id="range-page-count">0 source pages</span>
+                      <span class="text-muted small">Source has {{ total_pages }} pages. Overlapping ranges are allowed.</span>
+                    </div>
                   </div>
 
                   <div class="d-flex flex-wrap gap-2 mt-3">
-                    <button class="btn btn-outline-primary" type="submit" data-action="preview">Start / refresh preview</button>
+                    <button class="btn btn-outline-primary" id="refresh-preview" type="submit" data-action="preview">Start / refresh preview</button>
                     <button class="btn btn-success" type="submit" data-action="generate">Generate PDFs</button>
                   </div>
                 </section>
@@ -543,7 +474,7 @@
                 </section>
               </div>
 
-              {% if split_mode %}<div class="settings-grid mb-4">
+              {% if split_mode == "toc" %}<div class="settings-grid mb-4">
                 <section id="toc-map-panel">
                   <h2 class="h5 mb-2">Contents map</h2>
                   <div class="toc-map">
@@ -560,66 +491,12 @@
                 </section>
 
                 <section>
-                  <h2 class="h5 mb-2">{% if split_mode == "ranges" %}Page range preview{% else %}Editable split preview{% endif %}</h2>
+                  <h2 class="h5 mb-2">Editable split preview</h2>
                   <div class="preview-summary">
                     <span class="badge text-bg-primary">{{ section_count }} PDFs</span>
                     <span class="badge text-bg-light border">{{ final_page_count }} source pages</span>
-                    <span class="text-muted small">
-                      {% if split_mode == "ranges" %}
-                        Each row below will be generated as an independent PDF.
-                      {% else %}
-                        Split a section into its next TOC level or merge it with the next output.
-                      {% endif %}
-                    </span>
+                    <span class="text-muted small">Split a section into its next TOC level or merge it with the next output.</span>
                   </div>
-                  {% if split_mode == "ranges" %}
-                    <div class="range-output-grid">
-                      {% for section in sections %}
-                        <article class="range-output-card">
-                          <div class="range-output-head">
-                            <div>
-                              <div class="fw-semibold">PDF {{ section.index }} · {{ section.title }}</div>
-                              <div class="text-muted small">Only this page range will be included in this output PDF.</div>
-                            </div>
-                            <span class="badge text-bg-primary align-self-start">{{ section.page_count }} page{{ section.page_count|pluralize }}</span>
-                          </div>
-                          <div class="range-output-pages">
-                            <div class="range-output-metric">
-                              <span class="range-output-label">First page</span>
-                              <span class="range-output-value">{{ section.start_page }}</span>
-                            </div>
-                            <div class="range-output-metric">
-                              <span class="range-output-label">Last page</span>
-                              <span class="range-output-value">{{ section.end_page }}</span>
-                            </div>
-                            <div class="range-output-metric">
-                              <span class="range-output-label">Included pages</span>
-                              <span class="range-output-value">{{ section.start_page }}-{{ section.end_page }}</span>
-                            </div>
-                          </div>
-                          <div class="range-thumbnail-grid">
-                            <div class="range-thumbnail">
-                              {% if section.first_page_thumbnail %}
-                                <img src="{{ section.first_page_thumbnail }}" alt="Preview of first page {{ section.start_page }}">
-                              {% endif %}
-                              <div class="range-thumbnail-caption">First page · {{ section.start_page }}</div>
-                            </div>
-                            <div class="range-thumbnail">
-                              {% if section.last_page_thumbnail %}
-                                <img src="{{ section.last_page_thumbnail }}" alt="Preview of last page {{ section.end_page }}">
-                              {% endif %}
-                              <div class="range-thumbnail-caption">Last page · {{ section.end_page }}</div>
-                            </div>
-                          </div>
-                          <div class="text-break small">
-                            Output filename: <code>{{ section.filename }}</code>
-                          </div>
-                        </article>
-                      {% empty %}
-                        <div class="text-muted border rounded-3 p-3">No page ranges are ready. Add at least one valid range and refresh the preview.</div>
-                      {% endfor %}
-                    </div>
-                  {% else %}
                     <div class="border rounded-3 overflow-hidden">
                       <div class="table-responsive">
                         <table class="table table-sm mb-0 align-middle split-responsive-table">
@@ -689,7 +566,6 @@
                         </table>
                       </div>
                     </div>
-                  {% endif %}
                 </section>
               </div>{% endif %}
 
@@ -759,8 +635,10 @@
       const tocMapPanel = document.getElementById("toc-map-panel");
       const pageRangesInput = form.querySelector('input[name="page_ranges"]');
       const rangeList = document.getElementById("range-list");
-      const rangePreviewList = document.getElementById("range-preview-list");
       const addRangeRowButton = document.getElementById("add-range-row");
+      const rangePdfCount = document.getElementById("range-pdf-count");
+      const rangePageCount = document.getElementById("range-page-count");
+      const refreshPreview = document.getElementById("refresh-preview");
       const selectedLevel = form.querySelector('select[name="selected_level"]');
       const methodPrompt = document.getElementById("method-prompt");
       const totalPages = Number("{{ total_pages|default:'0' }}");
@@ -810,15 +688,16 @@
         const row = document.createElement("div");
         row.className = "range-row";
         row.innerHTML = `
-          <div>
-            <label class="form-label">First page</label>
-            <input type="number" class="form-control range-start" min="1" max="${totalPages || ""}" value="${start}">
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div><strong class="range-title">PDF</strong><div class="small text-muted range-description">Choose its first and last page</div></div>
+            <button type="button" class="btn btn-sm btn-outline-danger remove-range" aria-label="Remove this PDF range"><i class="bi bi-trash"></i></button>
           </div>
-          <div>
-            <label class="form-label">Last page</label>
-            <input type="number" class="form-control range-end" min="1" max="${totalPages || ""}" value="${end}">
+          <div class="range-fields">
+            <div><label class="form-label small fw-semibold">Starts at page</label><input type="number" class="form-control range-start" min="1" max="${totalPages || ""}" value="${start}" inputmode="numeric"></div>
+            <i class="bi bi-arrow-right range-arrow" aria-hidden="true"></i>
+            <div><label class="form-label small fw-semibold">Ends at page</label><input type="number" class="form-control range-end" min="1" max="${totalPages || ""}" value="${end}" inputmode="numeric"></div>
           </div>
-          <button type="button" class="btn btn-outline-danger remove-range">Remove</button>
+          <div class="range-live-preview"></div>
         `;
         row.querySelectorAll("input").forEach((input) => input.addEventListener("input", syncRangesFromRows));
         row.querySelector(".remove-range").addEventListener("click", () => {
@@ -832,21 +711,26 @@
       };
 
       const syncRangePreview = (ranges) => {
-        if (!rangePreviewList) {
-          return;
-        }
-        rangePreviewList.innerHTML = "";
-        ranges.forEach((range, index) => {
+        let validCount = 0;
+        let includedPages = 0;
+        Array.from(rangeList.querySelectorAll(".range-row")).forEach((item, index) => {
+          const range = ranges[index];
           const start = Number(range.start);
           const end = Number(range.end);
-          const item = document.createElement("div");
-          item.className = "range-output-card";
           const valid = Number.isInteger(start) && Number.isInteger(end) && start >= 1 && end >= start && (!totalPages || end <= totalPages);
           const pageCount = valid ? end - start + 1 : 0;
           const pageImage = page => thumbnailUrl.replace("999999", String(page));
-          item.innerHTML = `<div class="range-output-head"><div><strong>PDF ${index + 1}</strong><div class="small text-muted">Pages ${range.start || "?"}-${range.end || "?"}</div></div><span class="badge ${valid ? "text-bg-primary" : "text-bg-danger"}">${valid ? `${pageCount} page${pageCount === 1 ? "" : "s"}` : "Invalid range"}</span></div>${valid ? `<div class="range-thumbnail-grid mb-0"><div class="range-thumbnail"><img loading="lazy" src="${pageImage(start)}" alt="First page ${start}"><div class="range-thumbnail-caption">First page · ${start}</div></div><div class="range-thumbnail"><img loading="lazy" src="${pageImage(end)}" alt="Last page ${end}"><div class="range-thumbnail-caption">Last page · ${end}</div></div></div>` : `<div class="small text-danger">Use page numbers between 1 and ${totalPages}, with the last page equal to or after the first.</div>`}`;
-          rangePreviewList.appendChild(item);
+          item.classList.toggle("is-valid", valid);
+          item.classList.toggle("is-invalid", !valid && Boolean(range.start || range.end));
+          item.querySelector(".range-title").textContent = `PDF ${index + 1}`;
+          item.querySelector(".range-description").textContent = valid ? `Pages ${start}-${end} · ${pageCount} page${pageCount === 1 ? "" : "s"}` : "Choose its first and last page";
+          item.querySelector(".range-live-preview").innerHTML = valid
+            ? `<div class="range-thumbnail-grid mb-0"><div class="range-thumbnail"><img loading="lazy" src="${pageImage(start)}" alt="First page ${start}"><div class="range-thumbnail-caption">Starts · page ${start}</div></div><div class="range-thumbnail"><img loading="lazy" src="${pageImage(end)}" alt="Last page ${end}"><div class="range-thumbnail-caption">Ends · page ${end}</div></div></div>`
+            : `<div class="small ${range.start || range.end ? "text-danger" : "text-muted"}">${range.start || range.end ? `Use pages 1-${totalPages}, and make the end equal to or greater than the start.` : "Enter a range to see its first and last pages here."}</div>`;
+          if (valid) { validCount += 1; includedPages += pageCount; }
         });
+        if (rangePdfCount) rangePdfCount.textContent = `${validCount} PDF${validCount === 1 ? "" : "s"}`;
+        if (rangePageCount) rangePageCount.textContent = `${includedPages} source page${includedPages === 1 ? "" : "s"}`;
       };
 
       function syncRangesFromRows() {
@@ -896,6 +780,7 @@
           selectedLevel.disabled = !usingToc;
         }
         if (methodPrompt) methodPrompt.style.display = mode ? "none" : "";
+        if (refreshPreview) refreshPreview.style.display = usingToc ? "" : "none";
       };
 
       if (dropzone && fileInput) {

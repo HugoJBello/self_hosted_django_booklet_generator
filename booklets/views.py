@@ -155,17 +155,18 @@ def _specs_from_items(items: list[dict], margin_cm: float) -> list[SourcePdfSpec
 
 
 def _items_for_template(items: list[dict]) -> list[dict]:
-    return [
-        {
+    template_items = []
+    for index, item in enumerate(items):
+        template_items.append({
             "id": item.get("id", ""),
             "name": item.get("name", os.path.basename(item.get("path", ""))),
             "size": item.get("size", 0),
             "parity": "true" if item.get("same_page_parity", True) else "false",
             "margin": str(item.get("margin_cm", 1.0)),
             "watermark": bool(item.get("add_watermark", False)),
-        }
-        for item in items
-    ]
+            "preview_url": reverse("activity:workspace_preview", kwargs={"tool": "booklets", "file_id": item.get("id") or str(index)}),
+        })
+    return template_items
 
     return specs
 

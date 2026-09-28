@@ -306,7 +306,10 @@
                         <div class="text-muted small file-meta"></div>
                       </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger remove-file">Remove</button>
+                    <div class="btn-group btn-group-sm">
+                      <button type="button" class="btn btn-outline-primary preview-source"><i class="bi bi-eye me-1"></i>Preview</button>
+                      <button type="button" class="btn btn-outline-danger remove-file">Remove</button>
+                    </div>
                   </div>
 
                   <div class="row g-3">
@@ -412,6 +415,12 @@
           card.querySelector(".parity-select").value = item.parity;
           card.querySelector(".margin-input").value = item.margin;
           card.querySelector(".watermark-input").checked = item.watermark;
+          const sourcePreview = card.querySelector(".preview-source");
+          sourcePreview.classList.add("pdf-preview-trigger");
+          if (item.file && !item.preview_url) item.preview_url = URL.createObjectURL(item.file);
+          sourcePreview.dataset.pdfPreview = item.preview_url;
+          sourcePreview.dataset.pdfDownload = sourcePreview.dataset.pdfPreview;
+          sourcePreview.dataset.pdfName = fileName;
 
           card.querySelector(".remove-file").addEventListener("click", () => {
             selectedItems.splice(index, 1);
