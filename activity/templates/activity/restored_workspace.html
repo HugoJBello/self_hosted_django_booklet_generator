@@ -1,0 +1,26 @@
+{% if reopened_activity %}
+<section class="tool-page card shadow-sm border-primary-subtle mb-4 mx-auto" aria-labelledby="restored-workspace-title">
+  <div class="card-body p-3 p-md-4">
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+      <div>
+        <div class="small text-primary fw-semibold text-uppercase"><i class="bi bi-arrow-counterclockwise me-1"></i>Restored from activity</div>
+        <h2 class="h5 mb-1" id="restored-workspace-title">{{ reopened_activity.title }}</h2>
+        <div class="small text-muted">{{ reopened_activity.created_at|date:"d/m/Y H:i" }} · options and original file references restored</div>
+      </div>
+      {% include "activity/artifact_group_button.html" with item=reopened_activity %}
+    </div>
+    {% with artifacts=reopened_activity.artifacts.all %}
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        {% for artifact in artifacts %}
+          {% if artifact.kind == 'input' %}
+            <a class="btn btn-sm btn-outline-secondary text-break" href="{% url 'activity:file' artifact.public_id %}" title="Download original input">
+              <i class="bi bi-download me-1"></i>{{ artifact.name }}
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endwith %}
+    <p class="small text-muted mb-0 mt-3">Download any original above. To replace inputs for a new run, select or add files in the controls below; editable lists can also be reordered or cleared. The historic activity remains unchanged.</p>
+  </div>
+</section>
+{% endif %}

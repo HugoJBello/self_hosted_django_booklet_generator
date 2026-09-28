@@ -15,4 +15,7 @@ def recent_activity(request):
     activities = Activity.objects.filter(owner=request.user, tool=tool).annotate(
         output_pdf_count=Count("artifacts", filter=Q(artifacts__kind="output", artifacts__content_type="application/pdf")),
     )[:5]
-    return {"recent_tool_activities": activities, "current_activity_tool": tool}
+    reopened = getattr(request, "reopened_activity", None)
+    if reopened:
+        reopened.output_pdf_count = sum(1 for artifact in reopened.artifacts.all() if artifact.kind == "output" and artifact.content_type == "application/pdf")
+    return {"recent_tool_activities": activities, "current_activity_tool": tool, "reopened_activity": reopened}

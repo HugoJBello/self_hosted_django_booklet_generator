@@ -127,6 +127,27 @@ class ActivitySecurityTests(TestCase):
         self.assertNotContains(fresh, os.path.basename(self.path))
         self.assertNotIn("booklets_items", self.client.session)
 
+    def test_every_tool_shows_restored_inputs_and_results_on_reopen(self):
+        routes = {
+            "booklets": "booklets:form", "joinpdf": "joinpdf:form", "splitpdf": "splitpdf:form",
+            "ocrpdf": "ocrpdf:form", "diary": "diary:form", "calendarpdf": "calendarpdf:form",
+        }
+        for tool, route in routes.items():
+            activity = record_activity(
+                owner=self.owner, tool=tool, title=f"Restore {tool}", options={},
+                inputs=[{"name": f"{tool}-source.pdf", "path": self.path}],
+                outputs=[{"name": f"{tool}-result.pdf", "path": self.path}],
+                restore_state={"form_initial": {}},
+            )
+            self.client.force_login(self.owner)
+            self.client.post(reverse("activity:reopen", args=[activity.pk]))
+            response = self.client.get(reverse(route))
+            self.assertContains(response, "Restored from activity")
+            self.assertContains(response, f"{tool}-source.pdf")
+            source = activity.artifacts.get(kind="input")
+            self.assertContains(response, reverse("activity:file", args=[source.public_id]))
+            self.assertContains(response, "1 PDF")
+
     def test_reopen_requires_post(self):
         self.client.force_login(self.owner)
         self.assertEqual(self.client.get(reverse("activity:reopen", args=[self.activity.pk])).status_code, 405)

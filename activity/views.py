@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from .models import Activity, Artifact
+from .selectors import accessible_activity
 
 TOOL_URLS = {"booklets": "booklets:form", "joinpdf": "joinpdf:form", "splitpdf": "splitpdf:form", "ocrpdf": "ocrpdf:form", "diary": "diary:form", "calendarpdf": "calendarpdf:form"}
 
@@ -21,13 +22,6 @@ def accessible_artifact(request, public_id):
     return artifact
 
 
-def accessible_activity(request, activity_id):
-    queryset = Activity.objects.select_related("owner").prefetch_related("artifacts")
-    if not request.user.is_staff:
-        queryset = queryset.filter(owner=request.user)
-    return get_object_or_404(queryset, pk=activity_id)
-
-
 def activity_list(request):
     activities = Activity.objects.select_related("owner").annotate(
         output_pdf_count=Count("artifacts", filter=Q(artifacts__kind="output", artifacts__content_type="application/pdf")),
@@ -39,13 +33,13 @@ def activity_list(request):
 
 
 def activity_detail(request, activity_id):
-    activity = accessible_activity(request, activity_id)
+    activity = accessible_activity(request.user, activity_id)
     activity.output_pdf_count = activity.artifacts.filter(kind="output", content_type="application/pdf").count()
     return render(request, "activity/detail.html", {"activity": activity})
 
 
 def activity_outputs(request, activity_id):
-    activity = accessible_activity(request, activity_id)
+    activity = accessible_activity(request.user, activity_id)
     outputs = activity.artifacts.filter(kind="output", content_type="application/pdf")
     return JsonResponse({"activity": activity.title, "tool": activity.get_tool_display(), "files": [
         {"name": artifact.name, "size": artifact.size,
@@ -59,12 +53,13 @@ def activity_outputs(request, activity_id):
 def activity_reopen(request, activity_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
-    activity = accessible_activity(request, activity_id)
+    activity = accessible_activity(request.user, activity_id)
     state = activity.restore_state
     if state.get("session_key"):
         request.session[state["session_key"]] = state.get("session_value", {})
     request.session[f"activity_initial_{activity.tool}"] = state.get("form_initial", activity.options)
     request.session["activity_reopen_tool"] = activity.tool
+    request.session["activity_reopen_id"] = activity.pk
     return redirect(TOOL_URLS[activity.tool])
 
 

@@ -88,6 +88,7 @@
 <main class="container-xl py-4 py-md-5">
   {% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }} alert-dismissible fade show" role="alert">{{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endfor %}{% endif %}
   {% if recent_tool_activities %}{% include "activity/recent.html" %}{% endif %}
+  {% include "activity/restored_workspace.html" %}
   {% block content %}{% endblock %}
 </main>
 {% if request.user.is_authenticated %}{% include "activity/pdf_preview_modal.html" %}{% include "activity/output_selector_modal.html" %}{% endif %}
