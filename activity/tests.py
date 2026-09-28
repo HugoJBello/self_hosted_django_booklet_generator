@@ -40,6 +40,24 @@ class ActivitySecurityTests(TestCase):
         self.assertEqual(self.client.get(reverse("activity:detail", args=[self.activity.pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse("activity:file", args=[self.artifact.public_id])).status_code, 404)
         self.assertEqual(self.client.post(reverse("activity:reopen", args=[self.activity.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("activity:outputs", args=[self.activity.pk])).status_code, 404)
+
+    def test_output_selector_returns_only_output_pdfs(self):
+        Artifact.objects.create(activity=self.activity, kind="input", name="source.pdf", path=self.path, content_type="application/pdf", size=10)
+        Artifact.objects.create(activity=self.activity, kind="output", name="notes.txt", path=self.path, content_type="text/plain", size=10)
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("activity:outputs", args=[self.activity.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["name"] for item in response.json()["files"]], ["private.pdf"])
+
+    def test_recent_activity_groups_multiple_outputs(self):
+        for number in range(4):
+            Artifact.objects.create(activity=self.activity, kind="output", name=f"section-{number}.pdf", path=self.path, content_type="application/pdf", size=10)
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("booklets:form"))
+        self.assertContains(response, "5 PDFs")
+        self.assertContains(response, reverse("activity:outputs", args=[self.activity.pk]))
+        self.assertNotContains(response, "Preview section-0.pdf")
 
     def test_admin_can_audit_everything(self):
         self.client.force_login(self.admin)

@@ -1,5 +1,6 @@
 import os
 import fitz
+from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -28,14 +29,31 @@ def accessible_activity(request, activity_id):
 
 
 def activity_list(request):
-    activities = Activity.objects.select_related("owner").prefetch_related("artifacts")
+    activities = Activity.objects.select_related("owner").annotate(
+        output_pdf_count=Count("artifacts", filter=Q(artifacts__kind="output", artifacts__content_type="application/pdf")),
+        artifact_count=Count("artifacts", distinct=True),
+    )
     if not request.user.is_staff:
         activities = activities.filter(owner=request.user)
     return render(request, "activity/list.html", {"activities": activities[:250]})
 
 
 def activity_detail(request, activity_id):
-    return render(request, "activity/detail.html", {"activity": accessible_activity(request, activity_id)})
+    activity = accessible_activity(request, activity_id)
+    activity.output_pdf_count = activity.artifacts.filter(kind="output", content_type="application/pdf").count()
+    return render(request, "activity/detail.html", {"activity": activity})
+
+
+def activity_outputs(request, activity_id):
+    activity = accessible_activity(request, activity_id)
+    outputs = activity.artifacts.filter(kind="output", content_type="application/pdf")
+    return JsonResponse({"activity": activity.title, "tool": activity.get_tool_display(), "files": [
+        {"name": artifact.name, "size": artifact.size,
+         "preview_url": reverse("activity:preview", args=[artifact.public_id]),
+         "download_url": reverse("activity:file", args=[artifact.public_id]),
+         "print_url": f'{reverse("printmanager:print")}?artifact={artifact.pk}'}
+        for artifact in outputs
+    ]})
 
 
 def activity_reopen(request, activity_id):

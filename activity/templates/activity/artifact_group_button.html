@@ -1,0 +1,1 @@
+{% if item.output_pdf_count %}<button class="btn btn-outline-secondary activity-output-selector text-nowrap" type="button" data-activity-outputs="{% url 'activity:outputs' item.pk %}" data-activity-title="{{ item.title }}"><i class="bi bi-collection me-1"></i>{{ item.output_pdf_count }} PDF{{ item.output_pdf_count|pluralize }}</button>{% endif %}

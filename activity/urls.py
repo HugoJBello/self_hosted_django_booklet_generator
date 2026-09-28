@@ -3,6 +3,7 @@ from . import views
 
 app_name = "activity"
 urlpatterns = [
+    path("<int:activity_id>/outputs/", views.activity_outputs, name="outputs"),
     path("", views.activity_list, name="list"),
     path("<int:activity_id>/", views.activity_detail, name="detail"),
     path("<int:activity_id>/reopen/", views.activity_reopen, name="reopen"),
