@@ -1,25 +1,130 @@
 <script>
 (() => {
-  const inputs = Array.from(document.querySelectorAll('input[type="file"][multiple]'));
-  inputs.forEach((input) => {
+  document.querySelectorAll('input[type="file"][multiple]').forEach((input) => {
     const form = input.closest("form");
-    const selection = form?.querySelector("[data-file-selection]");
+    const queue = form?.querySelector("[data-upload-list]");
+    const localList = form?.querySelector("[data-local-file-list]");
+    const count = form?.querySelector("[data-upload-count]");
+    const empty = form?.querySelector("[data-upload-empty]");
+    const clientError = form?.querySelector("[data-upload-client-error]");
     const dropzone = form?.querySelector("[data-file-dropzone]");
-    let selectedFiles = Array.from(input.files);
+    if (!queue || !localList) return;
 
-    const appendFiles = (incoming) => {
-      selectedFiles = [...selectedFiles, ...Array.from(incoming)];
-      const transfer = new DataTransfer();
-      selectedFiles.forEach((file) => transfer.items.add(file));
-      input.files = transfer.files;
-      if (selection) {
-        selection.textContent = selectedFiles.length
-          ? `${selectedFiles.length} file(s) selected: ${selectedFiles.map((file) => file.name).join(" · ")}`
-          : "";
-      }
+    let localFiles = [];
+    let nextId = 0;
+
+    const totalCount = () => queue.querySelectorAll("[data-staged-upload]").length + localFiles.length;
+    const updateCount = () => {
+      const total = totalCount();
+      if (count) count.textContent = `${total} selected`;
+      if (empty) empty.hidden = total > 0;
     };
 
-    input.addEventListener("change", () => appendFiles(input.files));
+    const syncInputFiles = () => {
+      const transfer = new DataTransfer();
+      localFiles.forEach(({ file }) => transfer.items.add(file));
+      input.files = transfer.files;
+      updateCount();
+    };
+
+    const renderLocalFiles = () => {
+      localList.replaceChildren();
+      localFiles.forEach(({ id, file, previewUrl }) => {
+        const column = document.createElement("div");
+        column.className = "col-12 col-sm-6 col-lg-4";
+        const card = document.createElement("div");
+        card.className = "d-flex align-items-center gap-2 border rounded-3 p-2 h-100 bg-white";
+        if (previewUrl) {
+          const image = document.createElement("img");
+          image.src = previewUrl;
+          image.alt = `Preview of ${file.name}`;
+          image.className = "timetable-local-preview flex-shrink-0";
+          card.append(image);
+        } else {
+          const icon = document.createElement("div");
+          icon.className = "timetable-file-placeholder flex-shrink-0 d-flex align-items-center justify-content-center text-danger";
+          icon.innerHTML = '<i class="bi bi-file-earmark-pdf fs-3" aria-hidden="true"></i>';
+          card.append(icon);
+        }
+
+        const details = document.createElement("div");
+        details.className = "min-w-0 flex-grow-1";
+        const name = document.createElement("div");
+        name.className = "small fw-semibold text-truncate";
+        name.textContent = file.name;
+        name.title = file.name;
+        const size = document.createElement("div");
+        size.className = "text-muted small";
+        size.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+        details.append(name, size);
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "btn btn-sm btn-outline-secondary";
+        remove.setAttribute("aria-label", `Remove ${file.name}`);
+        remove.title = "Remove file";
+        remove.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+        remove.addEventListener("click", () => {
+          const removed = localFiles.find((item) => item.id === id);
+          if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+          localFiles = localFiles.filter((item) => item.id !== id);
+          if (clientError) clientError.hidden = true;
+          renderLocalFiles();
+          syncInputFiles();
+        });
+        card.append(details, remove);
+        column.append(card);
+        localList.append(column);
+      });
+      updateCount();
+    };
+
+    const addFiles = (files) => {
+      const incoming = Array.from(files);
+      const allowedSuffixes = [".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".pdf"];
+      const oversized = incoming.find((file) => file.size > 25 * 1024 * 1024);
+      const unsupported = incoming.find((file) => !allowedSuffixes.some((suffix) => file.name.toLowerCase().endsWith(suffix)));
+      if (totalCount() + incoming.length > 20 || oversized || unsupported) {
+        if (clientError) {
+          clientError.textContent = totalCount() + incoming.length > 20
+            ? "You can select up to 20 files. Remove one or more files before adding more."
+            : oversized
+              ? `${oversized.name} is larger than 25 MB.`
+              : `${unsupported.name} is not a supported timetable file.`;
+          clientError.hidden = false;
+        }
+        syncInputFiles();
+        return;
+      }
+      if (clientError) clientError.hidden = true;
+      const knownFiles = new Set(localFiles.map((item) => item.file));
+      incoming.forEach((file) => {
+        if (knownFiles.has(file)) return;
+        knownFiles.add(file);
+        const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
+        localFiles.push({ id: ++nextId, file, previewUrl });
+      });
+      renderLocalFiles();
+      syncInputFiles();
+    };
+
+    input.addEventListener("change", () => addFiles(input.files));
+    queue.querySelectorAll("img.timetable-thumbnail").forEach((image) => {
+      image.addEventListener("error", () => {
+        const fallback = document.createElement("div");
+        fallback.className = "timetable-file-placeholder flex-shrink-0 d-flex align-items-center justify-content-center text-secondary";
+        fallback.innerHTML = '<i class="bi bi-file-earmark-image fs-3" aria-hidden="true"></i>';
+        image.replaceWith(fallback);
+      }, { once: true });
+    });
+    queue.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-remove-staged-upload]");
+      if (!button) return;
+      button.closest("[data-staged-upload]")?.remove();
+      if (clientError) clientError.hidden = true;
+      updateCount();
+    });
+
     if (dropzone) {
       dropzone.addEventListener("dragover", (event) => {
         event.preventDefault();
@@ -29,9 +134,11 @@
       dropzone.addEventListener("drop", (event) => {
         event.preventDefault();
         dropzone.classList.remove("border-primary");
-        if (event.dataTransfer.files.length) appendFiles(event.dataTransfer.files);
+        if (event.dataTransfer.files.length) addFiles(event.dataTransfer.files);
       });
     }
+
+    updateCount();
   });
 })();
 </script>

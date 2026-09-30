@@ -102,11 +102,12 @@
 
               <section class="settings-panel">
                 <div class="settings-panel-title">{{ form.class_timetables.label }}</div>
-                <div class="settings-panel-subtitle">Add classes to the existing weekly calendar boxes without changing their size. No summary page is added.</div>
+                <div class="settings-panel-subtitle">Add classes to the existing weekly calendar boxes. Select one or several files, then add more or remove individual files. No summary page is added.</div>
                 {{ form.class_timetables }}
-                <div class="form-text">{{ form.class_timetables.help_text }} You can add more files in several selections; they will be combined. PNG, JPG, WEBP, TIFF or PDF; up to 20 files of 25 MB each.</div>
+                <div class="form-text">{{ form.class_timetables.help_text }} PNG, JPG, WEBP, TIFF or PDF; up to 20 files of 25 MB each.</div>
                 {% for e in form.class_timetables.errors %}<div class="text-danger small mt-2">{{ e }}</div>{% endfor %}
-                <div id="timetable-selection" data-file-selection class="small mt-2" aria-live="polite"></div>
+                {% include "calendarpdf/_upload_queue.html" %}
+                <div class="row g-2 mt-2" data-local-file-list></div>
                 {% include "calendarpdf/_subject_filter.html" %}
               </section>
 
@@ -248,11 +249,12 @@
             </div>
 
             <div class="d-flex gap-2 mt-4">
-              <button class="btn btn-primary" type="submit">Generate diary</button>
+              <button class="btn btn-primary" type="submit">{% if result_download_url %}Generate again{% else %}Generate diary{% endif %}</button>
               {% if result_download_url %}
                 {% include "activity/pdf_actions.html" with preview_url=result_preview_url download_url=result_download_url pdf_name="Diary PDF" artifact_id=result_artifact_id %}
               {% endif %}
             </div>
+            {% if staged_uploads %}<div class="small text-muted mt-2">Your selected timetables stay available when you generate again with a different subject filter.</div>{% endif %}
             {% include "calendarpdf/_found_subjects.html" %}
           </form>
         </div>

@@ -39,6 +39,7 @@ class SubjectFilterForm(forms.Form):
 class CalendarForm(SubjectFilterForm):
     images = ImageFilesField(
         label="Compact timetables",
+        required=False,
         widget=MultiImageInput(attrs={"accept": ".png,.jpg,.jpeg,.webp,.tif,.tiff,.pdf", "class": "form-control"}),
         help_text="Select multiple images or PDFs. Each printed date will be placed on the calendar.",
     )

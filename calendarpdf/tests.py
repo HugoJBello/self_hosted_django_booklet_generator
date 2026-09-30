@@ -1,10 +1,12 @@
+import io
+import tempfile
 from datetime import date
 from unittest.mock import patch
 
 import fitz
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from PIL import Image
 
 from .services import Event, _column_bounds, _extract_column, consolidate_events, filter_events_by_subject, make_pdf
@@ -55,6 +57,51 @@ Grupo: 1A
                 "images": [uploaded], "filter_subjects": "on", "subject_filter": "physics",
             })
         self.assertContains(response, "No subjects matched the active subject filter")
+
+    def test_calendar_reuses_uploads_when_filter_changes_and_supports_removal(self):
+        first = Event(date(2026, 9, 7), "10:00", "Mathematics")
+        second = Event(date(2026, 9, 8), "11:00", "Physics")
+        image = io.BytesIO()
+        Image.new("RGB", (24, 18), "white").save(image, format="PNG")
+        image_bytes = image.getvalue()
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            files = [
+                SimpleUploadedFile("first.png", image_bytes, content_type="image/png"),
+                SimpleUploadedFile("second.png", image_bytes, content_type="image/png"),
+            ]
+            with patch("calendarpdf.views.extract_uploaded_timetables", return_value={first, second}) as extract, \
+                    patch("calendarpdf.views.make_pdf", return_value=b"calendar pdf") as make_pdf:
+                response = self.client.post("/pdf_manager/calendar/", {"images": files})
+                self.assertEqual(response.status_code, 200)
+                uploads = response.context["staged_uploads"]
+                self.assertEqual([item["name"] for item in uploads], ["first.png", "second.png"])
+                self.assertEqual([file.name for file in extract.call_args.args[0]], ["first.png", "second.png"])
+                self.assertEqual(make_pdf.call_args.args[0], {first, second})
+
+                thumbnail = self.client.get(
+                    f"/pdf_manager/activity/timetable/calendarpdf/{uploads[0]['id']}/thumbnail/"
+                )
+                self.assertEqual(thumbnail.status_code, 200)
+                self.assertEqual(thumbnail["Content-Type"], "image/jpeg")
+
+                response = self.client.post("/pdf_manager/calendar/", {
+                    "timetable_upload_ids": [uploads[0]["id"], uploads[1]["id"]],
+                    "filter_subjects": "on",
+                    "subject_filter": "PHYS",
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([item["name"] for item in response.context["staged_uploads"]], ["first.png", "second.png"])
+                self.assertEqual(make_pdf.call_args.args[0], {second})
+                self.assertEqual(extract.call_count, 2)
+
+                response = self.client.post("/pdf_manager/calendar/", {
+                    "timetable_upload_ids": [uploads[1]["id"]],
+                    "filter_subjects": "on",
+                    "subject_filter": "physics",
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([item["name"] for item in response.context["staged_uploads"]], ["second.png"])
+                self.assertEqual([file.name for file in extract.call_args.args[0]], ["second.png"])
 
     def test_pdf_appends_one_consolidated_page_with_hours(self):
         events = {

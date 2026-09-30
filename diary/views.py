@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+from contextlib import ExitStack
 
 from django.conf import settings
 from django.contrib import messages
@@ -9,7 +10,8 @@ from django.http import FileResponse, Http404
 from django.shortcuts import render
 from django.urls import reverse
 
-from activity.services import persist_uploads, record_activity
+from activity.services import record_activity
+from activity.timetable_uploads import session_key, stage_timetable_uploads, staged_upload_files
 from activity.models import Artifact
 from activity.workspaces import prepare_workspace
 
@@ -28,22 +30,32 @@ def _initial_form(form: DiaryForm) -> DiaryForm:
 
 
 def diary_view(request):
-    prepare_workspace(request, "diary")
+    upload_session_key = session_key("diary")
+    prepare_workspace(request, "diary", session_key=upload_session_key)
     result_download_url = None
     result_preview_url = None
     result_artifact_id = None
     found_subjects = None
     included_subjects = None
+    staged_uploads = request.session.get(upload_session_key, [])
 
     if request.method == "POST":
         form = DiaryForm(request.POST, request.FILES)
-        if form.is_valid():
+        form_valid = form.is_valid()
+        try:
+            staged_uploads = stage_timetable_uploads(
+                request, "diary", form.cleaned_data.get("class_timetables", [])
+            )
+        except ValueError as exc:
+            form.add_error("class_timetables", str(exc))
+        if form_valid and not form.errors:
             class_events = set()
-            files = form.cleaned_data["class_timetables"]
-            saved_inputs = persist_uploads(files, "diary") if files else []
-            if files:
+            files = staged_uploads
+            if staged_uploads:
                 try:
-                    class_events = extract_uploaded_timetables(files)
+                    with ExitStack() as stack:
+                        files = staged_upload_files(staged_uploads, stack)
+                        class_events = extract_uploaded_timetables(files)
                 except (ValueError, OSError) as exc:
                     form.add_error("class_timetables", str(exc))
                 else:
@@ -105,8 +117,13 @@ def diary_view(request):
                     options = {key: value for key, value in form.cleaned_data.items() if key != "class_timetables"}
                     activity = record_activity(
                         owner=request.user, tool="diary", title=f"Diary from {form.cleaned_data['start_date']}", options=options,
-                        inputs=saved_inputs, outputs=[{"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path}],
-                        restore_state={"form_initial": options},
+                        inputs=staged_uploads,
+                        outputs=[{"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path}],
+                        restore_state={
+                            "session_key": upload_session_key,
+                            "session_value": staged_uploads,
+                            "form_initial": options,
+                        },
                         generated_names=True,
                     )
                     output_artifact = activity.artifacts.get(kind="output")
@@ -126,6 +143,8 @@ def diary_view(request):
             "result_preview_url": result_preview_url,
             "result_artifact_id": result_artifact_id,
             "found_subjects": found_subjects,
+            "staged_uploads": staged_uploads,
+            "upload_tool": "diary",
         },
     )
 

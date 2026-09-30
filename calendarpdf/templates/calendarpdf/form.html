@@ -11,16 +11,21 @@
           {% csrf_token %}
           {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
           <label for="{{ form.images.id_for_label }}" class="form-label fw-semibold">{{ form.images.label }}</label>
-          <div id="dropzone" data-file-dropzone class="rounded-4 border border-2 p-4 bg-light mb-2">
-            <p class="mb-2">Drop your files here or choose them below.</p>
+          <div id="dropzone" data-file-dropzone class="rounded-4 border border-2 p-3 p-sm-4 bg-light mb-2">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-cloud-arrow-up fs-4 text-primary" aria-hidden="true"></i>
+              <div><div class="fw-semibold">Add timetable files</div><div class="small text-muted">Choose one or several. You can add more at any time.</div></div>
+            </div>
             {{ form.images }}
           </div>
-          <div class="form-text">{{ form.images.help_text }} You can add more files in several selections; they will be combined. PNG, JPG, WEBP, TIFF and PDF are supported. Up to 20 files, 25 MB each.</div>
+          <div class="form-text">{{ form.images.help_text }} PNG, JPG, WEBP, TIFF and PDF are supported; up to 20 files of 25 MB each.</div>
           {% for error in form.images.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
-          <div id="selection" data-file-selection class="small mt-3" aria-live="polite"></div>
+          {% include "calendarpdf/_upload_queue.html" %}
+          <div class="row g-2 mt-2" data-local-file-list></div>
           {% include "calendarpdf/_subject_filter.html" %}
           <div id="download-error" class="alert alert-danger mt-3 d-none" role="alert"></div>
-          <button type="submit" class="btn btn-primary mt-4">Generate PDF</button>
+          <button type="submit" class="btn btn-primary mt-4">{% if result_download_url %}Generate again{% else %}Generate PDF{% endif %}</button>
+          {% if staged_uploads %}<div class="small text-muted mt-2">Your selected timetables stay available when you generate again with a different subject filter.</div>{% endif %}
           {% if result_download_url %}<div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">{% include "activity/pdf_actions.html" with preview_url=result_preview_url download_url=result_download_url pdf_name="Class calendar" artifact_id=result_artifact_id %}</div>{% endif %}
           {% include "calendarpdf/_found_subjects.html" %}
         </form>

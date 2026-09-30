@@ -1,14 +1,17 @@
 from datetime import date
+import io
 import shutil
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import skipUnless
 from unittest.mock import patch
 
 import fitz
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from PIL import Image
 
 from calendarpdf.services import Event
 from .class_overlay import _single_blocks, add_classes_to_diary
@@ -50,6 +53,48 @@ class DiaryClassTests(TestCase):
         with patch("diary.views.extract_uploaded_timetables", return_value={event}):
             response = self.client.post("/pdf_manager/diary/", data)
         self.assertContains(response, "No subjects matched the active subject filter")
+
+    def test_diary_reuses_uploaded_timetables_after_filter_edit(self):
+        first = Event(date(2026, 9, 14), "10:00", "Mathematics")
+        second = Event(date(2026, 9, 15), "11:00", "Physics")
+        image = io.BytesIO()
+        Image.new("RGB", (24, 18), "white").save(image, format="PNG")
+        image_bytes = image.getvalue()
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            output_path = Path(media_root) / "diary_outputs" / "diary.pdf"
+            output_path.parent.mkdir(parents=True)
+            output_path.write_bytes(b"diary pdf")
+            files = [
+                SimpleUploadedFile("first.png", image_bytes, content_type="image/png"),
+                SimpleUploadedFile("second.png", image_bytes, content_type="image/png"),
+            ]
+            pipeline_result = SimpleNamespace(output_pdf_path=str(output_path))
+            with patch("diary.views.extract_uploaded_timetables", return_value={first, second}) as extract, \
+                    patch("diary.views.build_diary_pipeline", return_value=pipeline_result) as build:
+                data = {
+                    "start_date": "2026-09-14", "number_of_weeks": "1",
+                    "calendar_mode": "single", "output_mode": "pdf",
+                    "max_pages_per_split": "40", "content_margin_cm": "0.5",
+                    "class_timetables": files,
+                }
+                response = self.client.post("/pdf_manager/diary/", data)
+                self.assertEqual(response.status_code, 200)
+                uploads = response.context["staged_uploads"]
+                self.assertEqual([item["name"] for item in uploads], ["first.png", "second.png"])
+                self.assertEqual(build.call_args.kwargs["class_events"], {first, second})
+
+                response = self.client.post("/pdf_manager/diary/", {
+                    "start_date": "2026-09-14", "number_of_weeks": "1",
+                    "calendar_mode": "single", "output_mode": "pdf",
+                    "max_pages_per_split": "40", "content_margin_cm": "0.5",
+                    "timetable_upload_ids": [item["id"] for item in uploads],
+                    "filter_subjects": "on", "subject_filter": "physics",
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(extract.call_count, 2)
+                self.assertEqual([file.name for file in extract.call_args.args[0]], ["first.png", "second.png"])
+                self.assertEqual(build.call_args.kwargs["class_events"], {second})
+                self.assertContains(response, "Physics")
 
     @skipUnless(shutil.which("pdflatex"), "requires pdflatex")
     def test_single_week_keeps_all_page_and_box_dimensions(self):

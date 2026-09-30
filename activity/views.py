@@ -1,5 +1,9 @@
+import io
 import os
+from pathlib import Path
+
 import fitz
+from PIL import Image, ImageOps
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -8,6 +12,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from .models import Activity, Artifact
 from .selectors import accessible_activity
+from .timetable_uploads import staged_upload_for_request
 from .workspace_files import workspace_pdf
 
 TOOL_URLS = {"booklets": "booklets:form", "joinpdf": "joinpdf:form", "splitpdf": "splitpdf:form", "ocrpdf": "ocrpdf:form", "diary": "diary:form", "calendarpdf": "calendarpdf:form"}
@@ -107,6 +112,32 @@ def _pdf_page_response(path, page_number):
             return response
     except (fitz.FileDataError, OSError) as exc:
         raise Http404("PDF cannot be opened") from exc
+
+
+def timetable_upload_thumbnail(request, tool, upload_id):
+    item = staged_upload_for_request(request, tool, upload_id)
+    path = item["path"]
+    try:
+        if Path(item["name"]).suffix.lower() == ".pdf":
+            with fitz.open(path) as document:
+                if not document.page_count:
+                    raise Http404("Timetable PDF has no pages.")
+                page = document.load_page(0)
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(0.28, 0.28), alpha=False)
+                image = Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
+        else:
+            with Image.open(path) as source:
+                if source.width * source.height > 50_000_000:
+                    raise Http404("Timetable image is too large for a thumbnail.")
+                image = ImageOps.exif_transpose(source).convert("RGB")
+        image.thumbnail((180, 120), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        image.save(output, format="JPEG", quality=78, optimize=True)
+    except (OSError, fitz.FileDataError, Image.DecompressionBombError) as exc:
+        raise Http404("Timetable thumbnail cannot be generated.") from exc
+    response = HttpResponse(output.getvalue(), content_type="image/jpeg")
+    response["Cache-Control"] = "private, max-age=300"
+    return response
 
 
 def workspace_preview(request, tool, file_id):
