@@ -3,10 +3,10 @@ from __future__ import annotations
 from django import forms
 from django.utils import timezone
 
-from calendarpdf.forms import ImageFilesField, MultiImageInput
+from calendarpdf.forms import ImageFilesField, MultiImageInput, SubjectFilterForm
 
 
-class DiaryForm(forms.Form):
+class DiaryForm(SubjectFilterForm):
     OUTPUT_PDF = "pdf"
     OUTPUT_SIDE_BY_SIDE = "side_by_side"
     OUTPUT_FLIPPED_A4 = "flipped_a4"

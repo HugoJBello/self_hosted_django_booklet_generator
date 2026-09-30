@@ -107,6 +107,7 @@
                 <div class="form-text">{{ form.class_timetables.help_text }} PNG, JPG, WEBP, TIFF or PDF; up to 20 files of 25 MB each.</div>
                 {% for e in form.class_timetables.errors %}<div class="text-danger small mt-2">{{ e }}</div>{% endfor %}
                 <div id="timetable-selection" class="small mt-2" aria-live="polite"></div>
+                {% include "calendarpdf/_subject_filter.html" %}
               </section>
 
               <section class="settings-panel">
@@ -252,6 +253,7 @@
                 {% include "activity/pdf_actions.html" with preview_url=result_preview_url download_url=result_download_url pdf_name="Diary PDF" artifact_id=result_artifact_id %}
               {% endif %}
             </div>
+            {% include "calendarpdf/_found_subjects.html" %}
           </form>
         </div>
       </div>
@@ -321,4 +323,5 @@
       });
     })();
   </script>
+  {% include "calendarpdf/_subject_filter_script.html" %}
 {% endblock %}

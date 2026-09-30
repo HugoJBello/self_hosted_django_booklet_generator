@@ -38,6 +38,19 @@ class DiaryClassTests(TestCase):
             response = self.client.post("/pdf_manager/diary/", data)
         self.assertContains(response, "No uploaded classes fall within the selected diary weeks")
 
+    def test_diary_subject_filter_reports_no_matches(self):
+        file = SimpleUploadedFile("schedule.png", b"test", content_type="image/png")
+        data = {
+            "start_date": "2026-09-14", "number_of_weeks": "1",
+            "calendar_mode": "single", "output_mode": "pdf",
+            "max_pages_per_split": "40", "content_margin_cm": "0.5",
+            "class_timetables": [file], "filter_subjects": "on", "subject_filter": "physics",
+        }
+        event = Event(date(2026, 9, 14), "08:00", "Mathematics")
+        with patch("diary.views.extract_uploaded_timetables", return_value={event}):
+            response = self.client.post("/pdf_manager/diary/", data)
+        self.assertContains(response, "No subjects matched the active subject filter")
+
     @skipUnless(shutil.which("pdflatex"), "requires pdflatex")
     def test_single_week_keeps_all_page_and_box_dimensions(self):
         events = {

@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from PIL import Image
 
-from .services import Event, _column_bounds, _extract_column, consolidate_events, make_pdf
+from .services import Event, _column_bounds, _extract_column, consolidate_events, filter_events_by_subject, make_pdf
 from .summary import category, hour_totals, overlapping_events
 
 
@@ -31,6 +31,30 @@ Grupo: 1A
         self.assertIn(Event(date(2026, 9, 7), "10:00", "MATEMÁTICAS I", "1T", "AULA 14", "11:00"), events)
         self.assertIn(Event(date(2026, 9, 14), "12:00", "ESTADÍSTICA", "1A", "AULA DE INFORMÁTICA I-4", "13:00"), events)
         self.assertEqual(len(events), 3)
+
+    def test_subject_filter_matches_fragments_without_case_or_accents(self):
+        events = {
+            Event(date(2026, 9, 7), "10:00", "MATEMÁTICAS I"),
+            Event(date(2026, 9, 8), "10:00", "Estadística avanzada"),
+            Event(date(2026, 9, 9), "10:00", "Physics"),
+        }
+        filtered, subjects = filter_events_by_subject(events, True, "matematicas, ESTAD")
+        self.assertEqual({event.subject for event in filtered}, {"MATEMÁTICAS I", "Estadística avanzada"})
+        self.assertEqual(subjects, ["Estadística avanzada", "MATEMÁTICAS I"])
+
+    def test_empty_or_inactive_subject_filter_has_no_effect(self):
+        events = {Event(date(2026, 9, 7), "10:00", "Mathematics")}
+        self.assertEqual(filter_events_by_subject(events, True, " , ")[0], events)
+        self.assertEqual(filter_events_by_subject(events, False, "physics")[0], events)
+
+    def test_calendar_reports_when_subject_filter_has_no_matches(self):
+        uploaded = SimpleUploadedFile("schedule.png", b"image", content_type="image/png")
+        events = {Event(date(2026, 9, 7), "10:00", "Mathematics")}
+        with patch("calendarpdf.views.extract_uploaded_timetables", return_value=events):
+            response = self.client.post("/pdf_manager/calendar/", {
+                "images": [uploaded], "filter_subjects": "on", "subject_filter": "physics",
+            })
+        self.assertContains(response, "No subjects matched the active subject filter")
 
     def test_pdf_appends_one_consolidated_page_with_hours(self):
         events = {

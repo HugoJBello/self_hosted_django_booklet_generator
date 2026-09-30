@@ -1,0 +1,14 @@
+<script>
+(() => {
+  const toggle = document.getElementById("id_filter_subjects");
+  const input = document.getElementById("id_subject_filter");
+  const fields = document.getElementById("subject-filter-fields");
+  if (!toggle || !input || !fields) return;
+  const refreshSubjectFilter = () => {
+    input.disabled = !toggle.checked;
+    fields.classList.toggle("opacity-50", !toggle.checked);
+  };
+  toggle.addEventListener("change", refreshSubjectFilter);
+  refreshSubjectFilter();
+})();
+</script>

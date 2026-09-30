@@ -18,9 +18,11 @@
           <div class="form-text">{{ form.images.help_text }} PNG, JPG, WEBP, TIFF and PDF are supported. Up to 20 files, 25 MB each.</div>
           {% for error in form.images.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
           <div id="selection" class="small mt-3" aria-live="polite"></div>
+          {% include "calendarpdf/_subject_filter.html" %}
           <div id="download-error" class="alert alert-danger mt-3 d-none" role="alert"></div>
           <button type="submit" class="btn btn-primary mt-4">Generate PDF</button>
           {% if result_download_url %}<div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">{% include "activity/pdf_actions.html" with preview_url=result_preview_url download_url=result_download_url pdf_name="Class calendar" artifact_id=result_artifact_id %}</div>{% endif %}
+          {% include "calendarpdf/_found_subjects.html" %}
         </form>
       </div>
     </div>
@@ -45,4 +47,5 @@
   });
 })();
 </script>
+{% include "calendarpdf/_subject_filter_script.html" %}
 {% endblock %}

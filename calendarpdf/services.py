@@ -67,6 +67,20 @@ def _plain(value: str) -> str:
     return unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode().lower()
 
 
+def filter_events_by_subject(events: set[Event], enabled: bool, value: str) -> tuple[set[Event], list[str]]:
+    """Apply the shared optional subject filter and return included subject labels."""
+    terms = {_plain(part).strip() for part in (value or "").split(",")}
+    terms.discard("")
+    filtered = (
+        {event for event in events if any(term in _plain(event.subject) for term in terms)}
+        if enabled and terms else set(events)
+    )
+    subjects: dict[str, str] = {}
+    for event in sorted(filtered):
+        subjects.setdefault(_plain(event.subject).strip(), event.subject.strip())
+    return filtered, sorted(subjects.values(), key=_plain)
+
+
 def _ocr_image(image: Image.Image, target_width: int) -> bytes:
     image = ImageOps.autocontrast(image.convert("L"))
     scale = min(4, max(1, target_width / max(image.width, 1)),

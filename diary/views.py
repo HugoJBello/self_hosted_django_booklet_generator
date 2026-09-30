@@ -13,7 +13,7 @@ from activity.services import persist_uploads, record_activity
 from activity.models import Artifact
 from activity.workspaces import prepare_workspace
 
-from calendarpdf.services import extract_uploaded_timetables
+from calendarpdf.services import extract_uploaded_timetables, filter_events_by_subject
 
 from .forms import DiaryForm
 from .services import build_diary_pipeline
@@ -32,6 +32,8 @@ def diary_view(request):
     result_download_url = None
     result_preview_url = None
     result_artifact_id = None
+    found_subjects = None
+    included_subjects = None
 
     if request.method == "POST":
         form = DiaryForm(request.POST, request.FILES)
@@ -50,6 +52,14 @@ def diary_view(request):
                     class_events = {event for event in class_events if monday <= event.day < last_day}
                     if not class_events:
                         form.add_error("class_timetables", "No uploaded classes fall within the selected diary weeks.")
+                    else:
+                        class_events, included_subjects = filter_events_by_subject(
+                            class_events,
+                            form.cleaned_data["filter_subjects"],
+                            form.cleaned_data["subject_filter"],
+                        )
+                        if not class_events:
+                            form.add_error("subject_filter", "No subjects matched the active subject filter.")
 
             if not form.errors:
                 outputs_dir = os.path.join(settings.MEDIA_ROOT, "diary_outputs")
@@ -91,6 +101,7 @@ def diary_view(request):
                     messages.error(request, f"Error generating diary: {exc}")
                 else:
                     messages.success(request, "Diary generated successfully.")
+                    found_subjects = included_subjects
                     options = {key: value for key, value in form.cleaned_data.items() if key != "class_timetables"}
                     activity = record_activity(
                         owner=request.user, tool="diary", title=f"Diary from {form.cleaned_data['start_date']}", options=options,
@@ -114,6 +125,7 @@ def diary_view(request):
             "result_download_url": result_download_url,
             "result_preview_url": result_preview_url,
             "result_artifact_id": result_artifact_id,
+            "found_subjects": found_subjects,
         },
     )
 

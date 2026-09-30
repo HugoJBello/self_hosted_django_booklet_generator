@@ -12,7 +12,7 @@ from activity.services import persist_uploads, record_activity
 from activity.workspaces import prepare_workspace
 
 from .forms import CalendarForm
-from .services import extract_uploaded_timetables, make_pdf
+from .services import extract_uploaded_timetables, filter_events_by_subject, make_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,13 @@ def calendar_view(request):
         saved_inputs = persist_uploads(form.cleaned_data["images"], "calendarpdf")
         try:
             events = extract_uploaded_timetables(form.cleaned_data["images"])
+            events, found_subjects = filter_events_by_subject(
+                events,
+                form.cleaned_data["filter_subjects"],
+                form.cleaned_data["subject_filter"],
+            )
+            if not events:
+                raise ValueError("No subjects matched the active subject filter.")
             pdf = make_pdf(events)
         except (ValueError, OSError, fitz.FileDataError) as exc:
             form.add_error(None, str(exc))
@@ -38,8 +45,16 @@ def calendar_view(request):
             with open(output_path, "wb") as output_file:
                 output_file.write(pdf)
             activity = record_activity(
-                owner=request.user, tool="calendarpdf", title=f"Calendar from {len(saved_inputs)} timetable(s)", options={},
-                inputs=saved_inputs, outputs=[{"name": "class_calendar.pdf", "path": output_path}], restore_state={"form_initial": {}},
+                owner=request.user, tool="calendarpdf", title=f"Calendar from {len(saved_inputs)} timetable(s)",
+                options={
+                    "filter_subjects": form.cleaned_data["filter_subjects"],
+                    "subject_filter": form.cleaned_data["subject_filter"],
+                },
+                inputs=saved_inputs, outputs=[{"name": "class_calendar.pdf", "path": output_path}],
+                restore_state={"form_initial": {
+                    "filter_subjects": form.cleaned_data["filter_subjects"],
+                    "subject_filter": form.cleaned_data["subject_filter"],
+                }},
                 generated_names=True,
             )
             artifact = activity.artifacts.get(kind="output")
@@ -48,5 +63,6 @@ def calendar_view(request):
                 "result_download_url": reverse("activity:file", kwargs={"public_id": artifact.public_id}),
                 "result_preview_url": reverse("activity:preview", kwargs={"public_id": artifact.public_id}),
                 "result_artifact_id": artifact.pk,
+                "found_subjects": found_subjects,
             })
     return render(request, "calendarpdf/form.html", {"form": form})
