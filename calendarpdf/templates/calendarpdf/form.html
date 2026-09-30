@@ -11,13 +11,13 @@
           {% csrf_token %}
           {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
           <label for="{{ form.images.id_for_label }}" class="form-label fw-semibold">{{ form.images.label }}</label>
-          <div id="dropzone" class="rounded-4 border border-2 p-4 bg-light mb-2">
+          <div id="dropzone" data-file-dropzone class="rounded-4 border border-2 p-4 bg-light mb-2">
             <p class="mb-2">Drop your files here or choose them below.</p>
             {{ form.images }}
           </div>
-          <div class="form-text">{{ form.images.help_text }} PNG, JPG, WEBP, TIFF and PDF are supported. Up to 20 files, 25 MB each.</div>
+          <div class="form-text">{{ form.images.help_text }} You can add more files in several selections; they will be combined. PNG, JPG, WEBP, TIFF and PDF are supported. Up to 20 files, 25 MB each.</div>
           {% for error in form.images.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
-          <div id="selection" class="small mt-3" aria-live="polite"></div>
+          <div id="selection" data-file-selection class="small mt-3" aria-live="polite"></div>
           {% include "calendarpdf/_subject_filter.html" %}
           <div id="download-error" class="alert alert-danger mt-3 d-none" role="alert"></div>
           <button type="submit" class="btn btn-primary mt-4">Generate PDF</button>
@@ -29,23 +29,6 @@
     <p class="text-muted small mt-3">Each class needs printed dates and a start time. The PDF includes rooms and class types when readable; red dots flag overlapping classes. Review the result when a source image is blurry or uses an unusual layout.</p>
   </div>
 </div>
-<script>
-(() => {
-  const input = document.querySelector('#dropzone input[type="file"]');
-  const zone = document.getElementById('dropzone');
-  const selection = document.getElementById('selection');
-  const form = document.getElementById('calendar-form');
-  if (!input) return;
-  const refresh = () => { selection.textContent = Array.from(input.files).map(f => f.name).join(' · '); };
-  input.addEventListener('change', refresh);
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('border-primary'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('border-primary'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('border-primary');
-    if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; refresh(); }
-  });
-})();
-</script>
 {% include "calendarpdf/_subject_filter_script.html" %}
+{% include "calendarpdf/_multi_file_script.html" %}
 {% endblock %}

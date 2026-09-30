@@ -1,0 +1,37 @@
+<script>
+(() => {
+  const inputs = Array.from(document.querySelectorAll('input[type="file"][multiple]'));
+  inputs.forEach((input) => {
+    const form = input.closest("form");
+    const selection = form?.querySelector("[data-file-selection]");
+    const dropzone = form?.querySelector("[data-file-dropzone]");
+    let selectedFiles = Array.from(input.files);
+
+    const appendFiles = (incoming) => {
+      selectedFiles = [...selectedFiles, ...Array.from(incoming)];
+      const transfer = new DataTransfer();
+      selectedFiles.forEach((file) => transfer.items.add(file));
+      input.files = transfer.files;
+      if (selection) {
+        selection.textContent = selectedFiles.length
+          ? `${selectedFiles.length} file(s) selected: ${selectedFiles.map((file) => file.name).join(" · ")}`
+          : "";
+      }
+    };
+
+    input.addEventListener("change", () => appendFiles(input.files));
+    if (dropzone) {
+      dropzone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        dropzone.classList.add("border-primary");
+      });
+      dropzone.addEventListener("dragleave", () => dropzone.classList.remove("border-primary"));
+      dropzone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        dropzone.classList.remove("border-primary");
+        if (event.dataTransfer.files.length) appendFiles(event.dataTransfer.files);
+      });
+    }
+  });
+})();
+</script>
