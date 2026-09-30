@@ -4,6 +4,7 @@ from pathlib import Path
 
 import fitz
 from PIL import Image, ImageOps
+from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -35,7 +36,34 @@ def activity_list(request):
     )
     if not request.user.is_staff:
         activities = activities.filter(owner=request.user)
-    return render(request, "activity/list.html", {"activities": activities[:250]})
+    activities = activities.order_by("-created_at", "-pk")
+    page = Paginator(activities, 20).get_page(request.GET.get("page"))
+    return render(request, "activity/list.html", {"activities": page})
+
+
+def activity_thumbnail(request, activity_id):
+    activity = accessible_activity(request.user, activity_id)
+    artifact = activity.artifacts.filter(
+        kind="output", content_type="application/pdf"
+    ).order_by("pk").first()
+    if not artifact or not os.path.isfile(artifact.path):
+        raise Http404("PDF is no longer available")
+    try:
+        with fitz.open(artifact.path) as document:
+            if not document.page_count:
+                raise Http404("PDF has no pages")
+            page = document.load_page(0)
+            scale = min(0.7, 220 / max(page.rect.width, 1), 150 / max(page.rect.height, 1))
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+            image = Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
+        image.thumbnail((220, 150), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        image.save(output, format="JPEG", quality=78, optimize=True)
+    except (fitz.FileDataError, OSError, Image.DecompressionBombError) as exc:
+        raise Http404("PDF thumbnail cannot be generated") from exc
+    response = HttpResponse(output.getvalue(), content_type="image/jpeg")
+    response["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 def activity_detail(request, activity_id):

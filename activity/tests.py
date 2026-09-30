@@ -1,5 +1,8 @@
+import io
 import os
 import tempfile
+import fitz
+from PIL import Image
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -158,3 +161,73 @@ class ActivitySecurityTests(TestCase):
         response = self.client.get(reverse("booklets:form"))
         self.assertContains(response, "Private run")
         self.assertNotContains(response, "Other private run")
+
+
+class ActivityListTests(TestCase):
+    def setUp(self):
+        self.owner = get_user_model().objects.create_user("activity-owner")
+        self.paths = []
+
+    def tearDown(self):
+        for path in self.paths:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def make_pdf(self, label):
+        handle, path = tempfile.mkstemp(suffix=".pdf")
+        os.close(handle)
+        with fitz.open() as document:
+            page = document.new_page()
+            page.insert_text((72, 72), label)
+            document.save(path)
+        self.paths.append(path)
+        return path
+
+    def test_list_is_newest_first_and_paginated(self):
+        for number in range(23):
+            record_activity(owner=self.owner, tool="joinpdf", title=f"Run {number:02}", options={})
+        self.client.force_login(self.owner)
+
+        first_page = self.client.get(reverse("activity:list"))
+        second_page = self.client.get(reverse("activity:list"), {"page": 2})
+
+        self.assertEqual(first_page.context["activities"].paginator.count, 23)
+        self.assertEqual(first_page.context["activities"].number, 1)
+        self.assertEqual(second_page.context["activities"].number, 2)
+        first_titles = [item.title for item in first_page.context["activities"]]
+        second_titles = [item.title for item in second_page.context["activities"]]
+        self.assertEqual(first_titles[0], "Run 22")
+        self.assertEqual(first_titles[-1], "Run 03")
+        self.assertEqual(second_titles, ["Run 02", "Run 01", "Run 00"])
+
+    def test_recent_tool_strip_is_newest_first(self):
+        older = record_activity(owner=self.owner, tool="joinpdf", title="Older", options={})
+        newer = record_activity(owner=self.owner, tool="joinpdf", title="Newer", options={})
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("joinpdf:form"))
+
+        recent_ids = [item.pk for item in response.context["recent_tool_activities"]]
+        self.assertEqual(recent_ids[:2], [newer.pk, older.pk])
+
+    def test_thumbnail_uses_first_output_pdf_and_is_owner_protected(self):
+        first_path = self.make_pdf("first output")
+        second_path = self.make_pdf("second output")
+        activity = record_activity(
+            owner=self.owner, tool="splitpdf", title="Several outputs", options={},
+            outputs=[{"name": "first.pdf", "path": first_path}, {"name": "second.pdf", "path": second_path}],
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("activity:thumbnail", args=[activity.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/jpeg")
+        with Image.open(io.BytesIO(response.content)) as thumbnail:
+            self.assertLessEqual(thumbnail.width, 220)
+            self.assertLessEqual(thumbnail.height, 150)
+        self.assertContains(self.client.get(reverse("activity:list")), reverse("activity:thumbnail", args=[activity.pk]))
+
+        other = get_user_model().objects.create_user("activity-other")
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(reverse("activity:thumbnail", args=[activity.pk])).status_code, 404)
