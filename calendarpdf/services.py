@@ -280,19 +280,22 @@ def _extract_column(text: str, weekday: int) -> set[Event]:
             "teoria", "practica", "laboratorio", "seminario", "taller", "online", "examen", "tutoria"
         ):
             kind = _normalise_type(line)
-        time_match = TIME_RE.search(line)
+        # OCR commonly inserts a space inside a two-digit hour (e.g. "13:00-1 4:00").
+        # Normalize only the candidate time text; keep the original line for date parsing.
+        time_line = re.sub(r"(?<=\d)\s+(?=\d)", "", line)
+        time_match = TIME_RE.search(time_line)
         if time_match:
             hour = f"{int(time_match.group(1)):02d}:{time_match.group(2)}"
             end_hour = f"{int(time_match.group(3)):02d}:{time_match.group(4)}"
         elif (subject and not DATE_RE.search(line) and not ISO_DATE_RE.search(line)
               and not NAMED_DATE_RE.search(line)
               and not room_match and not group_match and not type_match and not new_subject):
-            range_match = HOUR_RANGE_RE.search(line)
+            range_match = HOUR_RANGE_RE.search(time_line)
             if range_match:
                 hour = f"{int(range_match.group(1)):02d}:00"
                 end_hour = f"{int(range_match.group(2)):02d}:00"
             elif not hour:
-                start = START_RE.search(line)
+                start = START_RE.search(time_line)
                 if start:
                     hour = f"{int(start.group(1)):02d}:{start.group(2)}"
         if not subject or not hour:

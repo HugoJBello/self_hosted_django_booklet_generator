@@ -34,6 +34,18 @@ Grupo: 1A
         self.assertIn(Event(date(2026, 9, 14), "12:00", "ESTADÍSTICA", "1A", "AULA DE INFORMÁTICA I-4", "13:00"), events)
         self.assertEqual(len(events), 3)
 
+    def test_ocr_space_inside_second_hour_does_not_turn_minutes_into_hour(self):
+        text = """41887 - ESTADISTICA APLICADA A
+13:00-1 4:00
+08/09/26
+"""
+        events = _extract_column(text, 1)
+        self.assertIn(
+            Event(date(2026, 9, 8), "13:00", "ESTADISTICA APLICADA A", end_time="14:00"),
+            events,
+        )
+        self.assertFalse(any(event.time == "00:00" for event in events))
+
     def test_subject_filter_matches_fragments_without_case_or_accents(self):
         events = {
             Event(date(2026, 9, 7), "10:00", "MATEMÁTICAS I"),
