@@ -1,0 +1,22 @@
+<div class="modal fade" id="uploadImagePreviewModal" tabindex="-1" aria-labelledby="uploadImagePreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-centered">
+    <div class="modal-content upload-image-preview-content">
+      <div class="modal-header border-0 px-3 px-md-4">
+        <div class="min-w-0 flex-grow-1">
+          <div class="small text-primary fw-semibold text-uppercase"><i class="bi bi-image me-1" aria-hidden="true"></i>Timetable image</div>
+          <h2 class="modal-title h5 text-truncate mb-0" id="uploadImagePreviewTitle">Image preview</h2>
+        </div>
+        <div class="d-flex align-items-center gap-1 ms-2 flex-shrink-0">
+          <a class="btn btn-sm btn-outline-secondary upload-image-open" href="#" target="_blank" rel="noopener" aria-label="Open image in a new tab"><i class="bi bi-box-arrow-up-right"></i><span class="d-none d-md-inline ms-1">Open</span></a>
+          <a class="btn btn-sm btn-primary upload-image-download" href="#"><i class="bi bi-download"></i><span class="d-none d-md-inline ms-1">Download</span></a>
+          <button type="button" class="btn btn-sm btn-dark ms-1" data-bs-dismiss="modal" aria-label="Close image preview"><i class="bi bi-x-lg"></i><span class="d-none d-sm-inline ms-1">Close</span></button>
+        </div>
+      </div>
+      <div class="modal-body upload-image-preview-body p-2 p-md-3">
+        <div class="upload-image-preview-loading text-center text-muted py-5" hidden><div class="spinner-border text-primary mb-2" role="status"></div><div class="small">Loading preview…</div></div>
+        <img class="upload-image-preview-image" alt="">
+        <div class="upload-image-preview-error alert alert-warning m-3" hidden>Preview could not be loaded. You can still open or download the image.</div>
+      </div>
+    </div>
+  </div>
+</div>

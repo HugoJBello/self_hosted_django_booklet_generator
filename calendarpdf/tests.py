@@ -6,7 +6,7 @@ from unittest.mock import patch
 import fitz
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from PIL import Image
 
 from .services import Event, _column_bounds, _extract_column, consolidate_events, filter_events_by_subject, make_pdf
@@ -73,6 +73,8 @@ Grupo: 1A
                     patch("calendarpdf.views.make_pdf", return_value=b"calendar pdf") as make_pdf:
                 response = self.client.post("/pdf_manager/calendar/", {"images": files})
                 self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'id="uploadImagePreviewModal"')
+                self.assertContains(response, "timetable-upload-name")
                 uploads = response.context["staged_uploads"]
                 self.assertEqual([item["name"] for item in uploads], ["first.png", "second.png"])
                 self.assertEqual([file.name for file in extract.call_args.args[0]], ["first.png", "second.png"])
@@ -83,6 +85,21 @@ Grupo: 1A
                 )
                 self.assertEqual(thumbnail.status_code, 200)
                 self.assertEqual(thumbnail["Content-Type"], "image/jpeg")
+                image_preview = self.client.get(
+                    f"/pdf_manager/activity/timetable/calendarpdf/{uploads[0]['id']}/image-preview/"
+                )
+                self.assertEqual(image_preview.status_code, 200)
+                self.assertEqual(image_preview["Content-Type"], "image/jpeg")
+                other = Client()
+                other.force_login(get_user_model().objects.create_user("calendar-other"))
+                self.assertEqual(other.get(
+                    f"/pdf_manager/activity/timetable/calendarpdf/{uploads[0]['id']}/image-preview/"
+                ).status_code, 404)
+                image_file = self.client.get(
+                    f"/pdf_manager/activity/timetable/calendarpdf/{uploads[0]['id']}/file/?download=1"
+                )
+                self.assertEqual(image_file.status_code, 200)
+                self.assertIn("attachment", image_file["Content-Disposition"])
 
                 response = self.client.post("/pdf_manager/calendar/", {
                     "timetable_upload_ids": [uploads[0]["id"], uploads[1]["id"]],

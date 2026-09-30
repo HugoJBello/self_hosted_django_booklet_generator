@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils.translation import override
 
 from activity.services import record_activity
-from activity.timetable_uploads import session_key, stage_timetable_uploads, staged_upload_files
+from activity.timetable_uploads import prepare_staged_uploads, session_key, stage_timetable_uploads, staged_upload_files
 from activity.workspaces import prepare_workspace
 
 from .forms import CalendarForm
@@ -25,7 +25,7 @@ def calendar_view(request):
     prepare_workspace(request, "calendarpdf", session_key=upload_session_key)
     initial = request.session.pop("activity_initial_calendarpdf", None) if request.method == "GET" else None
     form = CalendarForm(request.POST or None, request.FILES or None, initial=initial)
-    staged_uploads = request.session.get(upload_session_key, [])
+    staged_uploads = prepare_staged_uploads(request.session.get(upload_session_key, []))
     found_subjects = None
     if request.method == "POST":
         form_valid = form.is_valid()

@@ -29,28 +29,40 @@
 
     const renderLocalFiles = () => {
       localList.replaceChildren();
-      localFiles.forEach(({ id, file, previewUrl }) => {
+      localFiles.forEach(({ id, file, previewUrl, objectUrl }) => {
         const column = document.createElement("div");
         column.className = "col-12 col-sm-6 col-lg-4";
         const card = document.createElement("div");
         card.className = "d-flex align-items-center gap-2 border rounded-3 p-2 h-100 bg-white";
         if (previewUrl) {
+          const preview = document.createElement("button");
+          preview.type = "button";
+          preview.className = "timetable-preview-button";
+          preview.dataset.uploadImagePreview = objectUrl;
+          preview.dataset.uploadImageFile = objectUrl;
+          preview.dataset.uploadImageName = file.name;
           const image = document.createElement("img");
           image.src = previewUrl;
-          image.alt = `Preview of ${file.name}`;
+          image.alt = "";
           image.className = "timetable-local-preview flex-shrink-0";
-          card.append(image);
+          preview.append(image);
+          card.append(preview);
         } else {
-          const icon = document.createElement("div");
-          icon.className = "timetable-file-placeholder flex-shrink-0 d-flex align-items-center justify-content-center text-danger";
-          icon.innerHTML = '<i class="bi bi-file-earmark-pdf fs-3" aria-hidden="true"></i>';
-          card.append(icon);
+          const preview = document.createElement("button");
+          preview.type = "button";
+          preview.className = "timetable-preview-button pdf-preview-trigger";
+          preview.dataset.pdfPreview = objectUrl;
+          preview.dataset.pdfDownload = objectUrl;
+          preview.dataset.pdfName = file.name;
+          preview.setAttribute("aria-label", `Preview ${file.name}`);
+          preview.innerHTML = '<span class="timetable-file-placeholder align-items-center justify-content-center text-danger"><i class="bi bi-file-earmark-pdf fs-3" aria-hidden="true"></i></span>';
+          card.append(preview);
         }
 
         const details = document.createElement("div");
         details.className = "min-w-0 flex-grow-1";
         const name = document.createElement("div");
-        name.className = "small fw-semibold text-truncate";
+        name.className = "small fw-semibold timetable-upload-name";
         name.textContent = file.name;
         name.title = file.name;
         const size = document.createElement("div");
@@ -66,7 +78,7 @@
         remove.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
         remove.addEventListener("click", () => {
           const removed = localFiles.find((item) => item.id === id);
-          if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+          if (removed?.objectUrl) URL.revokeObjectURL(removed.objectUrl);
           localFiles = localFiles.filter((item) => item.id !== id);
           if (clientError) clientError.hidden = true;
           renderLocalFiles();
@@ -101,8 +113,9 @@
       incoming.forEach((file) => {
         if (knownFiles.has(file)) return;
         knownFiles.add(file);
-        const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
-        localFiles.push({ id: ++nextId, file, previewUrl });
+        const objectUrl = URL.createObjectURL(file);
+        const previewUrl = file.name.toLowerCase().endsWith(".pdf") ? "" : objectUrl;
+        localFiles.push({ id: ++nextId, file, previewUrl, objectUrl });
       });
       renderLocalFiles();
       syncInputFiles();

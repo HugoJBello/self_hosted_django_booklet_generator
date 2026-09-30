@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import uuid
+import mimetypes
 from pathlib import Path
 
 from django.conf import settings
@@ -20,6 +21,13 @@ def session_key(tool: str) -> str:
     if tool not in TIMETABLE_TOOLS:
         raise ValueError("Unsupported timetable upload tool.")
     return f"timetable_uploads_{tool}"
+
+
+def prepare_staged_uploads(items) -> list[dict]:
+    prepared = [item for item in items if isinstance(item, dict)]
+    for item in prepared:
+        item.setdefault("is_pdf", Path(item.get("name", "")).suffix.lower() == ".pdf")
+    return prepared
 
 
 def stage_timetable_uploads(request, tool: str, new_files=()) -> list[dict]:
@@ -54,11 +62,12 @@ def stage_timetable_uploads(request, tool: str, new_files=()) -> list[dict]:
                 "id": uuid.uuid4().hex,
                 "name": name,
                 "path": path,
-                "content_type": getattr(uploaded, "content_type", "application/octet-stream"),
+                "content_type": mimetypes.guess_type(name)[0] or getattr(uploaded, "content_type", "application/octet-stream"),
+                "is_pdf": Path(name).suffix.lower() == ".pdf",
                 "size": os.path.getsize(path),
             })
     request.session[key] = selected
-    return selected
+    return prepare_staged_uploads(selected)
 
 
 def staged_upload_files(items: list[dict], stack):
@@ -74,7 +83,11 @@ def staged_upload_files(items: list[dict], stack):
 
 
 def staged_upload_for_request(request, tool: str, upload_id: str) -> dict:
-    for item in request.session.get(session_key(tool), []):
+    try:
+        key = session_key(tool)
+    except ValueError as exc:
+        raise Http404("Timetable upload is no longer available.") from exc
+    for item in request.session.get(key, []):
         if isinstance(item, dict) and item.get("id") == upload_id and _safe_upload_path(tool, item.get("path")):
             if os.path.isfile(item["path"]):
                 return item

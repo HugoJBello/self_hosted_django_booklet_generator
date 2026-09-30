@@ -140,6 +140,37 @@ def timetable_upload_thumbnail(request, tool, upload_id):
     return response
 
 
+def timetable_upload_image_preview(request, tool, upload_id):
+    item = staged_upload_for_request(request, tool, upload_id)
+    if item.get("is_pdf") or Path(item["name"]).suffix.lower() == ".pdf":
+        raise Http404("This timetable is not an image.")
+    try:
+        with Image.open(item["path"]) as source:
+            if source.width * source.height > 50_000_000:
+                raise Http404("Timetable image is too large to preview.")
+            image = ImageOps.exif_transpose(source).convert("RGB")
+        image.thumbnail((1800, 1500), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        image.save(output, format="JPEG", quality=86, optimize=True)
+    except (OSError, Image.DecompressionBombError) as exc:
+        raise Http404("Timetable image preview cannot be generated.") from exc
+    response = HttpResponse(output.getvalue(), content_type="image/jpeg")
+    response["Cache-Control"] = "private, max-age=300"
+    return response
+
+
+def timetable_upload_file(request, tool, upload_id):
+    item = staged_upload_for_request(request, tool, upload_id)
+    response = FileResponse(
+        open(item["path"], "rb"),
+        as_attachment=request.GET.get("download") == "1",
+        filename=item["name"],
+        content_type=item.get("content_type", "application/octet-stream"),
+    )
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
 def workspace_preview(request, tool, file_id):
     source = workspace_pdf(request, tool, file_id)
     if not source:

@@ -11,7 +11,7 @@ from django.shortcuts import render
 from django.urls import reverse
 
 from activity.services import record_activity
-from activity.timetable_uploads import session_key, stage_timetable_uploads, staged_upload_files
+from activity.timetable_uploads import prepare_staged_uploads, session_key, stage_timetable_uploads, staged_upload_files
 from activity.models import Artifact
 from activity.workspaces import prepare_workspace
 
@@ -37,7 +37,7 @@ def diary_view(request):
     result_artifact_id = None
     found_subjects = None
     included_subjects = None
-    staged_uploads = request.session.get(upload_session_key, [])
+    staged_uploads = prepare_staged_uploads(request.session.get(upload_session_key, []))
 
     if request.method == "POST":
         form = DiaryForm(request.POST, request.FILES)
