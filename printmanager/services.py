@@ -391,7 +391,8 @@ def _direct_ipp_request(*, printer, source_path, title, copies, document_format,
         Path(template.name).unlink(missing_ok=True)
 
 
-def _ipp_job_operation(*, printer, job_uri, operation, source_path=None, document_format=None):
+def _ipp_job_operation(*, printer, job_uri, operation, source_path=None, document_format=None,
+                       timeout=None):
     body = [
         "{", f'NAME "{operation}"', f"OPERATION {operation}",
         "GROUP operation-attributes-tag", "ATTR charset attributes-charset utf-8",
@@ -412,7 +413,10 @@ def _ipp_job_operation(*, printer, job_uri, operation, source_path=None, documen
     try:
         template.write("\n".join(body))
         template.close()
-        return _run(["ipptool", "-tv", printer.device_uri, template.name], timeout=settings.CUPS_CONVERSION_TIMEOUT)
+        return _run(
+            ["ipptool", "-tv", printer.device_uri, template.name],
+            timeout=timeout or settings.CUPS_CONVERSION_TIMEOUT,
+        )
     finally:
         Path(template.name).unlink(missing_ok=True)
 
@@ -439,7 +443,12 @@ def read_job_status(job):
     """Return normalized live IPP state and useful vendor-provided details."""
     if not job.job_uri:
         raise CupsError("This older job has no IPP tracking address.")
-    output = _ipp_job_operation(printer=job.printer, job_uri=job.job_uri, operation="Get-Job-Attributes")
+    output = _ipp_job_operation(
+        printer=job.printer,
+        job_uri=job.job_uri,
+        operation="Get-Job-Attributes",
+        timeout=settings.CUPS_STATUS_TIMEOUT,
+    )
     raw = {}
     for line in output.splitlines():
         match = re.match(r"^\s*([a-z][a-z0-9-]+)\s+\([^)]*\)\s*=\s*(.*?)\s*$", line)

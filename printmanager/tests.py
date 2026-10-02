@@ -10,11 +10,18 @@ from django.urls import reverse
 from activity.models import Activity, Artifact
 
 from .models import Printer, PrintJob
-from .services import CupsError, parse_devices, parse_ipp_attributes, parse_option_lines, probe_printer
-from .tasks import submit_print_job
+from .services import CupsError, parse_devices, parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status
+from .tasks import refresh_print_job, submit_print_job
 
 
 class CupsParsingTests(TestCase):
+    @override_settings(CUPS_STATUS_TIMEOUT=7)
+    @patch("printmanager.services._ipp_job_operation", return_value="job-state (enum) = processing")
+    def test_job_status_uses_short_status_timeout(self, operation):
+        job = type("Job", (), {"job_uri": "ipp://printer/jobs/1", "printer": object()})()
+        self.assertEqual(read_job_status(job)["status"], "processing")
+        self.assertEqual(operation.call_args.kwargs["timeout"], 7)
+
     def test_printer_state_reasons_become_actionable_alerts(self):
         identity = parse_ipp_attributes("""printer-state (enum) = processing
 printer-state-reasons (1setOf keyword) = media-jam-error, media-empty-warning, toner-empty-error""")
@@ -60,6 +67,7 @@ class PrintingViewsTests(TestCase):
             for printer in printers
         ]
         self.queue = patch("printmanager.views.django_rq.get_queue").start().return_value
+        self.connection = patch("printmanager.views.django_rq.get_connection").start().return_value
         self.addCleanup(patch.stopall)
 
     def test_only_staff_can_configure_printers(self):
@@ -160,6 +168,33 @@ class PrintingViewsTests(TestCase):
             printer=self.printer, path="/tmp/large.pdf", title="large.pdf",
             copies=3, page_ranges="2-8", options={"media": "A4"},
         )
+
+    @patch("printmanager.tasks.read_job_status", return_value={
+        "status": "processing", "detail": "media-empty", "attributes": {"job-state-reasons": "media-empty"},
+    })
+    def test_out_of_paper_status_is_persisted_by_background_worker(self, read_status):
+        job = PrintJob.objects.create(
+            owner=self.user, printer=self.printer, document_name="large.pdf",
+            document_path="/tmp/large.pdf", status="queued", job_uri="ipp://printer/jobs/8",
+        )
+        refresh_print_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "processing")
+        self.assertEqual(job.status_detail, "media-empty")
+        self.assertEqual(job.status_data["job-state-reasons"], "media-empty")
+
+    def test_status_page_queues_refresh_without_contacting_printer(self):
+        job = PrintJob.objects.create(
+            owner=self.user, printer=self.printer, document_name="large.pdf",
+            document_path="/tmp/large.pdf", status="queued", job_uri="ipp://printer/jobs/9",
+        )
+        self.connection.set.return_value = True
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("printmanager:jobs"))
+
+        self.assertEqual(response.status_code, 200)
+        self.queue.enqueue.assert_called_once_with(refresh_print_job, job.pk, job_timeout=30)
 
     def test_user_cannot_select_another_users_artifact(self):
         activity = Activity.objects.create(owner=self.other, tool="booklets", title="secret")

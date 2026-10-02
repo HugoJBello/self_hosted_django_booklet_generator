@@ -17,8 +17,8 @@ from activity.models import Artifact
 
 from .forms import PrinterForm, PrintForm
 from .models import Printer, PrintJob
-from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, printer_availabilities, probe_printer, read_job_status
-from .tasks import submit_print_job
+from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, printer_availabilities, probe_printer
+from .tasks import refresh_print_job, submit_print_job
 
 
 staff_required = user_passes_test(lambda user: user.is_staff, login_url=settings.LOGIN_URL)
@@ -253,26 +253,21 @@ def _visible_jobs(request):
     return jobs if request.user.is_staff else jobs.filter(owner=request.user)
 
 
-def _refresh_jobs(jobs):
-    now = timezone.now()
+def _queue_job_refreshes(jobs):
+    try:
+        queue = django_rq.get_queue("default")
+        connection = django_rq.get_connection("default")
+    except Exception:
+        return
     for job in jobs:
         if job.status in {"completed", "canceled", "error"} or not job.job_uri:
             continue
+        lock_key = f"print-job-refresh:{job.pk}"
         try:
-            live = read_job_status(job)
-            job.status = live["status"]
-            job.status_detail = live["detail"]
-            job.status_data = live["attributes"]
-            if job.status == "processing" and not job.started_at:
-                job.started_at = now
-            if job.status in {"completed", "canceled", "error"} and not job.completed_at:
-                job.completed_at = now
-            job.last_checked_at = now
-            job.save(update_fields=("status", "status_detail", "status_data", "started_at", "completed_at", "last_checked_at"))
-        except CupsError as exc:
-            job.status_detail = str(exc)
-            job.last_checked_at = now
-            job.save(update_fields=("status_detail", "last_checked_at"))
+            if connection.set(lock_key, "1", nx=True, ex=15):
+                queue.enqueue(refresh_print_job, job.pk, job_timeout=30)
+        except Exception:
+            connection.delete(lock_key)
 
 
 def job_list(request):
@@ -281,7 +276,7 @@ def job_list(request):
     if printer_id.isdigit():
         jobs = jobs.filter(printer_id=printer_id)
     recent = list(jobs[:100])
-    _refresh_jobs(recent)
+    _queue_job_refreshes(recent)
     printers = list(Printer.objects.filter(pk__in=_visible_jobs(request).values("printer_id")).distinct())
     statuses = printer_availabilities(printers)
     counts = {key: jobs.filter(status=key).count() for key in ("queued", "processing", "completed", "error")}
