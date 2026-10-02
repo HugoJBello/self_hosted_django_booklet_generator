@@ -56,6 +56,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/app/data
+      - ./data/cups/run:/run/cups
     environment:
       # Mismos envs (para settings y rutas)
       DJANGO_SECRET_KEY: "dev-unsafe-secret-key"
@@ -64,6 +65,8 @@ services:
       APP_SUBPATH: "/pdf_manager"
       DJANGO_DB_PATH: "/app/data/db.sqlite3"
       DJANGO_MEDIA_ROOT: "/app/data/media"
+      CUPS_SERVER: "/run/cups/cups.sock"
+      CUPS_DISCOVERY_FILE: "/run/cups/discovered-printers.txt"
 
       # Redis
       REDIS_HOST: "redis"
@@ -73,6 +76,7 @@ services:
     depends_on:
       - redis
       - pdf_manager
+      - cups
 
     # ✅ Importante: con ENTRYPOINT=/entrypoint.sh, esto pasa args al script
     # y el script debe detectar "rqworker" y ejecutar "python manage.py rqworker default"

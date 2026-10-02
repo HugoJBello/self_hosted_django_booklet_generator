@@ -11,6 +11,7 @@ from activity.models import Activity, Artifact
 
 from .models import Printer, PrintJob
 from .services import CupsError, parse_devices, parse_ipp_attributes, parse_option_lines, probe_printer
+from .tasks import submit_print_job
 
 
 class CupsParsingTests(TestCase):
@@ -58,6 +59,7 @@ class PrintingViewsTests(TestCase):
             {"printer": printer, "connected": True, "state": "ready", "label": "Ready", "detail": "Connected and ready."}
             for printer in printers
         ]
+        self.queue = patch("printmanager.views.django_rq.get_queue").start().return_value
         self.addCleanup(patch.stopall)
 
     def test_only_staff_can_configure_printers(self):
@@ -97,8 +99,7 @@ class PrintingViewsTests(TestCase):
         self.assertContains(response, f'id="printer-{self.printer.pk}" checked')
         self.assertContains(response, "Ready")
 
-    @patch("printmanager.views.submit_pdf", side_effect=CupsError("still offline"))
-    def test_user_can_attempt_an_offline_printer(self, submit):
+    def test_user_can_attempt_an_offline_printer(self):
         self.availability.side_effect = None
         self.availability.return_value = [
             {"printer": self.printer, "connected": False, "state": "offline", "label": "Offline", "detail": "Timed out."},
@@ -108,12 +109,12 @@ class PrintingViewsTests(TestCase):
             "printer": self.printer.pk, "source": "upload", "copies": 1,
             "document": SimpleUploadedFile("attempt.pdf", b"%PDF", content_type="application/pdf"),
         })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(PrintJob.objects.get().error_message, "still offline")
-        submit.assert_called_once()
+        job = PrintJob.objects.get()
+        self.assertRedirects(response, f'{reverse("printmanager:jobs")}?printer={self.printer.pk}&highlight={job.pk}', fetch_redirect_response=False)
+        self.assertEqual(job.status_detail, "Waiting for background submission.")
+        self.queue.enqueue.assert_called_once_with(submit_print_job, job.pk)
 
-    @patch("printmanager.views.submit_pdf", return_value=("request id is office-1", {"media": "A4"}, {"media": "A4"}))
-    def test_user_can_submit_uploaded_pdf(self, submit):
+    def test_user_can_submit_uploaded_pdf_without_waiting_for_printer(self):
         self.client.force_login(self.user)
         response = self.client.post(reverse("printmanager:print"), {
             "printer": self.printer.pk, "source": "upload", "copies": 2,
@@ -123,19 +124,42 @@ class PrintingViewsTests(TestCase):
         job = PrintJob.objects.get()
         self.assertRedirects(response, f'{reverse("printmanager:jobs")}?printer={self.printer.pk}&highlight={job.pk}', fetch_redirect_response=False)
         self.assertEqual((job.owner, job.status), (self.user, "queued"))
-        submit.assert_called_once()
+        self.assertEqual(job.options["copies"], 2)
+        self.assertEqual(job.options["media"], "A4")
+        self.queue.enqueue.assert_called_once_with(submit_print_job, job.pk)
         if os.path.exists(job.document_path):
             os.unlink(job.document_path)
 
-    @patch("printmanager.views.submit_pdf", side_effect=CupsError("offline"))
-    def test_failed_submission_is_audited(self, submit):
-        self.client.force_login(self.user)
-        response = self.client.post(reverse("printmanager:print"), {
-            "printer": self.printer.pk, "source": "upload", "copies": 1,
-            "document": SimpleUploadedFile("failed.pdf", b"%PDF", content_type="application/pdf"),
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(PrintJob.objects.get().status, "error")
+    @patch("printmanager.tasks.submit_pdf", side_effect=CupsError("offline"))
+    def test_background_submission_failure_is_audited(self, submit):
+        job = PrintJob.objects.create(
+            owner=self.user, printer=self.printer, document_name="failed.pdf",
+            document_path="/tmp/failed.pdf", options={"copies": 1}, status="queued",
+        )
+        submit_print_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "error")
+        self.assertEqual(job.error_message, "offline")
+
+    @patch("printmanager.tasks.submit_pdf", return_value=(
+        "IPP job 7 accepted by office", {"media": "A4"}, {"media": "A4"}, "ipp://printer/jobs/7"
+    ))
+    def test_background_submission_persists_printer_tracking(self, submit):
+        job = PrintJob.objects.create(
+            owner=self.user, printer=self.printer, document_name="large.pdf",
+            document_path="/tmp/large.pdf",
+            options={"copies": 3, "page_ranges": "2-8", "media": "A4"}, status="queued",
+        )
+        submit_print_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "queued")
+        self.assertEqual(job.cups_job_id, "IPP job 7 accepted by office")
+        self.assertEqual(job.job_uri, "ipp://printer/jobs/7")
+        self.assertEqual(job.status_detail, "Accepted by the printer queue.")
+        submit.assert_called_once_with(
+            printer=self.printer, path="/tmp/large.pdf", title="large.pdf",
+            copies=3, page_ranges="2-8", options={"media": "A4"},
+        )
 
     def test_user_cannot_select_another_users_artifact(self):
         activity = Activity.objects.create(owner=self.other, tool="booklets", title="secret")

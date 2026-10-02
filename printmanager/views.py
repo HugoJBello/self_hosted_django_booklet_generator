@@ -2,6 +2,7 @@ import os
 import uuid
 from functools import wraps
 
+import django_rq
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
@@ -16,7 +17,8 @@ from activity.models import Artifact
 
 from .forms import PrinterForm, PrintForm
 from .models import Printer, PrintJob
-from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, printer_availabilities, probe_printer, read_job_status, submit_pdf
+from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, printer_availabilities, probe_printer, read_job_status
+from .tasks import submit_print_job
 
 
 staff_required = user_passes_test(lambda user: user.is_staff, login_url=settings.LOGIN_URL)
@@ -203,19 +205,23 @@ def print_document(request):
                 options["Collate"] = "True"
             jobs = []
             for path, name in documents:
-                job = PrintJob(owner=request.user, printer=data["printer"], document_name=name, document_path=path, options=options, status="error")
+                job = PrintJob.objects.create(
+                    owner=request.user,
+                    printer=data["printer"],
+                    document_name=name,
+                    document_path=path,
+                    options={"copies": data["copies"], "page_ranges": data["page_ranges"], **options},
+                    status="queued",
+                    status_detail="Waiting for background submission.",
+                )
                 try:
-                    response = submit_pdf(printer=data["printer"], path=path, title=name, copies=data["copies"], page_ranges=data["page_ranges"], options=options)
-                    result, merged, effective = response[:3]
-                    job.job_uri = response[3] if len(response) > 3 else ""
-                    job.options = {"copies": data["copies"], "page_ranges": data["page_ranges"], **merged}
-                    job.effective_options = effective
-                    job.transport = "ipp-create-send"
-                    job.cups_job_id = result
-                    job.status = "queued"
-                except CupsError as exc:
-                    job.error_message = str(exc)
-                job.save()
+                    django_rq.get_queue("default").enqueue(submit_print_job, job.pk)
+                except Exception:
+                    job.status = "error"
+                    job.error_message = "The background print queue is unavailable. Try again shortly."
+                    job.status_detail = "The document was saved, but could not be queued for submission."
+                    job.completed_at = timezone.now()
+                    job.save(update_fields=("status", "error_message", "status_detail", "completed_at"))
                 jobs.append(job)
             accepted = sum(job.status != "error" for job in jobs)
             if accepted:
