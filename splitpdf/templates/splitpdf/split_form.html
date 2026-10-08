@@ -811,7 +811,15 @@
       if (applyBooklets) {
         applyBooklets.addEventListener("change", refreshBookletUI);
       }
-      layoutInputs.forEach((input) => input.addEventListener("change", refreshBookletUI));
+      layoutInputs.forEach((input) => input.addEventListener("change", () => {
+        if (input.checked && input.value === "side_by_side") {
+          const portraitPrinting = form.querySelector('input[name="side_by_side_prepare_for_portrait_printing"]');
+          if (portraitPrinting) {
+            portraitPrinting.checked = true;
+          }
+        }
+        refreshBookletUI();
+      }));
       splitModeInputs.forEach((input) => input.addEventListener("change", refreshBookletUI));
       methodInputs.forEach((input) => input.addEventListener("change", () => {
         refreshSplitModeUI();
