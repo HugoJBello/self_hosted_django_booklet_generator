@@ -108,17 +108,49 @@ las rutas Django también contienen literalmente `pdf_manager`, por lo que para
 usar otro prefijo no basta con cambiar la variable: hay que modificar asimismo
 `pdf_manager_project/urls.py`.
 
-Tras editar la configuración, valide y recargue Nginx:
+### Aplicar y verificar el límite de carga
+
+El cambio del repositorio no modifica automáticamente el proxy inverso. Hay que
+editar la configuración **activa** de Nginx en cada servidor donde se despliegue
+la aplicación. Una directiva dentro de `location ^~ /pdf_manager/` prevalece
+sobre otra situada en `server` o `http`; por ejemplo, un límite global de
+`200M` no evita el error si este `location` todavía contiene `50M`.
+
+Con Nginx instalado como servicio del sistema, valide y recargue después de
+editar el archivo de configuración:
 
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Si aparece `413 Payload Too Large`, compruebe la configuración efectiva con
-`nginx -T`: una directiva `client_max_body_size` dentro de `location` prevalece
-sobre la definida en `server`. Si hay otro proxy o CDN delante de Nginx, su
-límite de carga también debe admitir el tamaño deseado.
+Si Nginx se ejecuta en Docker, edite el archivo del host montado como
+`/etc/nginx/conf.d/default.conf` (no la copia efímera dentro del contenedor) y
+ejecute, sustituyendo `<nginx>` por el nombre real del contenedor:
+
+```bash
+docker exec <nginx> nginx -t
+docker exec <nginx> nginx -s reload
+```
+
+Compruebe qué valor termina aplicándose:
+
+```bash
+# Nginx del sistema
+sudo nginx -T 2>&1 | grep -n -C 4 'client_max_body_size\|pdf_manager'
+
+# Nginx en Docker
+docker exec <nginx> nginx -T 2>&1 \
+  | grep -n -C 4 'client_max_body_size\|pdf_manager'
+```
+
+Un `413 Payload Too Large` normalmente lo devuelve Nginx antes de que la
+petición llegue a Django. Confírmelo revisando el registro de acceso de Gunicorn:
+si no aparece el `POST` rechazado, el límite está en Nginx o en un proxy
+anterior. Si hay un CDN, balanceador o túnel delante de Nginx, este también debe
+aceptar el tamaño deseado. El cuerpo `multipart/form-data` ocupa algo más que el
+archivo original, por lo que no conviene fijar un límite exactamente igual al
+tamaño máximo esperado para el fichero.
 
 Finalmente, compruebe tanto la aplicación como un recurso estático:
 
