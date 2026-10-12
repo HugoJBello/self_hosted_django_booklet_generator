@@ -77,8 +77,10 @@ location ^~ /pdf_manager/ {
     proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # La generación y el OCR pueden tardar, y se suben archivos PDF.
-    client_max_body_size 50M;
+    # La generación y el OCR pueden tardar, y se suben archivos PDF grandes.
+    # Este límite debe ser igual o menor que el permitido por cualquier proxy
+    # anterior (CDN, balanceador o túnel) para evitar respuestas HTTP 413.
+    client_max_body_size 200M;
     proxy_read_timeout 300s;
     proxy_send_timeout 300s;
     proxy_request_buffering off;
@@ -112,6 +114,11 @@ Tras editar la configuración, valide y recargue Nginx:
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+Si aparece `413 Payload Too Large`, compruebe la configuración efectiva con
+`nginx -T`: una directiva `client_max_body_size` dentro de `location` prevalece
+sobre la definida en `server`. Si hay otro proxy o CDN delante de Nginx, su
+límite de carga también debe admitir el tamaño deseado.
 
 Finalmente, compruebe tanto la aplicación como un recurso estático:
 
