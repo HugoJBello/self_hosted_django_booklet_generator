@@ -55,9 +55,6 @@ data/booklets/
 *.pid
 docker-compose.override.yml
 
-# Docker build artifacts
-.dockerignore
-
 # ============================================================
 # OS / Editors
 # ============================================================

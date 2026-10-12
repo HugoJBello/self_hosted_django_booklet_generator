@@ -1,0 +1,17 @@
+# Runtime state is mounted into the containers and must not be sent as part of
+# either image build context. Some CUPS directories are intentionally private,
+# which otherwise makes `docker compose build` fail while scanning the context.
+data/
+
+# Files that are irrelevant to the runtime images.
+.git/
+.gitignore
+.dockerignore
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
