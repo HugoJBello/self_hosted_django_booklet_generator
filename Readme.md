@@ -52,6 +52,74 @@ en otra term
 
  docker compose up -d --build --force-recreate
 
+## Proxy inverso Nginx bajo `/pdf_manager/`
+
+El proyecto está preparado para publicarse conservando el prefijo
+`/pdf_manager` (por ejemplo, `https://example.com/pdf_manager/`). El contenedor
+web escucha en el puerto `8000` y el `docker-compose.yml` lo publica en el
+puerto `8010` del host.
+
+Añada lo siguiente dentro del bloque `server { ... }` de Nginx:
+
+```nginx
+# Normaliza la URL sin barra final.
+location = /pdf_manager {
+    return 301 /pdf_manager/;
+}
+
+location ^~ /pdf_manager/ {
+    # Sin barra final: el upstream debe recibir /pdf_manager/... completo.
+    proxy_pass http://127.0.0.1:8010;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # La generación y el OCR pueden tardar, y se suben archivos PDF.
+    client_max_body_size 50M;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+    proxy_request_buffering off;
+}
+```
+
+La ausencia de la barra final en `proxy_pass http://127.0.0.1:8010` es
+intencionada. Si se escribe `proxy_pass http://127.0.0.1:8010/`, Nginx elimina
+el prefijo antes de enviar la petición y Django responderá con rutas incorrectas
+o errores 404.
+
+Mantenga estas variables en los servicios `pdf_manager` y
+`pdf_manager_worker`:
+
+```yaml
+environment:
+  APP_SUBPATH: "/pdf_manager"
+  DJANGO_ALLOWED_HOSTS: "example.com"
+  DJANGO_CSRF_TRUSTED_ORIGINS: "https://example.com"
+  DJANGO_COOKIE_SECURE: "True"
+```
+
+`APP_SUBPATH` controla las URLs de archivos estáticos y media. En esta versión,
+las rutas Django también contienen literalmente `pdf_manager`, por lo que para
+usar otro prefijo no basta con cambiar la variable: hay que modificar asimismo
+`pdf_manager_project/urls.py`.
+
+Tras editar la configuración, valide y recargue Nginx:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Finalmente, compruebe tanto la aplicación como un recurso estático:
+
+```bash
+curl -I https://example.com/pdf_manager/
+curl -I https://example.com/pdf_manager/static/booklets/favicon.svg
+```
+
 ## Impresión mediante CUPS
 
 La sección **Print** permite enviar un PDF subido o un resultado del historial a una
