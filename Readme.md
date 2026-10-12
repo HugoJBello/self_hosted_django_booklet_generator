@@ -80,7 +80,7 @@ location ^~ /pdf_manager/ {
     # La generación y el OCR pueden tardar, y se suben archivos PDF grandes.
     # Este límite debe ser igual o menor que el permitido por cualquier proxy
     # anterior (CDN, balanceador o túnel) para evitar respuestas HTTP 413.
-    client_max_body_size 200M;
+    client_max_body_size 10G;
     proxy_read_timeout 300s;
     proxy_send_timeout 300s;
     proxy_request_buffering off;
@@ -114,7 +114,7 @@ El cambio del repositorio no modifica automáticamente el proxy inverso. Hay que
 editar la configuración **activa** de Nginx en cada servidor donde se despliegue
 la aplicación. Una directiva dentro de `location ^~ /pdf_manager/` prevalece
 sobre otra situada en `server` o `http`; por ejemplo, un límite global de
-`200M` no evita el error si este `location` todavía contiene `50M`.
+`10G` no evita el error si este `location` todavía contiene `50M`.
 
 Con Nginx instalado como servicio del sistema, valide y recargue después de
 editar el archivo de configuración:
