@@ -159,6 +159,21 @@ curl -I https://example.com/pdf_manager/
 curl -I https://example.com/pdf_manager/static/booklets/favicon.svg
 ```
 
+### Subidas grandes por fragmentos
+
+Los formularios de toda la aplicación que aceptan PDF usan automáticamente el
+cargador común `chunk_upload.js`. Antes de enviar el formulario, cada PDF se
+transfiere en peticiones autenticadas de 16 MB, con progreso, velocidad,
+cancelación y reintentos visibles. El servidor valida y recompone el documento,
+y un middleware lo entrega a la vista como un archivo Django convencional. Así,
+Booklets, OCR, Join, Split, Diary, Calendar y Print reutilizan el mismo flujo sin
+duplicar lógica y sin superar el límite por petición de proxies como Cloudflare.
+
+Las URLs del JavaScript y CSS incluyen `FRONTEND_ASSET_VERSION` para invalidar
+las cachés persistentes del navegador (incluido Brave) después de desplegar. Se
+puede definir esta variable en el entorno; al modificar estos recursos debe
+cambiarse su valor predeterminado en `pdf_manager_project/settings.py`.
+
 ## Impresión mediante CUPS
 
 La sección **Print** permite enviar un PDF subido o un resultado del historial a una

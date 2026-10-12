@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="{% static 'booklets/favicon.svg' %}">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="{% static 'booklets/chunk_upload.css' %}?v={{ frontend_asset_version }}" rel="stylesheet">
   <style>
     :root { --ink:#172033; --brand:#3659d9; --surface:#f4f6fb; }
     body { color:var(--ink); background:var(--surface); min-height:100vh; }
@@ -54,7 +55,7 @@
   </style>
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body data-chunk-upload-url="{% url 'activity:chunk_upload' %}">
 {% if request.user.is_authenticated %}
 <nav class="navbar navbar-expand-lg navbar-dark app-navbar sticky-top">
   <div class="container-xl">
@@ -100,6 +101,7 @@
 </main>
 {% if request.user.is_authenticated %}{% include "activity/pdf_preview_modal.html" %}{% include "activity/upload_image_preview_modal.html" %}{% include "activity/output_selector_modal.html" %}{% endif %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{% static 'booklets/chunk_upload.js' %}?v={{ frontend_asset_version }}"></script>
 <script>(()=>{
 const el=document.getElementById('pdfPreviewModal');if(!el)return;
 const modal=bootstrap.Modal.getOrCreateInstance(el),body=el.querySelector('.modal-body'),pagesBox=el.querySelector('.pdf-preview-pages'),frame=el.querySelector('.pdf-preview-frame'),loading=el.querySelector('.pdf-preview-loading'),error=el.querySelector('.pdf-preview-error'),title=el.querySelector('.modal-title'),open=el.querySelector('.pdf-preview-open'),download=el.querySelector('.pdf-preview-download'),counter=el.querySelector('.pdf-preview-counter'),previous=el.querySelector('.pdf-preview-previous'),next=el.querySelector('.pdf-preview-next'),zoomOut=el.querySelector('.pdf-preview-zoom-out'),zoomIn=el.querySelector('.pdf-preview-zoom-in'),zoomLabel=el.querySelector('.pdf-preview-zoom-label');

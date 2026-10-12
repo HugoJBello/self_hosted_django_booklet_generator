@@ -1,9 +1,14 @@
+from django.conf import settings
 from django.db.models import Count, Q
 
 from .models import Activity
 
 
 SUPPORTED_TOOLS = {"booklets", "joinpdf", "splitpdf", "ocrpdf", "diary", "calendarpdf"}
+
+
+def frontend_assets(request):
+    return {"frontend_asset_version": settings.FRONTEND_ASSET_VERSION}
 
 
 def recent_activity(request):

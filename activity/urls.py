@@ -1,8 +1,10 @@
 from django.urls import path
 from . import views
+from .chunk_uploads import chunk_upload
 
 app_name = "activity"
 urlpatterns = [
+    path("chunk-upload/", chunk_upload, name="chunk_upload"),
     path("<int:activity_id>/outputs/", views.activity_outputs, name="outputs"),
     path("<int:activity_id>/thumbnail/", views.activity_thumbnail, name="thumbnail"),
     path("", views.activity_list, name="list"),

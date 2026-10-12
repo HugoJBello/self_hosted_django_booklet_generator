@@ -25,6 +25,7 @@ else:
 # Subpath fijo (NO usar FORCE_SCRIPT_NAME)
 # ------------------------------------------------------------
 APP_SUBPATH = os.environ.get("APP_SUBPATH", "/pdf_manager").rstrip("/")
+FRONTEND_ASSET_VERSION = os.environ.get("FRONTEND_ASSET_VERSION", "20261012.2")
 
 # ------------------------------------------------------------
 # Applications
@@ -81,6 +82,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "activity.chunk_uploads.ChunkedPdfUploadMiddleware",
     "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -111,6 +113,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "activity.context_processors.recent_activity",
+                "activity.context_processors.frontend_assets",
             ],
         },
     }

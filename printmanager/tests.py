@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 from unittest.mock import patch
 
@@ -137,6 +138,59 @@ class PrintingViewsTests(TestCase):
         self.queue.enqueue.assert_called_once_with(submit_print_job, job.pk)
         if os.path.exists(job.document_path):
             os.unlink(job.document_path)
+
+    def test_chunked_pdf_upload_is_reassembled_as_a_normal_form_file(self):
+        self.client.force_login(self.user)
+        start = self.client.post(reverse("activity:chunk_upload"), {
+            "action": "start", "filename": "large.pdf", "field": "document", "size": "13",
+        })
+        self.assertEqual(start.status_code, 200)
+        token = start.json()["token"]
+        first = self.client.post(reverse("activity:chunk_upload"), {
+            "action": "chunk", "token": token, "offset": "0",
+            "chunk": SimpleUploadedFile("block", b"%PDF-1.", content_type="application/octet-stream"),
+        })
+        self.assertEqual(first.json()["offset"], 7)
+        complete = self.client.post(reverse("activity:chunk_upload"), {
+            "action": "chunk", "token": token, "offset": "7",
+            "chunk": SimpleUploadedFile("block", b"4\nbody", content_type="application/octet-stream"),
+        })
+        self.assertTrue(complete.json()["complete"])
+
+        response = self.client.post(reverse("printmanager:print"), {
+            "printer": self.printer.pk, "source": "upload", "copies": 1,
+            "chunk_upload_tokens": json.dumps([{"token": token, "field": "document"}]),
+        })
+
+        job = PrintJob.objects.get()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(job.document_name, "large.pdf")
+        with open(job.document_path, "rb") as saved:
+            self.assertEqual(saved.read(), b"%PDF-1.4\nbody")
+        os.unlink(job.document_path)
+
+    def test_chunk_upload_rejects_out_of_sequence_blocks(self):
+        self.client.force_login(self.user)
+        token = self.client.post(reverse("activity:chunk_upload"), {
+            "action": "start", "filename": "large.pdf", "field": "document", "size": "8",
+        }).json()["token"]
+        response = self.client.post(reverse("activity:chunk_upload"), {
+            "action": "chunk", "token": token, "offset": "2",
+            "chunk": SimpleUploadedFile("block", b"%PDF", content_type="application/octet-stream"),
+        })
+        self.assertEqual(response.status_code, 409)
+
+    def test_chunk_upload_token_is_private_to_the_session(self):
+        self.client.force_login(self.user)
+        token = self.client.post(reverse("activity:chunk_upload"), {
+            "action": "start", "filename": "private.pdf", "field": "document", "size": "8",
+        }).json()["token"]
+        self.client.force_login(self.other)
+        response = self.client.post(reverse("activity:chunk_upload"), {
+            "action": "chunk", "token": token, "offset": "0",
+            "chunk": SimpleUploadedFile("block", b"%PDF-1\n", content_type="application/octet-stream"),
+        })
+        self.assertEqual(response.status_code, 404)
 
     @patch("printmanager.tasks.submit_pdf", side_effect=CupsError("offline"))
     def test_background_submission_failure_is_audited(self, submit):

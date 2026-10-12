@@ -550,7 +550,9 @@
 
       form.addEventListener("submit", () => {
         refreshCards();
-        syncInputFiles();
+        if (form.dataset.chunkUploadReady !== "true") {
+          syncInputFiles();
+        }
       });
 
       form.addEventListener("submit", (event) => {
