@@ -20,10 +20,29 @@
   const papers = {a5:[420,595],a4:[595,842],a3:[842,1191],letter:[612,792],photo_4x6:[288,432]};
   const imageSuffixes = [".png",".jpg",".jpeg",".webp",".tif",".tiff",".bmp",".heic",".heif"];
   const settings = new Map(), urls = new Map(), images = new Map();
+  let selectedFiles = [];
   let activeKey = "";
   const keyFor = (file) => `${file.name}::${file.size}::${file.lastModified}`;
   const isImage = (file) => file.type.toLowerCase().startsWith("image/") || imageSuffixes.some((suffix) => file.name.toLowerCase().endsWith(suffix));
   const size = (bytes) => bytes < 1048576 ? `${(bytes/1024).toFixed(1)} KB` : `${(bytes/1048576).toFixed(1)} MB`;
+
+  function assignFiles(files) {
+    if (typeof DataTransfer === "undefined") return false;
+    const transfer = new DataTransfer(); files.forEach((file) => transfer.items.add(file)); input.files = transfer.files; return true;
+  }
+
+  function mergeSelection(incoming) {
+    const merged = new Map(selectedFiles.map((file) => [keyFor(file), file]));
+    incoming.forEach((file) => merged.set(keyFor(file), file));
+    selectedFiles = [...merged.values()];
+    assignFiles(selectedFiles);
+  }
+
+  const addMore = document.createElement("button");
+  addMore.type = "button"; addMore.className = "btn btn-outline-primary btn-sm mt-2 print-add-more";
+  addMore.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Add more documents';
+  addMore.addEventListener("click", () => input.click());
+  input.insertAdjacentElement("afterend", addMore);
 
   function syncFields(files) {
     manifestField.value = JSON.stringify(files.map((file) => ({name:file.name,size:file.size,type:isImage(file)?"image":"pdf"})));
@@ -77,8 +96,8 @@
     controls.forEach((control)=>{control.value=options[control.dataset.imageOption]});modalElement.querySelector(".modal-title").textContent=file.name;updateEditor();modal.show();
   }
   function removeAt(files,index) {
-    const removed=files[index],key=keyFor(removed),transfer=new DataTransfer();files.forEach((file,i)=>{if(i!==index)transfer.items.add(file)});input.files=transfer.files;
-    if(urls.has(key))URL.revokeObjectURL(urls.get(key));urls.delete(key);images.delete(key);settings.delete(key);input.dispatchEvent(new Event("change",{bubbles:true}));
+    const removed=files[index],key=keyFor(removed);selectedFiles=files.filter((file,i)=>i!==index);assignFiles(selectedFiles);
+    if(urls.has(key))URL.revokeObjectURL(urls.get(key));urls.delete(key);images.delete(key);settings.delete(key);render();
   }
   function render() {
     const files=[...input.files];files.filter(isImage).forEach((file)=>{if(!settings.has(keyFor(file)))settings.set(keyFor(file),{...defaults})});syncFields(files);
@@ -94,5 +113,5 @@
     count.textContent=files.length?`${files.length} document${files.length===1?'':'s'} selected`:'No documents selected';note.hidden=files.length<2;if(submit)submit.textContent=files.length>1?`Queue ${files.length} documents`:'Send to printer';
   }
   controls.forEach((control)=>control.addEventListener("input",updateEditor));modalElement?.querySelector("[data-image-reset]")?.addEventListener("click",()=>{settings.set(activeKey,{...defaults});const file=[...input.files].find((item)=>keyFor(item)===activeKey);if(file)openEditor(file)});
-  modalElement?.addEventListener("hidden.bs.modal",render);input.addEventListener("change",render);window.addEventListener("pagehide",()=>urls.forEach(URL.revokeObjectURL));render();
+  modalElement?.addEventListener("hidden.bs.modal",render);input.addEventListener("change",()=>{mergeSelection([...input.files]);render()});window.addEventListener("pagehide",()=>urls.forEach(URL.revokeObjectURL));mergeSelection([...input.files]);render();
 })();
