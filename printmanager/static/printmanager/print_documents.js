@@ -10,11 +10,11 @@
   const canvas = modalElement?.querySelector("[data-image-layout-canvas]"), controls = [...(modalElement?.querySelectorAll("[data-image-option]") || [])];
   const defaults = {paper:"a4",orientation:"auto",fit:"contain",margin_mm:10,horizontal:"center",vertical:"center",rotation:0,dpi:300,background:"#ffffff"};
   const papers = {a5:[420,595],a4:[595,842],a3:[842,1191],letter:[612,792],photo_4x6:[288,432]};
-  const imageSuffixes = [".png",".jpg",".jpeg",".webp",".tif",".tiff",".bmp"];
+  const imageSuffixes = [".png",".jpg",".jpeg",".webp",".tif",".tiff",".bmp",".heic",".heif"];
   const settings = new Map(), urls = new Map(), images = new Map();
   let activeKey = "";
   const keyFor = (file) => `${file.name}::${file.size}::${file.lastModified}`;
-  const isImage = (file) => imageSuffixes.some((suffix) => file.name.toLowerCase().endsWith(suffix));
+  const isImage = (file) => file.type.toLowerCase().startsWith("image/") || imageSuffixes.some((suffix) => file.name.toLowerCase().endsWith(suffix));
   const size = (bytes) => bytes < 1048576 ? `${(bytes/1024).toFixed(1)} KB` : `${(bytes/1048576).toFixed(1)} MB`;
 
   function syncFields(files) {
@@ -76,11 +76,11 @@
     const files=[...input.files];files.filter(isImage).forEach((file)=>{if(!settings.has(keyFor(file)))settings.set(keyFor(file),{...defaults})});syncFields(files);
     list.replaceChildren(...files.map((file,index)=>{const imageDocument=isImage(file),card=document.createElement("article");card.className="print-document-card";
       const thumb=document.createElement("div");thumb.className="print-document-thumb";
-      if(imageDocument){const preview=document.createElement("canvas");thumb.append(preview);paint(preview,loadImage(file),settings.get(keyFor(file)));}else{const frame=document.createElement("iframe");frame.src=`${getUrl(file)}#page=1&toolbar=0&navpanes=0&scrollbar=0`;frame.title=`First page of ${file.name}`;thumb.append(frame)}
+      if(imageDocument){const preview=document.createElement("canvas"),fallback=document.createElement("span");fallback.className="print-document-thumb-fallback";fallback.innerHTML='<i class="bi bi-image"></i>';thumb.append(preview,fallback);const image=loadImage(file);image.addEventListener("load",()=>{fallback.hidden=true},{once:true});image.addEventListener("error",()=>{preview.hidden=true;fallback.hidden=false},{once:true});paint(preview,image,settings.get(keyFor(file)));}else{const frame=document.createElement("iframe");frame.src=`${getUrl(file)}#page=1&toolbar=0&navpanes=0&scrollbar=0`;frame.title=`First page of ${file.name}`;thumb.append(frame)}
       const details=document.createElement("div");details.className="print-document-details";const name=document.createElement("div");name.className="print-document-name";name.textContent=file.name;
       const meta=document.createElement("div");meta.className="print-document-meta";meta.innerHTML=`<span>${imageDocument?'Image → PDF':'PDF'}</span><span>${size(file.size)}</span>`;
       const actions=document.createElement("div");actions.className="print-document-actions";
-      if(imageDocument){const edit=document.createElement("button");edit.type="button";edit.className="btn btn-sm btn-outline-primary";edit.innerHTML='<i class="bi bi-sliders me-1"></i><span>Edit PDF layout</span>';edit.addEventListener("click",()=>openEditor(file));actions.append(edit)}
+      if(imageDocument){const edit=document.createElement("button");edit.type="button";edit.className="btn btn-sm btn-primary";edit.innerHTML='<i class="bi bi-sliders me-1"></i><span>Edit composition</span>';edit.addEventListener("click",()=>openEditor(file));actions.append(edit)}
       else{const preview=document.createElement("button");preview.type="button";preview.className="btn btn-sm btn-outline-primary pdf-preview-trigger";preview.dataset.pdfPreview=getUrl(file);preview.dataset.pdfDownload=getUrl(file);preview.dataset.pdfName=file.name;preview.innerHTML='<i class="bi bi-eye me-1"></i><span>Preview</span>';actions.append(preview)}
       const remove=document.createElement("button");remove.type="button";remove.className="btn btn-sm btn-outline-secondary";remove.innerHTML='<i class="bi bi-x-lg me-1"></i><span>Remove</span>';remove.addEventListener("click",()=>removeAt(files,index));actions.append(remove);details.append(name,meta,actions);card.append(thumb,details);return card}));
     count.textContent=files.length?`${files.length} document${files.length===1?'':'s'} selected`:'No documents selected';note.hidden=files.length<2;if(submit)submit.textContent=files.length>1?`Queue ${files.length} documents`:'Send to printer';

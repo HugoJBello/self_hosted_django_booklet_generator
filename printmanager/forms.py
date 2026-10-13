@@ -61,7 +61,7 @@ class PrinterForm(forms.ModelForm):
 class PrintForm(forms.Form):
     printer = forms.ModelChoiceField(queryset=Printer.objects.none(), empty_label=None)
     source = forms.ChoiceField(choices=(("upload", "Upload documents"), ("recent", "Choose PDFs from recent activity")), widget=forms.RadioSelect)
-    document = MultipleFileField(required=False, widget=MultipleFileInput(attrs={"accept": "application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp"}))
+    document = MultipleFileField(required=False, widget=MultipleFileInput(attrs={"accept": "application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp,.heic,.heif"}))
     image_options = forms.CharField(required=False, widget=forms.HiddenInput)
     document_manifest = forms.CharField(required=False, widget=forms.HiddenInput)
     artifact = forms.MultipleChoiceField(required=False, choices=(), widget=forms.SelectMultiple(attrs={"size": 8}))

@@ -25,7 +25,7 @@ else:
 # Subpath fijo (NO usar FORCE_SCRIPT_NAME)
 # ------------------------------------------------------------
 APP_SUBPATH = os.environ.get("APP_SUBPATH", "/pdf_manager").rstrip("/")
-FRONTEND_ASSET_VERSION = os.environ.get("FRONTEND_ASSET_VERSION", "20261013.3")
+FRONTEND_ASSET_VERSION = os.environ.get("FRONTEND_ASSET_VERSION", "20261013.4")
 
 # ------------------------------------------------------------
 # Applications

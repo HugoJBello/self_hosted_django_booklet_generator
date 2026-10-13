@@ -8,9 +8,12 @@ from pathlib import Path
 
 import fitz
 from PIL import Image, ImageColor, ImageOps
+from pillow_heif import register_heif_opener
 from django.conf import settings
 
-IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"}
+register_heif_opener()
+
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp", ".heic", ".heif"}
 PAPER_SIZES = {
     "a5": (419.53, 595.28),
     "a4": (595.28, 841.89),
