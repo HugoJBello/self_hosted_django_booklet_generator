@@ -187,6 +187,12 @@ trabajo queda como enviado con resultado desconocido en vez de permanecer
 indefinidamente en la cola; la app no lo reenvía automáticamente para evitar
 impresiones duplicadas.
 
+Desde **Print status & history** se puede reenviar cualquier trabajo cuyo archivo
+siga disponible y cuya impresora esté habilitada. La acción pide confirmación y
+crea un trabajo nuevo —sin alterar el histórico— con el mismo documento,
+impresora y todas las opciones de impresión. La lista se presenta como tabla en
+escritorio y como tarjetas con acciones de ancho completo en pantallas móviles.
+
 La subida admite varios PDF e imágenes en una sola selección. La interfaz responsiva
 muestra miniaturas y una lista clara tanto en escritorio como en móvil, permite
 previsualizar, editar o retirar cada documento y aplica a todos los mismos ajustes

@@ -101,6 +101,20 @@ def _documents_from_uploads(uploads, image_options, manifest):
     return documents
 
 
+def _enqueue_print_job(job):
+    """Submit a saved PrintJob to RQ and leave an auditable failure if RQ is down."""
+    try:
+        django_rq.get_queue("default").enqueue(submit_print_job, job.pk)
+        return True
+    except Exception:
+        job.status = "error"
+        job.error_message = "The background print queue is unavailable. Try again shortly."
+        job.status_detail = "The document was saved, but could not be queued for submission."
+        job.completed_at = timezone.now()
+        job.save(update_fields=("status", "error_message", "status_detail", "completed_at"))
+        return False
+
+
 @staff_required
 def printer_list(request):
     printers = list(Printer.objects.prefetch_related("jobs").all())
@@ -293,14 +307,7 @@ def print_document(request):
                     status="queued",
                     status_detail="Waiting for background submission.",
                 )
-                try:
-                    django_rq.get_queue("default").enqueue(submit_print_job, job.pk)
-                except Exception:
-                    job.status = "error"
-                    job.error_message = "The background print queue is unavailable. Try again shortly."
-                    job.status_detail = "The document was saved, but could not be queued for submission."
-                    job.completed_at = timezone.now()
-                    job.save(update_fields=("status", "error_message", "status_detail", "completed_at"))
+                _enqueue_print_job(job)
                 jobs.append(job)
             accepted = sum(job.status != "error" for job in jobs)
             if accepted:
@@ -351,14 +358,44 @@ def _queue_job_refreshes(jobs):
             connection.delete(lock_key)
 
 
+@never_cache
 def job_list(request):
     printer_id = request.GET.get("printer", "")
     jobs = _visible_jobs(request)
     if printer_id.isdigit():
         jobs = jobs.filter(printer_id=printer_id)
     recent = list(jobs[:100])
+    for job in recent:
+        job.can_resend = os.path.isfile(job.document_path) and job.printer.is_enabled
     _queue_job_refreshes(recent)
     printers = list(Printer.objects.filter(pk__in=_visible_jobs(request).values("printer_id")).distinct())
     statuses = printer_availabilities(printers)
     counts = {key: jobs.filter(status=key).count() for key in ("queued", "processing", "completed", "error")}
     return render(request, "printmanager/job_list.html", {"jobs": recent, "printers": printers, "printer_statuses": statuses, "selected_printer": printer_id, "counts": counts, "highlight": request.GET.get("highlight", "")})
+
+
+def job_resend(request, pk):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    source = get_object_or_404(_visible_jobs(request), pk=pk)
+    if not os.path.isfile(source.document_path):
+        messages.error(request, "This job cannot be resent because its saved document is no longer available.")
+        return redirect(f'{reverse("printmanager:jobs")}?printer={source.printer_id}&highlight={source.pk}')
+    if not source.printer.is_enabled:
+        messages.error(request, "This job cannot be resent while its printer is disabled.")
+        return redirect(f'{reverse("printmanager:jobs")}?printer={source.printer_id}&highlight={source.pk}')
+
+    job = PrintJob.objects.create(
+        owner=request.user,
+        printer=source.printer,
+        document_name=source.document_name,
+        document_path=source.document_path,
+        options=dict(source.options or {}),
+        status="queued",
+        status_detail=f"Queued again from print job #{source.pk} with the same settings.",
+    )
+    if _enqueue_print_job(job):
+        messages.success(request, f"{source.document_name} was added to the queue again with the same settings.")
+    else:
+        messages.error(request, "The new job was saved, but the print queue is currently unavailable.")
+    return redirect(f'{reverse("printmanager:jobs")}?printer={job.printer_id}&highlight={job.pk}')
