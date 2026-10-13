@@ -182,6 +182,16 @@ impresoras. Al guardar, la configuración se aplica a CUPS y se consultan las
 opciones que anuncia el driver. Cada trabajo conserva usuario, documento, opciones,
 resultado e identificador CUPS.
 
+La subida admite varios PDF en una sola selección. La interfaz muestra la lista,
+permite previsualizar o retirar cada documento y aplica a todos los mismos ajustes
+de copias, páginas, papel, caras, orientación, color y escala. Cada PDF se guarda
+como un trabajo independiente y se encola en el orden seleccionado.
+
+Los botones **Print** de Activity y de los resultados de las herramientas abren
+la vista de impresión en modo enfocado: únicamente se muestra el PDF elegido,
+con sus acciones de previsualización y descarga, sin exponer ni cargar el resto
+del historial del usuario.
+
 El despliegue incluye su propio servicio CUPS: no utiliza ni exige modificar el
 CUPS del host. El servicio comparte un socket privado con Django y usa red de host
 para recibir anuncios mDNS/Bonjour y alcanzar impresoras IPP de la LAN. Sus colas,

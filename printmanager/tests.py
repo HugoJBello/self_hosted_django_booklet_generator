@@ -139,6 +139,52 @@ class PrintingViewsTests(TestCase):
         if os.path.exists(job.document_path):
             os.unlink(job.document_path)
 
+    def test_multiple_uploaded_pdfs_are_queued_with_the_same_settings(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("printmanager:print"), {
+            "printer": self.printer.pk, "source": "upload", "copies": 3,
+            "media": "A4", "sides": "two-sided-long-edge", "scaling": "fit-to-page",
+            "document": [
+                SimpleUploadedFile("first.pdf", b"%PDF-first", content_type="application/pdf"),
+                SimpleUploadedFile("second.pdf", b"%PDF-second", content_type="application/pdf"),
+            ],
+        })
+
+        jobs = list(PrintJob.objects.order_by("pk"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual([job.document_name for job in jobs], ["first.pdf", "second.pdf"])
+        self.assertEqual(jobs[0].options, jobs[1].options)
+        self.assertEqual(jobs[0].options["copies"], 3)
+        self.assertEqual(jobs[0].options["sides"], "two-sided-long-edge")
+        self.assertEqual(jobs[0].options["print-scaling"], "fit-to-page")
+        self.assertEqual(self.queue.enqueue.call_count, 2)
+        for job in jobs:
+            if os.path.exists(job.document_path):
+                os.unlink(job.document_path)
+
+    def test_print_link_focuses_only_the_requested_activity_pdf(self):
+        activity = Activity.objects.create(owner=self.user, tool="splitpdf", title="Selected split")
+        selected = Artifact.objects.create(
+            activity=activity, kind="output", name="selected.pdf", path="/tmp/selected.pdf",
+            content_type="application/pdf", size=1234,
+        )
+        other_activity = Activity.objects.create(owner=self.user, tool="ocrpdf", title="Other run")
+        Artifact.objects.create(
+            activity=other_activity, kind="output", name="must-not-appear.pdf", path="/tmp/other.pdf",
+            content_type="application/pdf", size=4321,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(f'{reverse("printmanager:print")}?artifact={selected.pk}')
+
+        self.assertContains(response, "Print this PDF")
+        self.assertContains(response, "selected.pdf")
+        self.assertContains(response, 'name="source" value="recent"', html=False)
+        self.assertContains(response, f'name="artifact" value="{selected.pk}"', html=False)
+        self.assertNotContains(response, "must-not-appear.pdf")
+        self.assertNotContains(response, "PDFs from activity")
+        self.assertNotContains(response, "Upload a PDF")
+
     def test_chunked_pdf_upload_is_reassembled_as_a_normal_form_file(self):
         self.client.force_login(self.user)
         start = self.client.post(reverse("activity:chunk_upload"), {

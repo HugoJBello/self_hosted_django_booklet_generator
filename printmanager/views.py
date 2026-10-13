@@ -176,10 +176,9 @@ def print_document(request):
     requested_artifact_id = request.GET.get("artifact", "")
     if requested_artifact_id.isdigit():
         requested_artifact = artifact_queryset.filter(pk=requested_artifact_id).first()
-    artifacts_page = Paginator(artifact_queryset, 12).get_page(request.GET.get("page"))
+    visible_artifacts = artifact_queryset.filter(pk=requested_artifact.pk) if requested_artifact else artifact_queryset
+    artifacts_page = Paginator(visible_artifacts, 12).get_page(request.GET.get("page"))
     artifacts = list(artifacts_page.object_list)
-    if requested_artifact and all(item.pk != requested_artifact.pk for item in artifacts):
-        artifacts.insert(0, requested_artifact)
     enabled_printers = list(Printer.objects.filter(is_enabled=True).order_by("-is_default", "name"))
     printer_choices = printer_availabilities(enabled_printers)
     connected_printers = [item["printer"] for item in printer_choices if item["connected"]]
@@ -245,6 +244,7 @@ def print_document(request):
         "printer_choices": printer_choices,
         "has_enabled_printers": bool(enabled_printers),
         "printer_capabilities": printer_capabilities,
+        "focused_artifact": requested_artifact,
     })
 
 
