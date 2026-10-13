@@ -4,6 +4,7 @@ import re
 from django import forms
 
 from .models import Printer
+from .image_documents import IMAGE_SUFFIXES
 
 
 class MultipleFileInput(forms.ClearableFileInput):
@@ -59,8 +60,10 @@ class PrinterForm(forms.ModelForm):
 
 class PrintForm(forms.Form):
     printer = forms.ModelChoiceField(queryset=Printer.objects.none(), empty_label=None)
-    source = forms.ChoiceField(choices=(("upload", "Upload a PDF"), ("recent", "Choose from recent activity")), widget=forms.RadioSelect)
-    document = MultipleFileField(required=False, widget=MultipleFileInput(attrs={"accept": "application/pdf,.pdf"}))
+    source = forms.ChoiceField(choices=(("upload", "Upload documents"), ("recent", "Choose PDFs from recent activity")), widget=forms.RadioSelect)
+    document = MultipleFileField(required=False, widget=MultipleFileInput(attrs={"accept": "application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp"}))
+    image_options = forms.CharField(required=False, widget=forms.HiddenInput)
+    document_manifest = forms.CharField(required=False, widget=forms.HiddenInput)
     artifact = forms.MultipleChoiceField(required=False, choices=(), widget=forms.SelectMultiple(attrs={"size": 8}))
     copies = forms.IntegerField(min_value=1, max_value=999, initial=1)
     page_ranges = forms.CharField(required=False, help_text="Examples: 1-4, 7, 10-12")
@@ -94,10 +97,11 @@ class PrintForm(forms.Form):
         data = super().clean()
         source = data.get("source")
         if source == "upload" and not data.get("document"):
-            self.add_error("document", "Select a PDF to upload.")
+            self.add_error("document", "Select at least one PDF or image to upload.")
         if source == "recent" and not data.get("artifact"):
             self.add_error("artifact", "Select a recent PDF.")
+        allowed_suffixes = IMAGE_SUFFIXES | {".pdf"}
         for document in data.get("document") or []:
-            if document.content_type not in ("application/pdf", "application/x-pdf") and not document.name.lower().endswith(".pdf"):
-                self.add_error("document", "Only PDF documents are accepted.")
+            if not any(document.name.lower().endswith(suffix) for suffix in allowed_suffixes):
+                self.add_error("document", "Only PDF and supported image documents are accepted.")
         return data

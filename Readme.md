@@ -24,7 +24,7 @@ Los administradores pueden crear usuarios, borrar usuarios y restablecer contras
 
 ## Historial de actividad
 
-Cada ejecución de Booklets, Join, Split, OCR, Diary y Calendar conserva en la base de datos:
+Cada ejecución de Booklets, Join, Split, OCR, Diary, Calendar y la conversión de imágenes en Print Documents conserva en la base de datos:
 
 - El usuario propietario y la fecha.
 - Las opciones elegidas.
@@ -176,16 +176,24 @@ cambiarse su valor predeterminado en `pdf_manager_project/settings.py`.
 
 ## Impresión mediante CUPS
 
-La sección **Print** permite enviar un PDF subido o un resultado del historial a una
+La sección **Print Documents** permite enviar PDF, imágenes o un resultado del historial a una
 cola persistida en Django. Solo los administradores pueden crear o modificar
 impresoras. Al guardar, la configuración se aplica a CUPS y se consultan las
 opciones que anuncia el driver. Cada trabajo conserva usuario, documento, opciones,
 resultado e identificador CUPS.
 
-La subida admite varios PDF en una sola selección. La interfaz muestra la lista,
-permite previsualizar o retirar cada documento y aplica a todos los mismos ajustes
+La subida admite varios PDF e imágenes en una sola selección. La interfaz responsiva
+muestra miniaturas y una lista clara tanto en escritorio como en móvil, permite
+previsualizar, editar o retirar cada documento y aplica a todos los mismos ajustes
 de copias, páginas, papel, caras, orientación, color y escala. Cada PDF se guarda
 como un trabajo independiente y se encola en el orden seleccionado.
+
+Cada imagen dispone de un editor visual para elegir papel, orientación automática o
+manual, ajuste (contener, cubrir, estirar o tamaño real), márgenes, alineación,
+rotación, DPI y fondo. El servidor genera el PDF definitivo con esa composición. La
+imagen original, el PDF resultante y todas las opciones de maquetación quedan en
+**Activity**, desde donde el resultado se puede previsualizar, descargar o volver a
+imprimir con los mismos controles de acceso que el resto de artefactos de la app.
 
 Los botones **Print** de Activity y de los resultados de las herramientas abren
 la vista de impresión en modo enfocado: únicamente se muestra el PDF elegido,

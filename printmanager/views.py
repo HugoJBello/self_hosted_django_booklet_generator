@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from functools import wraps
@@ -14,8 +15,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from activity.models import Artifact
+from activity.services import record_activity
 
 from .forms import PrinterForm, PrintForm
+from .image_documents import convert_uploaded_image, is_supported_image
 from .models import Printer, PrintJob
 from .services import CupsError, _run, certify_printer, configure_printer, discover_printers, printer_availabilities, probe_printer
 from .tasks import refresh_print_job, submit_print_job
@@ -51,6 +54,50 @@ def _save_upload(uploaded):
         for chunk in uploaded.chunks():
             destination.write(chunk)
     return path, filename
+
+
+def _json_list(value):
+    try:
+        parsed = json.loads(value or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _ordered_uploads(uploads, manifest):
+    remaining = list(uploads)
+    ordered = []
+    for entry in manifest:
+        if not isinstance(entry, dict):
+            continue
+        for index, uploaded in enumerate(remaining):
+            if uploaded.name == entry.get("name") and uploaded.size == entry.get("size"):
+                ordered.append(remaining.pop(index))
+                break
+    return ordered + remaining
+
+
+def _documents_from_uploads(uploads, image_options, manifest):
+    documents = []
+    option_entries = list(image_options)
+    for uploaded in _ordered_uploads(uploads, manifest):
+        if is_supported_image(uploaded.name):
+            raw_options = {}
+            for index, entry in enumerate(option_entries):
+                if isinstance(entry, dict) and entry.get("name") == uploaded.name and entry.get("size") == uploaded.size:
+                    raw_options = entry.get("options", {})
+                    option_entries.pop(index)
+                    break
+            path, name, normalized, source_path, source_name = convert_uploaded_image(uploaded, raw_options)
+            documents.append({
+                "path": path, "name": name, "image_options": normalized,
+                "source_path": source_path, "source_name": source_name,
+                "source_content_type": getattr(uploaded, "content_type", "application/octet-stream"),
+            })
+        else:
+            path, name = _save_upload(uploaded)
+            documents.append({"path": path, "name": name})
+    return documents
 
 
 @staff_required
@@ -189,10 +236,18 @@ def print_document(request):
         if form.is_valid():
             data = form.cleaned_data
             if data["source"] == "upload":
-                documents = [_save_upload(upload) for upload in data["document"]]
+                try:
+                    documents = _documents_from_uploads(
+                        data["document"],
+                        _json_list(data.get("image_options")),
+                        _json_list(data.get("document_manifest")),
+                    )
+                except (OSError, ValueError) as exc:
+                    form.add_error("document", f"An image could not be prepared for printing: {exc}")
+                    documents = []
             else:
                 selected = list(artifact_queryset.filter(pk__in=data["artifact"]))
-                documents = [(artifact.path, artifact.name) for artifact in selected]
+                documents = [{"path": artifact.path, "name": artifact.name} for artifact in selected]
             options = dict(data["extra_options"])
             for key in ("media", "sides", "orientation_requested", "print_color_mode"):
                 value = data.get(key)
@@ -202,13 +257,36 @@ def print_document(request):
                 options["print-scaling"] = data["scaling"]
             if data.get("collate"):
                 options["Collate"] = "True"
+            generated_images = [document for document in documents if document.get("source_path")]
+            if generated_images:
+                activity = record_activity(
+                    owner=request.user,
+                    tool="printdocuments",
+                    title=(generated_images[0]["name"] if len(generated_images) == 1 else f"{len(generated_images)} image documents"),
+                    options={
+                        "image_layouts": [
+                            {"source": document["source_name"], **document["image_options"]}
+                            for document in generated_images
+                        ],
+                        "print_settings": {"copies": data["copies"], "page_ranges": data["page_ranges"], **options},
+                    },
+                    inputs=[{
+                        "path": document["source_path"], "name": document["source_name"],
+                        "content_type": document["source_content_type"],
+                    } for document in generated_images],
+                    outputs=[{
+                        "path": document["path"], "name": document["name"], "content_type": "application/pdf",
+                    } for document in generated_images],
+                )
+                for document, artifact in zip(generated_images, activity.artifacts.filter(kind="output")):
+                    document["artifact_id"] = artifact.pk
             jobs = []
-            for path, name in documents:
+            for document in documents:
                 job = PrintJob.objects.create(
                     owner=request.user,
                     printer=data["printer"],
-                    document_name=name,
-                    document_path=path,
+                    document_name=document["name"],
+                    document_path=document["path"],
                     options={"copies": data["copies"], "page_ranges": data["page_ranges"], **options},
                     status="queued",
                     status_detail="Waiting for background submission.",
@@ -226,7 +304,8 @@ def print_document(request):
             if accepted:
                 messages.success(request, f"{accepted} document(s) accepted and queued.")
                 return redirect(f'{reverse("printmanager:jobs")}?printer={data["printer"].pk}&highlight={jobs[-1].pk}')
-            messages.error(request, "The printer did not accept the selected documents.")
+            if documents:
+                messages.error(request, "The printer did not accept the selected documents.")
     else:
         form = PrintForm(artifacts=artifacts, initial={
             "source": "recent" if requested_artifact or request.GET.get("page") else "upload",

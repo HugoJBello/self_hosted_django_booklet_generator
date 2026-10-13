@@ -1,3 +1,4 @@
+import io
 import os
 import json
 import tempfile
@@ -7,10 +8,13 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+import fitz
+from PIL import Image
 
 from activity.models import Activity, Artifact
 
 from .models import Printer, PrintJob
+from .image_documents import image_layout
 from .services import CupsError, parse_devices, parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status
 from .tasks import refresh_print_job, submit_print_job
 
@@ -177,13 +181,55 @@ class PrintingViewsTests(TestCase):
 
         response = self.client.get(f'{reverse("printmanager:print")}?artifact={selected.pk}')
 
-        self.assertContains(response, "Print this PDF")
+        self.assertContains(response, "Print this document")
         self.assertContains(response, "selected.pdf")
         self.assertContains(response, 'name="source" value="recent"', html=False)
         self.assertContains(response, f'name="artifact" value="{selected.pk}"', html=False)
         self.assertNotContains(response, "must-not-appear.pdf")
         self.assertNotContains(response, "PDFs from activity")
-        self.assertNotContains(response, "Upload a PDF")
+        self.assertNotContains(response, "Upload documents")
+
+    def test_uploaded_image_becomes_pdf_and_is_saved_in_activity(self):
+        image_bytes = io.BytesIO()
+        Image.new("RGB", (1200, 600), "#336699").save(image_bytes, "PNG")
+        payload = image_bytes.getvalue()
+        image_options = [{
+            "name": "wide.png", "size": len(payload),
+            "options": {"paper": "a4", "orientation": "landscape", "fit": "contain", "margin_mm": 12},
+        }]
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("printmanager:print"), {
+            "printer": self.printer.pk, "source": "upload", "copies": 1,
+            "document": SimpleUploadedFile("wide.png", payload, content_type="image/png"),
+            "image_options": json.dumps(image_options),
+            "document_manifest": json.dumps([{"name": "wide.png", "size": len(payload), "type": "image"}]),
+        })
+
+        job = PrintJob.objects.get()
+        activity = Activity.objects.get(tool="printdocuments")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(job.document_name, "wide.pdf")
+        self.assertEqual(activity.options["image_layouts"][0]["margin_mm"], 12.0)
+        self.assertEqual(activity.artifacts.filter(kind="input", name="wide.png").count(), 1)
+        output = activity.artifacts.get(kind="output")
+        self.assertEqual(output.path, job.document_path)
+        with fitz.open(output.path) as document:
+            self.assertGreater(document[0].rect.width, document[0].rect.height)
+        for artifact in activity.artifacts.all():
+            if os.path.exists(artifact.path):
+                os.unlink(artifact.path)
+
+    def test_image_layout_respects_fit_orientation_and_margins(self):
+        page, rect, options = image_layout((1600, 800), {
+            "paper": "a4", "orientation": "landscape", "fit": "contain", "margin_mm": 10,
+        })
+        margin = options["margin_mm"] * 72 / 25.4
+        self.assertGreater(page[0], page[1])
+        self.assertGreaterEqual(rect[0], margin - 0.01)
+        self.assertGreaterEqual(rect[1], margin - 0.01)
+        self.assertLessEqual(rect[2], page[0] - margin + 0.01)
+        self.assertLessEqual(rect[3], page[1] - margin + 0.01)
 
     def test_chunked_pdf_upload_is_reassembled_as_a_normal_form_file(self):
         self.client.force_login(self.user)
