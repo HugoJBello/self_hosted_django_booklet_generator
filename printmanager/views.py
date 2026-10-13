@@ -116,6 +116,16 @@ def _enqueue_print_job(job):
         return False
 
 
+def _automatic_pdf_orientation(path):
+    """Return the IPP orientation enum when every PDF page agrees."""
+    try:
+        with fitz.open(path) as document:
+            orientations = {"4" if page.rect.width > page.rect.height else "3" for page in document}
+        return orientations.pop() if len(orientations) == 1 else ""
+    except (fitz.FileDataError, OSError):
+        return ""
+
+
 @staff_required
 def printer_list(request):
     printers = list(Printer.objects.prefetch_related("jobs").all())
@@ -288,7 +298,9 @@ def print_document(request):
             # Printer capability defaults may otherwise reintroduce portrait
             # through extra_options and contradict a generated landscape PDF.
             if not data.get("orientation_requested"):
-                options.pop("orientation-requested", None)
+                # Empty is an intentional override: submit_pdf merges printer
+                # defaults later, so removing the key would restore portrait.
+                options["orientation-requested"] = ""
             if data.get("scaling"):
                 options["print-scaling"] = data["scaling"]
             if data.get("collate"):
@@ -318,12 +330,15 @@ def print_document(request):
                     document["artifact_id"] = artifact.pk
             jobs = []
             for document in documents:
+                job_options = {"copies": data["copies"], "page_ranges": data["page_ranges"], **options}
+                if not data.get("orientation_requested"):
+                    job_options["orientation-requested"] = _automatic_pdf_orientation(document["path"])
                 job = PrintJob.objects.create(
                     owner=request.user,
                     printer=data["printer"],
                     document_name=document["name"],
                     document_path=document["path"],
-                    options={"copies": data["copies"], "page_ranges": data["page_ranges"], **options},
+                    options=job_options,
                     status="queued",
                     status_detail="Waiting for background submission.",
                 )
