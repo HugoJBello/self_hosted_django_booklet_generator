@@ -236,9 +236,16 @@ def printer_delete(request, pk):
 @never_cache
 def print_document(request):
     artifact_queryset = _artifact_queryset(request)
+    restored_extra_options = {}
     requested_artifact = None
+    requested_job = None
+    requested_job_id = request.GET.get("job", "")
+    if requested_job_id.isdigit():
+        requested_job = get_object_or_404(_visible_jobs(request), pk=requested_job_id)
+        if not os.path.isfile(requested_job.document_path):
+            raise Http404("This print document is no longer available.")
     requested_artifact_id = request.GET.get("artifact", "")
-    if requested_artifact_id.isdigit():
+    if not requested_job and requested_artifact_id.isdigit():
         requested_artifact = artifact_queryset.filter(pk=requested_artifact_id).first()
     visible_artifacts = artifact_queryset.filter(pk=requested_artifact.pk) if requested_artifact else artifact_queryset
     artifacts_page = Paginator(visible_artifacts, 12).get_page(request.GET.get("page"))
@@ -262,9 +269,16 @@ def print_document(request):
                 except (OSError, ValueError) as exc:
                     form.add_error("document", f"An image could not be prepared for printing: {exc}")
                     documents = []
-            else:
+            elif data["source"] == "recent":
                 selected = list(artifact_queryset.filter(pk__in=data["artifact"]))
                 documents = [{"path": artifact.path, "name": artifact.name} for artifact in selected]
+            else:
+                source_job = get_object_or_404(_visible_jobs(request), pk=data["source_job"])
+                if os.path.isfile(source_job.document_path):
+                    documents = [{"path": source_job.document_path, "name": source_job.document_name}]
+                else:
+                    form.add_error("source_job", "This print document is no longer available.")
+                    documents = []
             options = dict(data["extra_options"])
             for key in ("media", "sides", "orientation_requested", "print_color_mode"):
                 value = data.get(key)
@@ -317,11 +331,27 @@ def print_document(request):
             if documents:
                 messages.error(request, "The printer did not accept the selected documents.")
     else:
-        form = PrintForm(artifacts=artifacts, initial={
-            "source": "recent" if requested_artifact or request.GET.get("page") else "upload",
+        initial = {
+            "source": "job" if requested_job else "recent" if requested_artifact or request.GET.get("page") else "upload",
+            "source_job": requested_job.pk if requested_job else None,
             "artifact": [str(requested_artifact.pk)] if requested_artifact else [],
-            "printer": default_printer.pk if default_printer else None,
-        })
+            "printer": requested_job.printer_id if requested_job and requested_job.printer.is_enabled else default_printer.pk if default_printer else None,
+        }
+        if requested_job:
+            saved = dict(requested_job.options or {})
+            initial.update({
+                "copies": saved.pop("copies", 1),
+                "page_ranges": saved.pop("page_ranges", ""),
+                "media": saved.pop("media", ""),
+                "sides": saved.pop("sides", ""),
+                "orientation_requested": saved.pop("orientation-requested", ""),
+                "print_color_mode": saved.pop("print-color-mode", ""),
+                "scaling": saved.pop("print-scaling", ""),
+                "collate": str(saved.pop("Collate", "")).lower() in {"true", "1", "yes"},
+            })
+            restored_extra_options = saved
+            initial["extra_options"] = json.dumps(saved, indent=2)
+        form = PrintForm(artifacts=artifacts, initial=initial)
     printer_capabilities = {
         str(printer.pk): {"options": printer.supported_options, "defaults": printer.default_options}
         for printer in Printer.objects.filter(is_enabled=True)
@@ -334,6 +364,9 @@ def print_document(request):
         "has_enabled_printers": bool(enabled_printers),
         "printer_capabilities": printer_capabilities,
         "focused_artifact": requested_artifact,
+        "focused_job": requested_job,
+        "focused_document": requested_artifact or requested_job,
+        "restored_extra_options": restored_extra_options if requested_job else {},
     })
 
 

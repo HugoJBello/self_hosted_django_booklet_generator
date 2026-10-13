@@ -193,8 +193,12 @@ crea un trabajo nuevo —sin alterar el histórico— con el mismo documento,
 impresora y todas las opciones de impresión. La lista usa tarjetas compactas en
 escritorio y reorganiza sus acciones a ancho completo en pantallas móviles.
 Cada trabajo muestra la miniatura de la primera página y reutiliza la botonera
-común de PDF para previsualizar, reenviar o descargar el documento. Estas rutas
-están protegidas por el propietario del trabajo y los permisos de administrador.
+común de PDF para previsualizar, reenviar, editar antes de reenviar o descargar
+el documento. **Resend** crea inmediatamente una copia con los mismos ajustes;
+**Edit & resend** abre el documento de forma aislada en Print Documents y restaura
+la impresora y sus parámetros para poder modificarlos antes de crear un trabajo
+nuevo. Estas rutas están protegidas por el propietario del trabajo y los permisos
+de administrador.
 
 La subida admite varios PDF e imágenes en una sola selección. La interfaz responsiva
 muestra miniaturas y una lista clara tanto en escritorio como en móvil, permite

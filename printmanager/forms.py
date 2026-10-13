@@ -60,7 +60,8 @@ class PrinterForm(forms.ModelForm):
 
 class PrintForm(forms.Form):
     printer = forms.ModelChoiceField(queryset=Printer.objects.none(), empty_label=None)
-    source = forms.ChoiceField(choices=(("upload", "Upload documents"), ("recent", "Choose PDFs from recent activity")), widget=forms.RadioSelect)
+    source = forms.ChoiceField(choices=(("upload", "Upload documents"), ("recent", "Choose PDFs from recent activity"), ("job", "Reuse a print job")), widget=forms.RadioSelect)
+    source_job = forms.IntegerField(required=False, widget=forms.HiddenInput)
     document = MultipleFileField(required=False, widget=MultipleFileInput(attrs={"accept": "application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp,.heic,.heif"}))
     image_options = forms.CharField(required=False, widget=forms.HiddenInput)
     document_manifest = forms.CharField(required=False, widget=forms.HiddenInput)
@@ -100,6 +101,8 @@ class PrintForm(forms.Form):
             self.add_error("document", "Select at least one PDF or image to upload.")
         if source == "recent" and not data.get("artifact"):
             self.add_error("artifact", "Select a recent PDF.")
+        if source == "job" and not data.get("source_job"):
+            self.add_error("source_job", "Select a print job to reuse.")
         allowed_suffixes = IMAGE_SUFFIXES | {".pdf"}
         for document in data.get("document") or []:
             if not any(document.name.lower().endswith(suffix) for suffix in allowed_suffixes):

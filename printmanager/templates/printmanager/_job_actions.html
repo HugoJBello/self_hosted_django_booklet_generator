@@ -12,6 +12,11 @@
   <button class="btn btn-sm btn-outline-primary" type="button" disabled title="The document is missing or the printer is disabled"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Resend</button>
   {% endif %}
   {% if job.document_available %}
+  <a class="btn btn-sm btn-outline-primary" href="{% url 'printmanager:print' %}?job={{ job.pk }}" aria-label="Edit settings and resend {{ job.document_name }}"><i class="bi bi-sliders me-1" aria-hidden="true"></i>Edit &amp; resend</a>
+  {% else %}
+  <button class="btn btn-sm btn-outline-primary" type="button" disabled><i class="bi bi-sliders me-1" aria-hidden="true"></i>Edit &amp; resend</button>
+  {% endif %}
+  {% if job.document_available %}
   <a class="btn btn-sm btn-outline-secondary" href="{{ document_url }}?download=1"><i class="bi bi-download me-1" aria-hidden="true"></i>Download</a>
   {% else %}
   <button class="btn btn-sm btn-outline-secondary" type="button" disabled><i class="bi bi-download me-1" aria-hidden="true"></i>Download</button>
