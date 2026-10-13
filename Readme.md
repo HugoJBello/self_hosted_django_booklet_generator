@@ -190,8 +190,11 @@ impresiones duplicadas.
 Desde **Print status & history** se puede reenviar cualquier trabajo cuyo archivo
 siga disponible y cuya impresora esté habilitada. La acción pide confirmación y
 crea un trabajo nuevo —sin alterar el histórico— con el mismo documento,
-impresora y todas las opciones de impresión. La lista se presenta como tabla en
-escritorio y como tarjetas con acciones de ancho completo en pantallas móviles.
+impresora y todas las opciones de impresión. La lista usa tarjetas compactas en
+escritorio y reorganiza sus acciones a ancho completo en pantallas móviles.
+Cada trabajo muestra la miniatura de la primera página y reutiliza la botonera
+común de PDF para previsualizar, reenviar o descargar el documento. Estas rutas
+están protegidas por el propietario del trabajo y los permisos de administrador.
 
 La subida admite varios PDF e imágenes en una sola selección. La interfaz responsiva
 muestra miniaturas y una lista clara tanto en escritorio como en móvil, permite

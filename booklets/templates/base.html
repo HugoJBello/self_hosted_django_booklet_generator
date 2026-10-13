@@ -45,7 +45,8 @@
     .pdf-preview-toolbar { background:#f8fafc; }
     .pdf-preview-trigger { white-space:nowrap; }
     .pdf-actions { display:flex; flex-wrap:wrap; gap:.4rem; width:100%; max-width:100%; min-width:0; }
-    .pdf-actions > .btn { flex:1 1 7.5rem; min-width:0; padding:.35rem .6rem; white-space:normal; overflow-wrap:anywhere; }
+    .pdf-actions > .btn, .pdf-actions > form { flex:1 1 7.5rem; min-width:0; }
+    .pdf-actions > .btn, .pdf-actions > form > .btn { width:100%; padding:.35rem .6rem; white-space:normal; overflow-wrap:anywhere; }
     @media(max-width:991.98px) { .pdf-preview-modal-content{height:100dvh;border-radius:0}.pdf-preview-modal-content .modal-header{padding-top:max(.65rem,env(safe-area-inset-top))}.pdf-preview-pages{padding:.65rem;gap:.65rem}.pdf-preview-page{box-shadow:0 2px 12px #0f172a30}.pdf-preview-frame{min-height:0} }
     .upload-image-preview-content { height:min(92dvh,900px); overflow:hidden; box-shadow:0 24px 70px #0f172a52; }
     .upload-image-preview-content .modal-header { flex:0 0 auto; position:relative; z-index:1; }

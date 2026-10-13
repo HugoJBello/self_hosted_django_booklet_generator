@@ -1,0 +1,19 @@
+{% url 'printmanager:job_preview' job.pk as preview_url %}
+{% url 'printmanager:job_document' job.pk as document_url %}
+<div class="pdf-actions" role="group" aria-label="Actions for {{ job.document_name }}">
+  {% if job.document_available %}
+  <button class="btn btn-sm btn-outline-primary pdf-preview-trigger" type="button" data-pdf-preview="{{ preview_url }}" data-pdf-download="{{ document_url }}?download=1" data-pdf-name="{{ job.document_name }}"><i class="bi bi-eye me-1" aria-hidden="true"></i>Preview</button>
+  {% else %}
+  <button class="btn btn-sm btn-outline-primary" type="button" disabled><i class="bi bi-eye me-1" aria-hidden="true"></i>Preview</button>
+  {% endif %}
+  {% if job.can_resend %}
+  <form method="post" action="{% url 'printmanager:job_resend' job.pk %}" onsubmit="return confirm('Print this document again with exactly the same settings?');">{% csrf_token %}<button class="btn btn-sm btn-outline-primary" type="submit" aria-label="Resend {{ job.document_name }}"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Resend</button></form>
+  {% else %}
+  <button class="btn btn-sm btn-outline-primary" type="button" disabled title="The document is missing or the printer is disabled"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Resend</button>
+  {% endif %}
+  {% if job.document_available %}
+  <a class="btn btn-sm btn-outline-secondary" href="{{ document_url }}?download=1"><i class="bi bi-download me-1" aria-hidden="true"></i>Download</a>
+  {% else %}
+  <button class="btn btn-sm btn-outline-secondary" type="button" disabled><i class="bi bi-download me-1" aria-hidden="true"></i>Download</button>
+  {% endif %}
+</div>

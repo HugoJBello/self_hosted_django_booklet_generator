@@ -4,12 +4,13 @@ import uuid
 from functools import wraps
 
 import django_rq
+import fitz
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.http import HttpResponseNotAllowed, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -341,6 +342,29 @@ def _visible_jobs(request):
     return jobs if request.user.is_staff else jobs.filter(owner=request.user)
 
 
+def _job_document(request, pk):
+    job = get_object_or_404(_visible_jobs(request), pk=pk)
+    if not os.path.isfile(job.document_path):
+        raise Http404("This print document is no longer available.")
+    return job
+
+
+def _job_pdf_page(job, page_number, *, thumbnail=False):
+    try:
+        with fitz.open(job.document_path) as document:
+            if page_number < 1 or page_number > document.page_count:
+                raise Http404("PDF page does not exist.")
+            page = document.load_page(page_number - 1)
+            max_width = 220 if thumbnail else 1800
+            scale = min(2.0, max_width / max(page.rect.width, 1))
+            image = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+            response = HttpResponse(image.tobytes("jpeg", jpg_quality=78 if thumbnail else 82), content_type="image/jpeg")
+            response["Cache-Control"] = "private, max-age=300" if thumbnail else "private, max-age=3600"
+            return response
+    except (fitz.FileDataError, OSError) as exc:
+        raise Http404("PDF cannot be opened.") from exc
+
+
 def _queue_job_refreshes(jobs):
     try:
         queue = django_rq.get_queue("default")
@@ -366,12 +390,42 @@ def job_list(request):
         jobs = jobs.filter(printer_id=printer_id)
     recent = list(jobs[:100])
     for job in recent:
-        job.can_resend = os.path.isfile(job.document_path) and job.printer.is_enabled
+        job.document_available = os.path.isfile(job.document_path)
+        job.can_resend = job.document_available and job.printer.is_enabled
     _queue_job_refreshes(recent)
     printers = list(Printer.objects.filter(pk__in=_visible_jobs(request).values("printer_id")).distinct())
     statuses = printer_availabilities(printers)
     counts = {key: jobs.filter(status=key).count() for key in ("queued", "processing", "completed", "error")}
     return render(request, "printmanager/job_list.html", {"jobs": recent, "printers": printers, "printer_statuses": statuses, "selected_printer": printer_id, "counts": counts, "highlight": request.GET.get("highlight", "")})
+
+
+def job_document(request, pk):
+    job = _job_document(request, pk)
+    response = FileResponse(
+        open(job.document_path, "rb"),
+        as_attachment=request.GET.get("download") == "1",
+        filename=job.document_name,
+        content_type="application/pdf",
+    )
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+def job_preview_info(request, pk):
+    job = _job_document(request, pk)
+    try:
+        with fitz.open(job.document_path) as document:
+            return JsonResponse({"name": job.document_name, "pages": document.page_count})
+    except (fitz.FileDataError, OSError) as exc:
+        raise Http404("PDF cannot be opened.") from exc
+
+
+def job_preview_page(request, pk, page_number):
+    return _job_pdf_page(_job_document(request, pk), page_number)
+
+
+def job_thumbnail(request, pk):
+    return _job_pdf_page(_job_document(request, pk), 1, thumbnail=True)
 
 
 def job_resend(request, pk):
