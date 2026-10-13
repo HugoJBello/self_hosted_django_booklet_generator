@@ -108,7 +108,7 @@ def printer_list(request):
     for printer in printers:
         printer.live_status = live[printer.pk]
         printer.job_count = printer.jobs.count()
-        printer.active_job_count = printer.jobs.filter(status__in=("queued", "processing", "submitted")).count()
+        printer.active_job_count = printer.jobs.filter(status__in=("queued", "processing")).count()
     return render(request, "printmanager/printer_list.html", {"printers": printers})
 
 

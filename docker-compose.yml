@@ -82,6 +82,31 @@ services:
     # y el script debe detectar "rqworker" y ejecutar "python manage.py rqworker default"
     command: ["rqworker", "default"]
 
+  pdf_manager_print_monitor:
+    build: .
+    container_name: pdf_manager_print_monitor
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./data/cups/run:/run/cups
+    environment:
+      DJANGO_SECRET_KEY: "dev-unsafe-secret-key"
+      DJANGO_DEBUG: "True"
+      DJANGO_ALLOWED_HOSTS: "*"
+      APP_SUBPATH: "/pdf_manager"
+      DJANGO_DB_PATH: "/app/data/db.sqlite3"
+      DJANGO_MEDIA_ROOT: "/app/data/media"
+      CUPS_SERVER: "/run/cups/cups.sock"
+      CUPS_DISCOVERY_FILE: "/run/cups/discovered-printers.txt"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+    depends_on:
+      - redis
+      - pdf_manager
+      - cups
+    command: ["manage", "printjobmonitor", "--interval", "15"]
+
   redis:
     image: redis:7-alpine
     container_name: pdf_manager_redis

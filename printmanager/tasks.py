@@ -86,9 +86,17 @@ def refresh_print_job(job_id):
             "last_checked_at",
         ))
     except CupsError as exc:
-        job.status_detail = str(exc)
+        detail = str(exc)
+        if "client-error-not-found" in detail.lower():
+            # Some printers discard completed job records quickly. CUPS already
+            # accepted this job, so it is no longer queued even though its final
+            # state cannot be recovered from the printer.
+            job.status = "submitted"
+            job.status_detail = "The printer accepted this job but no longer reports its status. Check the printer's job history for the final result."
+        else:
+            job.status_detail = detail
         job.last_checked_at = now
-        job.save(update_fields=("status_detail", "last_checked_at"))
+        job.save(update_fields=("status", "status_detail", "last_checked_at"))
     except Exception:
         logger.exception("Unexpected failure refreshing print job %s", job.pk)
         job.status_detail = "The printer status could not be refreshed."

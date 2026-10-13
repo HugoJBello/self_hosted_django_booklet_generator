@@ -329,6 +329,18 @@ class PrintingViewsTests(TestCase):
         self.assertEqual(job.status_detail, "media-empty")
         self.assertEqual(job.status_data["job-state-reasons"], "media-empty")
 
+    @patch("printmanager.tasks.read_job_status", side_effect=CupsError("client-error-not-found"))
+    def test_printer_that_drops_completed_job_records_does_not_leave_job_queued(self, read_status):
+        job = PrintJob.objects.create(
+            owner=self.user, printer=self.printer, document_name="short-retention.pdf",
+            document_path="/tmp/short-retention.pdf", status="queued",
+            cups_job_id="IPP job 10 accepted", job_uri="ipp://printer/jobs/10",
+        )
+        refresh_print_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "submitted")
+        self.assertIn("no longer reports its status", job.status_detail)
+
     def test_status_page_queues_refresh_without_contacting_printer(self):
         job = PrintJob.objects.create(
             owner=self.user, printer=self.printer, document_name="large.pdf",

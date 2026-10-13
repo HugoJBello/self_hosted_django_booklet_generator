@@ -50,6 +50,11 @@ if [ "${1:-}" = "rqworker" ]; then
   exec python manage.py rqworker "${QUEUE}"
 fi
 
+if [ "${1:-}" = "manage" ]; then
+  shift
+  exec python manage.py "$@"
+fi
+
 # La inicialización persistente pertenece únicamente al proceso web. Esto evita
 # escrituras simultáneas sobre SQLite durante el primer arranque.
 python manage.py migrate --noinput

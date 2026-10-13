@@ -180,7 +180,12 @@ La sección **Print Documents** permite enviar PDF, imágenes o un resultado del
 cola persistida en Django. Solo los administradores pueden crear o modificar
 impresoras. Al guardar, la configuración se aplica a CUPS y se consultan las
 opciones que anuncia el driver. Cada trabajo conserva usuario, documento, opciones,
-resultado e identificador CUPS.
+resultado e identificador CUPS. Un monitor independiente consulta CUPS cada 15
+segundos, incluso si el usuario cierra la página o pierde la sesión. Si la
+impresora elimina el recibo antes de que la app pueda leer el resultado, el
+trabajo queda como enviado con resultado desconocido en vez de permanecer
+indefinidamente en la cola; la app no lo reenvía automáticamente para evitar
+impresiones duplicadas.
 
 La subida admite varios PDF e imágenes en una sola selección. La interfaz responsiva
 muestra miniaturas y una lista clara tanto en escritorio como en móvil, permite
