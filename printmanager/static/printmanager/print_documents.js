@@ -8,6 +8,14 @@
   const modalElement = document.getElementById("image-layout-modal");
   const modal = modalElement ? bootstrap.Modal.getOrCreateInstance(modalElement) : null;
   const canvas = modalElement?.querySelector("[data-image-layout-canvas]"), controls = [...(modalElement?.querySelectorAll("[data-image-option]") || [])];
+  const modalDialog = modalElement?.querySelector(".modal-dialog"), previewBox = modalElement?.querySelector(".image-layout-preview"), controlsBox = modalElement?.querySelector(".image-layout-controls");
+  modalDialog?.classList.add("modal-dialog-scrollable");
+  if (previewBox && !previewBox.querySelector(".image-layout-page-label")) {
+    const label = document.createElement("div"); label.className = "image-layout-page-label"; label.innerHTML = '<i class="bi bi-file-earmark me-1"></i>PDF page preview'; previewBox.prepend(label);
+  }
+  if (controlsBox && !controlsBox.querySelector(".image-layout-help")) {
+    const help = document.createElement("div"); help.className = "image-layout-help alert alert-primary py-2 small"; help.innerHTML = '<i class="bi bi-hand-index-thumb me-1"></i>Edit the controls below. The PDF page updates immediately.'; controlsBox.prepend(help);
+  }
   const defaults = {paper:"a4",orientation:"auto",fit:"contain",margin_mm:10,horizontal:"center",vertical:"center",rotation:0,dpi:300,background:"#ffffff"};
   const papers = {a5:[420,595],a4:[595,842],a3:[842,1191],letter:[612,792],photo_4x6:[288,432]};
   const imageSuffixes = [".png",".jpg",".jpeg",".webp",".tif",".tiff",".bmp",".heic",".heif"];

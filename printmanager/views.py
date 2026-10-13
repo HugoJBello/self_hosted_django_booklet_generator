@@ -13,6 +13,7 @@ from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 
 from activity.models import Artifact
 from activity.services import record_activity
@@ -217,6 +218,7 @@ def printer_delete(request, pk):
     return redirect("printmanager:printers")
 
 
+@never_cache
 def print_document(request):
     artifact_queryset = _artifact_queryset(request)
     requested_artifact = None
