@@ -30,7 +30,7 @@
         <thead><tr><th class="ps-4">Document</th><th>Printer</th><th>Status</th><th>Progress & details</th><th>User / time</th><th class="pe-4 text-end">Actions</th></tr></thead>
         <tbody>
           {% for job in jobs %}
-          <tr {% if highlight == job.pk|stringformat:'s' %}class="table-primary"{% endif %}>
+          <tr>
             <td class="ps-4 job-document" data-label="Document"><strong class="text-break">{{ job.document_name }}</strong><div class="small text-muted">{{ job.cups_job_id|default:"No printer ID" }}</div></td>
             <td data-label="Printer">{{ job.printer }}</td>
             <td data-label="Status"><span class="badge {% if job.status == 'completed' %}text-bg-success{% elif job.status == 'processing' %}text-bg-primary{% elif job.status == 'error' %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ job.get_status_display }}</span></td>
