@@ -81,6 +81,8 @@
   function paint(target, image, raw) {
     if (!image.complete || !image.naturalWidth) { image.addEventListener("load",()=>paint(target,image,raw),{once:true}); return; }
     const layout=pageLayout(image,raw), maxWidth=target.closest(".image-layout-preview")?700:150, scale=Math.min(maxWidth/layout.pw,220/layout.ph);
+    const thumbnail=target.closest(".print-document-thumb");
+    if(thumbnail)thumbnail.style.setProperty("--document-page-ratio",`${layout.pw}/${layout.ph}`);
     target.width=Math.max(1,Math.round(layout.pw*scale));target.height=Math.max(1,Math.round(layout.ph*scale));
     const ctx=target.getContext("2d");ctx.fillStyle=layout.options.background;ctx.fillRect(0,0,target.width,target.height);ctx.save();
     ctx.beginPath();ctx.rect(0,0,target.width,target.height);ctx.clip();ctx.translate((layout.x+layout.dw/2)*scale,(layout.y+layout.dh/2)*scale);ctx.rotate(layout.rotation*Math.PI/180);
@@ -113,6 +115,7 @@
       const remove=document.createElement("button");remove.type="button";remove.className="btn btn-sm btn-outline-secondary";remove.innerHTML='<i class="bi bi-x-lg me-1"></i><span>Remove</span>';remove.addEventListener("click",()=>removeAt(files,index));actions.append(remove);details.append(name,meta,actions);card.append(thumb,details);return card}));
     count.textContent=files.length?`${files.length} document${files.length===1?'':'s'} selected`:'No documents selected';addMore.hidden=files.length===0;note.hidden=files.length<2;if(submit)submit.textContent=files.length>1?`Queue ${files.length} documents`:'Send to printer';
   }
-  controls.forEach((control)=>control.addEventListener("input",updateEditor));modalElement?.querySelector("[data-image-reset]")?.addEventListener("click",()=>{settings.set(activeKey,{...defaults});const file=[...input.files].find((item)=>keyFor(item)===activeKey);if(file)openEditor(file)});
+  controls.forEach((control)=>{control.addEventListener("input",updateEditor);control.addEventListener("change",updateEditor)});modalElement?.querySelector("[data-image-reset]")?.addEventListener("click",()=>{settings.set(activeKey,{...defaults});const file=[...input.files].find((item)=>keyFor(item)===activeKey);if(file)openEditor(file)});
+  form.addEventListener("submit",()=>syncFields([...input.files]));
   modalElement?.addEventListener("hidden.bs.modal",render);input.addEventListener("change",()=>{mergeSelection([...input.files]);render()});window.addEventListener("pagehide",()=>urls.forEach(URL.revokeObjectURL));mergeSelection([...input.files]);render();
 })();
