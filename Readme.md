@@ -212,6 +212,9 @@ rotación, DPI y fondo. El servidor genera el PDF definitivo con esa composició
 imagen original, el PDF resultante y todas las opciones de maquetación quedan en
 **Activity**, desde donde el resultado se puede previsualizar, descargar o volver a
 imprimir con los mismos controles de acceso que el resto de artefactos de la app.
+Cuando la orientación de impresión está en **Automatic**, no se envía una orden IPP
+de retrato o paisaje: se respeta directamente la orientación de cada página PDF,
+incluidas las páginas apaisadas creadas a partir de imágenes.
 
 Los botones **Print** de Activity y de los resultados de las herramientas abren
 la vista de impresión en modo enfocado: únicamente se muestra el PDF elegido,

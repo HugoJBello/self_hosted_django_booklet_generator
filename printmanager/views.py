@@ -284,6 +284,11 @@ def print_document(request):
                 value = data.get(key)
                 if value:
                     options[key.replace("_", "-")] = value
+            # "Automatic" must let the PDF page define its own orientation.
+            # Printer capability defaults may otherwise reintroduce portrait
+            # through extra_options and contradict a generated landscape PDF.
+            if not data.get("orientation_requested"):
+                options.pop("orientation-requested", None)
             if data.get("scaling"):
                 options["print-scaling"] = data["scaling"]
             if data.get("collate"):
@@ -353,7 +358,10 @@ def print_document(request):
             initial["extra_options"] = json.dumps(saved, indent=2)
         form = PrintForm(artifacts=artifacts, initial=initial)
     printer_capabilities = {
-        str(printer.pk): {"options": printer.supported_options, "defaults": printer.default_options}
+        str(printer.pk): {
+            "options": {key: value for key, value in printer.supported_options.items() if key != "orientation-requested"},
+            "defaults": {key: value for key, value in printer.default_options.items() if key != "orientation-requested"},
+        }
         for printer in Printer.objects.filter(is_enabled=True)
     }
     return render(request, "printmanager/print_form.html", {
