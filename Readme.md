@@ -103,6 +103,13 @@ environment:
   DJANGO_COOKIE_SECURE: "True"
 ```
 
+Las cookies usan por defecto los nombres `pdf_manager_sessionid` y
+`pdf_manager_csrftoken`, y quedan limitadas a `/pdf_manager/`. Esto evita que
+otras aplicaciones Django publicadas en el mismo dominio sobrescriban la
+sesion. Los nombres y las rutas se pueden personalizar con
+`DJANGO_SESSION_COOKIE_NAME`, `DJANGO_CSRF_COOKIE_NAME`,
+`DJANGO_SESSION_COOKIE_PATH` y `DJANGO_CSRF_COOKIE_PATH`.
+
 `APP_SUBPATH` controla las URLs de archivos estáticos y media. En esta versión,
 las rutas Django también contienen literalmente `pdf_manager`, por lo que para
 usar otro prefijo no basta con cambiar la variable: hay que modificar asimismo

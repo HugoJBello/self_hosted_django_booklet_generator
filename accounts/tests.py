@@ -1,6 +1,7 @@
 from io import StringIO
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
@@ -19,8 +20,19 @@ class AuthenticationTests(TestCase):
     def test_login_and_logout(self):
         response = self.client.post(reverse("accounts:login"), {"username": "reader", "password": "A-strong-password-123"})
         self.assertRedirects(response, reverse("accounts:home"))
+        session_cookie = response.cookies[settings.SESSION_COOKIE_NAME]
+        self.assertEqual(settings.SESSION_COOKIE_NAME, "pdf_manager_sessionid")
+        self.assertEqual(session_cookie["path"], "/pdf_manager/")
+        self.assertTrue(session_cookie["secure"])
         self.assertEqual(self.client.get(reverse("accounts:home")).status_code, 200)
         self.assertRedirects(self.client.post(reverse("accounts:logout")), reverse("accounts:login"))
+
+    def test_csrf_cookie_is_isolated_from_other_apps_on_the_host(self):
+        response = self.client.get(reverse("accounts:login"))
+        csrf_cookie = response.cookies[settings.CSRF_COOKIE_NAME]
+        self.assertEqual(settings.CSRF_COOKIE_NAME, "pdf_manager_csrftoken")
+        self.assertEqual(csrf_cookie["path"], "/pdf_manager/")
+        self.assertTrue(csrf_cookie["secure"])
 
     def test_normal_user_cannot_manage_users(self):
         self.client.force_login(self.user)

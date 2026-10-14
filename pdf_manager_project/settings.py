@@ -188,6 +188,16 @@ COOKIE_SECURE = os.environ.get("DJANGO_COOKIE_SECURE", "True").lower() == "true"
 CSRF_COOKIE_SECURE = COOKIE_SECURE
 SESSION_COOKIE_SECURE = COOKIE_SECURE
 
+# This service shares its public host with other Django applications.  Django's
+# default cookie names (sessionid/csrftoken) are host-wide and would therefore
+# overwrite each other.  Give this application its own names and scope them to
+# its URL prefix.
+COOKIE_PATH = f"{APP_SUBPATH}/" if APP_SUBPATH else "/"
+SESSION_COOKIE_NAME = os.environ.get("DJANGO_SESSION_COOKIE_NAME", "pdf_manager_sessionid")
+CSRF_COOKIE_NAME = os.environ.get("DJANGO_CSRF_COOKIE_NAME", "pdf_manager_csrftoken")
+SESSION_COOKIE_PATH = os.environ.get("DJANGO_SESSION_COOKIE_PATH", COOKIE_PATH)
+CSRF_COOKIE_PATH = os.environ.get("DJANGO_CSRF_COOKIE_PATH", COOKIE_PATH)
+
 # SameSite recomendado para formularios normales (evita problemas)
 CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_SAMESITE", "Lax")
 SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_SAMESITE", "Lax")

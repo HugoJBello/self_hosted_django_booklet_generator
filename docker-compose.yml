@@ -31,7 +31,7 @@ services:
 
       # Proxy / Cloudflare / HTTPS (MUY PERMISIVO)
       DJANGO_CSRF_TRUSTED_ORIGINS: "https://api-android18.hjbello.org,https://*.hjbello.org,https://*"
-      DJANGO_COOKIE_SECURE: "False"
+      DJANGO_COOKIE_SECURE: "True"
       DJANGO_SECURE_SSL_REDIRECT: "False"
 
       # Gunicorn
