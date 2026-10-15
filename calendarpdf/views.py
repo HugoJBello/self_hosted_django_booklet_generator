@@ -43,14 +43,14 @@ def calendar_view(request):
                     with ExitStack() as stack:
                         files = staged_upload_files(staged_uploads, stack)
                         events = extract_uploaded_timetables(files)
-                    events, found_subjects = filter_events_by_subject(
-                        events,
-                        form.cleaned_data["filter_subjects"],
-                        form.cleaned_data["subject_filter"],
-                    )
-                    if not events:
-                        raise ValueError("No subjects matched the active subject filter.")
-                    pdf = make_pdf(events)
+                        events, found_subjects = filter_events_by_subject(
+                            events,
+                            form.cleaned_data["filter_subjects"],
+                            form.cleaned_data["subject_filter"],
+                        )
+                        if not events:
+                            raise ValueError("No subjects matched the active subject filter.")
+                        pdf = make_pdf(events, files)
                 except (ValueError, OSError, fitz.FileDataError) as exc:
                     form.add_error(None, str(exc))
                 except Exception:

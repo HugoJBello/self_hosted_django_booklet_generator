@@ -10,7 +10,7 @@ import unicodedata
 from pathlib import Path
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import fitz
 from PIL import Image, ImageOps, ImageSequence
@@ -37,6 +37,7 @@ MONTH_ALIASES = {
     "dic": 12, "diciembre": 12, "dec": 12, "december": 12,
 }
 TIME_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*[:.h]\s*([0-5]\d)\s*(?:[-–—]|\ba\b|\bto\b)\s*([01]?\d|2[0-3])\s*[:.h]\s*([0-5]\d)(?!\d)", re.I)
+COMPACT_TIME_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])([0-5]\d)\s*[-–—]\s*([01]?\d|2[0-3])([0-5]\d)(?!\d)")
 HOUR_RANGE_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*[-–—]\s*([01]?\d|2[0-3])(?!\d)")
 START_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*[:.h]\s*([0-5]\d)(?!\d)", re.I)
 SUBJECT_RE = re.compile(r"\b\d{4,6}(?:\s*\([^)]*\))?\s*[-–—:]\s*(.+)", re.I)
@@ -157,6 +158,8 @@ def _clean_source_label(raw: str) -> str:
 def _subject_from_line(line: str, allow_fallback: bool) -> str | None:
     if DATE_RE.search(line) or ISO_DATE_RE.search(line) or NAMED_DATE_RE.search(line):
         return None
+    if TIME_RE.search(line) or COMPACT_TIME_RE.search(line):
+        return None
     match = SUBJECT_RE.search(line)
     if match:
         return _clean_source_label(match.group(1))
@@ -235,6 +238,14 @@ def _line_dates(line: str, likely_year: int | None, weekday: int) -> set[date]:
                     event_day = corrected
             except ValueError:
                 pass
+        # The weekday column is known before OCR. Recover a nearby date when a
+        # single misread digit changes its weekday (for example 06/11 -> 08/11).
+        if event_day.weekday() != weekday:
+            for offset in (-1, 1, -2, 2):
+                corrected = event_day + timedelta(days=offset)
+                if corrected.weekday() == weekday:
+                    event_day = corrected
+                    break
         if event_day.weekday() == weekday:
             found.add(event_day)
     return found
@@ -287,6 +298,9 @@ def _extract_column(text: str, weekday: int) -> set[Event]:
         if time_match:
             hour = f"{int(time_match.group(1)):02d}:{time_match.group(2)}"
             end_hour = f"{int(time_match.group(3)):02d}:{time_match.group(4)}"
+        elif compact_match := COMPACT_TIME_RE.search(time_line):
+            hour = f"{int(compact_match.group(1)):02d}:{compact_match.group(2)}"
+            end_hour = f"{int(compact_match.group(3)):02d}:{compact_match.group(4)}"
         elif (subject and not DATE_RE.search(line) and not ISO_DATE_RE.search(line)
               and not NAMED_DATE_RE.search(line)
               and not room_match and not group_match and not type_match and not new_subject):
@@ -413,6 +427,9 @@ def extract_uploaded_timetables(files) -> set[Event]:
             extracted = extract_events(uploaded.read(), uploaded.name)
         except ValueError as exc:
             raise ValueError(f"{uploaded.name}: {exc}") from exc
+        finally:
+            if hasattr(uploaded, "seek"):
+                uploaded.seek(0)
         if not extracted:
             raise ValueError(
                 f"{uploaded.name}: no dated classes could be read. "
@@ -422,7 +439,45 @@ def extract_uploaded_timetables(files) -> set[Event]:
     return consolidate_events(events)
 
 
-def make_pdf(events: set[Event]) -> bytes:
+def _append_source_files(doc: fitz.Document, source_files) -> None:
+    """Append each original source, fitted without cropping or distortion."""
+    for source in source_files or ():
+        if hasattr(source, "seek"):
+            source.seek(0)
+        data = source.read()
+        if hasattr(source, "seek"):
+            source.seek(0)
+        name = getattr(source, "name", "Timetable source")
+        frames: list[tuple[bytes, float]] = []
+        if Path(name).suffix.lower() == ".pdf":
+            with fitz.open(stream=data, filetype="pdf") as source_doc:
+                for source_page in source_doc:
+                    pix = source_page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                    frames.append((pix.tobytes("png"), pix.width / max(pix.height, 1)))
+        else:
+            image = Image.open(io.BytesIO(data))
+            for frame in ImageSequence.Iterator(image):
+                prepared = ImageOps.exif_transpose(frame).convert("RGB")
+                buffer = io.BytesIO()
+                prepared.save(buffer, format="PNG", optimize=True)
+                frames.append((buffer.getvalue(), prepared.width / max(prepared.height, 1)))
+        for frame_index, (image_data, ratio) in enumerate(frames, start=1):
+            landscape = ratio >= 1
+            page_width, page_height = ((1190.55, 841.89) if landscape else (841.89, 1190.55))
+            page = doc.new_page(width=page_width, height=page_height)
+            page.insert_font(fontname="dejavu", fontfile=str(FONT_PATH))
+            suffix = f" · page {frame_index}" if len(frames) > 1 else ""
+            page.insert_text(
+                (32, 34), f"Original source · {Path(name).name}{suffix}",
+                fontsize=10, fontname="dejavu", color=(0.35, 0.39, 0.46),
+            )
+            page.insert_image(
+                fitz.Rect(28, 50, page_width - 28, page_height - 28),
+                stream=image_data, keep_proportion=True,
+            )
+
+
+def make_pdf(events: set[Event], source_files=None) -> bytes:
     events = consolidate_events(events)
     if not events:
         raise ValueError("No classes with a subject, time and valid dates were found.")
@@ -495,6 +550,7 @@ def make_pdf(events: set[Event]) -> bytes:
                         page.insert_text((box.x0, y + min(10, line_height / 2)), room_label,
                                          fontsize=room_size, fontname="dejavu", color=(0.35, 0.39, 0.46))
     add_weekly_summary(doc, events, FONT_PATH)
+    _append_source_files(doc, source_files)
     output = doc.tobytes(garbage=4, deflate=True)
     doc.close()
     return output

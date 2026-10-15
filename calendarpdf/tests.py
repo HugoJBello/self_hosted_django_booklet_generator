@@ -46,6 +46,26 @@ Grupo: 1A
         )
         self.assertFalse(any(event.time == "00:00" for event in events))
 
+    def test_friday_ocr_recovers_compact_time_and_nearby_misread_date(self):
+        text = """41953 (445) - MATEMÁTICAS I
+1000-1100
+Grupo: 1T
+(AULA 14)
+11/09/26 18/09/26 25/09/26 09/10/28 16/10/26 23/10/26 08/11/26
+Grupo: 2A
+(AULA 14)
+13/11/26
+"""
+        events = _extract_column(text, 4)
+        expected_days = {
+            date(2026, 9, 11), date(2026, 9, 18), date(2026, 9, 25),
+            date(2026, 10, 9), date(2026, 10, 16), date(2026, 10, 23),
+            date(2026, 11, 6), date(2026, 11, 13),
+        }
+        self.assertEqual({event.day for event in events}, expected_days)
+        self.assertTrue(all(event.time == "10:00" and event.end_time == "11:00" for event in events))
+        self.assertTrue(all(event.subject == "MATEMÁTICAS I" for event in events))
+
     def test_subject_filter_matches_fragments_without_case_or_accents(self):
         events = {
             Event(date(2026, 9, 7), "10:00", "MATEMÁTICAS I"),
@@ -156,6 +176,17 @@ Grupo: 1A
             self.assertIn("Theory: 2 h", appendix)
             self.assertIn("Classroom practice: 1 h", appendix)
         self.assertEqual(hour_totals(events)["Laboratory"], 120)
+
+    def test_pdf_appends_original_image_fitted_on_its_own_page(self):
+        image = io.BytesIO()
+        Image.new("RGB", (1600, 304), "white").save(image, format="JPEG")
+        source = SimpleUploadedFile("wide timetable.jpg", image.getvalue(), content_type="image/jpeg")
+        events = {Event(date(2026, 9, 11), "10:00", "Mathematics", end_time="11:00")}
+        with fitz.open(stream=make_pdf(events, [source]), filetype="pdf") as document:
+            self.assertEqual(document.page_count, 3)
+            self.assertIn("Original source", document[-1].get_text())
+            self.assertIn("wide timetable.jpg", document[-1].get_text())
+            self.assertTrue(document[-1].get_images(full=True))
 
     def test_summary_lists_every_date_without_clipping(self):
         days = {date(2026, 9, day) for day in range(1, 29)}
