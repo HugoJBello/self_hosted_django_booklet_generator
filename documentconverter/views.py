@@ -17,6 +17,9 @@ def converter_view(request):
     initial = request.session.pop("activity_initial_documentconverter", None) if request.method == "GET" else None
     form = ConvertDocumentsForm(request.POST or None, request.FILES or None, initial=initial)
     results = []
+    sources = []
+    has_image_sources = False
+    has_office_sources = False
     if request.method == "POST" and form.is_valid():
         image_options = {key: form.cleaned_data[key] for key in ("paper", "orientation", "fit", "margin_mm")}
         converted = []
@@ -33,7 +36,13 @@ def converter_view(request):
                 shutil.rmtree(Path(item["output_path"]).parent, ignore_errors=True)
             form.add_error(None, "The documents could not be converted. Check the files and try again.")
         else:
-            options = {**image_options, "files": [{"name": item["source_name"], "kind": item["kind"]} for item in converted]}
+            has_image_sources = any(item["kind"] == "image" for item in converted)
+            has_office_sources = any(item["kind"] == "office" for item in converted)
+            options = {}
+            if has_office_sources:
+                options.update({"office_converter": "LibreOffice Writer", "office_layout": "Original document"})
+            if has_image_sources:
+                options.update({f"image_{key}": value for key, value in image_options.items()})
             activity = record_activity(
                 owner=request.user, tool="documentconverter",
                 title=converted[0]["source_name"] if len(converted) == 1 else f"{len(converted)} converted documents",
@@ -42,6 +51,13 @@ def converter_view(request):
                 outputs=[{"name": item["output_name"], "path": item["output_path"], "content_type": "application/pdf"} for item in converted],
                 restore_state={"form_initial": image_options},
             )
+            for artifact in activity.artifacts.filter(kind="input"):
+                sources.append({
+                    "name": artifact.name,
+                    "size": artifact.size,
+                    "content_type": artifact.content_type,
+                    "download_url": reverse("activity:file", args=[artifact.public_id]),
+                })
             for artifact in activity.artifacts.filter(kind="output"):
                 results.append({
                     "name": artifact.name, "artifact_id": artifact.pk,
@@ -49,4 +65,10 @@ def converter_view(request):
                     "download_url": reverse("activity:file", args=[artifact.public_id]),
                 })
             form = ConvertDocumentsForm(initial=image_options)
-    return render(request, "documentconverter/form.html", {"form": form, "results": results})
+    return render(request, "documentconverter/form.html", {
+        "form": form,
+        "results": results,
+        "sources": sources,
+        "has_image_sources": has_image_sources,
+        "has_office_sources": has_office_sources,
+    })

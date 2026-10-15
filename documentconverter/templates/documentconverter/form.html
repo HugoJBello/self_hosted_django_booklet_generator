@@ -5,31 +5,51 @@
   <h1 class="h3 mb-2"><i class="bi bi-file-earmark-arrow-down text-primary me-2"></i>Convert to PDF</h1>
   <p class="text-muted mb-4">Create faithful PDFs from DOC, DOCX and ODT documents, or fit images onto printable PDF pages.</p>
   <div class="card shadow-sm"><div class="card-body p-4">
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" id="document-converter-form">
       {% csrf_token %}
       {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-      <div class="file-dropzone mb-3" data-file-dropzone>
-        <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up"></i></span><div><label class="file-dropzone-title" for="{{ form.documents.id_for_label }}">Drop documents or images here</label><div class="file-dropzone-description">Choose up to 10 files. Each file becomes a separate PDF.</div></div></div>
+      <label class="form-label fw-semibold" for="{{ form.documents.id_for_label }}">{{ form.documents.label }}</label>
+      <div class="file-dropzone mb-2" data-file-dropzone>
+        <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></span><div><div class="file-dropzone-title">Drop documents or images here or choose files</div><div class="file-dropzone-description">Choose one or several. Each file becomes a separate PDF.</div></div></div>
         {{ form.documents }}
       </div>
-      <div class="form-text mb-2">Supported: DOC, DOCX, ODT, PNG, JPEG, WebP, TIFF, BMP and HEIC/HEIF. Maximum 25 MB per file.</div>
-      {% for error in form.documents.errors %}<div class="text-danger small mb-2">{{ error }}</div>{% endfor %}
-      <div class="border rounded-3 p-3 mt-4" data-image-settings hidden>
+      <div class="form-text">Up to 10 files of 25 MB each. Supported: DOC, DOCX, ODT, PNG, JPEG, WebP, TIFF, BMP and HEIC/HEIF.</div>
+      {% for error in form.documents.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
+      <div class="row g-2 mt-2" data-local-source-list></div>
+      <div class="border rounded-4 p-3 mt-4" data-office-settings {% if not has_office_sources %}hidden{% endif %}>
+        <div class="fw-semibold mb-1"><i class="bi bi-file-earmark-word me-1"></i>Office document settings</div>
+        <div class="small text-muted mb-3">The document is exported through LibreOffice Writer while preserving its original page size and layout.</div>
+        <div class="row g-3">
+          <div class="col-sm-6"><div class="small text-muted">Layout</div><div class="fw-semibold">Original document</div></div>
+          <div class="col-sm-6"><div class="small text-muted">PDF converter</div><div class="fw-semibold">LibreOffice Writer</div></div>
+        </div>
+      </div>
+      <div class="border rounded-4 p-3 mt-4" data-image-settings {% if not has_image_sources %}hidden{% endif %}>
         <div class="fw-semibold mb-1"><i class="bi bi-image me-1"></i>Image page settings</div>
         <div class="small text-muted mb-3">These settings apply only to image files. Office documents keep their original page layout.</div>
         <div class="row g-3"><div class="col-sm-6 col-lg-3"><label class="form-label">Paper</label>{{ form.paper }}</div><div class="col-sm-6 col-lg-3"><label class="form-label">Orientation</label>{{ form.orientation }}</div><div class="col-sm-6 col-lg-3"><label class="form-label">Fit</label>{{ form.fit }}</div><div class="col-sm-6 col-lg-3"><label class="form-label">{{ form.margin_mm.label }}</label>{{ form.margin_mm }}</div></div>
       </div>
       <button class="btn btn-primary mt-4" type="submit"><i class="bi bi-file-earmark-pdf me-1"></i>Convert to PDF</button>
     </form>
+    {% if sources %}<div class="mt-4 pt-4 border-top"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Uploaded files</h2><span class="badge rounded-pill text-bg-light border">{{ sources|length }} selected</span></div><div class="row g-2">{% for source in sources %}<div class="col-12 col-md-6"><div class="d-flex align-items-center gap-3 border rounded-3 p-3 h-100 bg-white"><span class="flex-shrink-0 fs-3 text-primary"><i class="bi {% if 'image/' in source.content_type %}bi-file-earmark-image{% else %}bi-file-earmark-word{% endif %}"></i></span><div class="min-w-0 flex-grow-1"><div class="fw-semibold text-break">{{ source.name }}</div><div class="small text-muted">Original · {{ source.size|filesizeformat }}</div></div><a class="btn btn-sm btn-outline-secondary" href="{{ source.download_url }}"><i class="bi bi-download me-1"></i>Download</a></div></div>{% endfor %}</div></div>{% endif %}
     {% if results %}<div class="mt-4 pt-4 border-top"><h2 class="h5 mb-3">Converted documents</h2><div class="list-group">{% for result in results %}<div class="list-group-item d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3"><div class="fw-semibold text-break"><i class="bi bi-file-earmark-pdf text-danger me-2"></i>{{ result.name }}</div>{% include "activity/pdf_actions.html" with preview_url=result.preview_url download_url=result.download_url pdf_name=result.name artifact_id=result.artifact_id %}</div>{% endfor %}</div></div>{% endif %}
   </div></div>
   <p class="text-muted small mt-3">LibreOffice runs only while an Office document is being converted. A separate temporary profile prevents concurrent conversions from blocking one another.</p>
 </div></div>
 <script>(()=>{
 const input=document.getElementById('{{ form.documents.id_for_label }}'),settings=document.querySelector('[data-image-settings]');
-if(!input||!settings)return;
+const officeSettings=document.querySelector('[data-office-settings]'),localList=document.querySelector('[data-local-source-list]');
+if(!input||!settings||!officeSettings||!localList)return;
 const imageExtensions=new Set(['png','jpg','jpeg','webp','tif','tiff','bmp','heic','heif']);
-const update=()=>{settings.hidden=!Array.from(input.files||[]).some(file=>imageExtensions.has(file.name.toLowerCase().split('.').pop()))};
-input.addEventListener('change',update);update();
+const officeExtensions=new Set(['doc','docx','odt']);
+let files=[];
+let selectionChanged=false;
+const sync=()=>{const transfer=new DataTransfer();files.forEach(file=>transfer.items.add(file));input.files=transfer.files};
+const render=()=>{
+  const selected=files.length?files:Array.from(input.files||[]),extensions=selected.map(file=>file.name.toLowerCase().split('.').pop());
+  if(selectionChanged||selected.length){settings.hidden=!extensions.some(extension=>imageExtensions.has(extension));officeSettings.hidden=!extensions.some(extension=>officeExtensions.has(extension))}
+  localList.replaceChildren(...selected.map((file,index)=>{const column=document.createElement('div');column.className='col-12 col-md-6';const card=document.createElement('div');card.className='d-flex align-items-center gap-3 border rounded-3 p-3 h-100 bg-white';const extension=file.name.toLowerCase().split('.').pop(),icon=document.createElement('i');icon.className=`bi ${imageExtensions.has(extension)?'bi-file-earmark-image':'bi-file-earmark-word'} fs-3 text-primary`;const details=document.createElement('div');details.className='min-w-0 flex-grow-1';const name=document.createElement('div');name.className='fw-semibold text-break';name.textContent=file.name;const size=document.createElement('div');size.className='small text-muted';size.textContent=`${(file.size/1024/1024).toFixed(2)} MB`;details.append(name,size);const remove=document.createElement('button');remove.type='button';remove.className='btn btn-sm btn-outline-secondary';remove.title='Remove file';remove.setAttribute('aria-label',`Remove ${file.name}`);remove.innerHTML='<i class="bi bi-x-lg" aria-hidden="true"></i>';remove.addEventListener('click',()=>{files.splice(index,1);sync();render()});card.append(icon,details,remove);column.append(card);return column}));
+};
+input.addEventListener('change',()=>{selectionChanged=true;files=Array.from(input.files||[]);render()});render();
 })();</script>
 {% endblock %}
