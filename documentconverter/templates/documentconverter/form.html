@@ -14,7 +14,7 @@
       </div>
       <div class="form-text mb-2">Supported: DOC, DOCX, ODT, PNG, JPEG, WebP, TIFF, BMP and HEIC/HEIF. Maximum 25 MB per file.</div>
       {% for error in form.documents.errors %}<div class="text-danger small mb-2">{{ error }}</div>{% endfor %}
-      <div class="border rounded-3 p-3 mt-4">
+      <div class="border rounded-3 p-3 mt-4" data-image-settings hidden>
         <div class="fw-semibold mb-1"><i class="bi bi-image me-1"></i>Image page settings</div>
         <div class="small text-muted mb-3">These settings apply only to image files. Office documents keep their original page layout.</div>
         <div class="row g-3"><div class="col-sm-6 col-lg-3"><label class="form-label">Paper</label>{{ form.paper }}</div><div class="col-sm-6 col-lg-3"><label class="form-label">Orientation</label>{{ form.orientation }}</div><div class="col-sm-6 col-lg-3"><label class="form-label">Fit</label>{{ form.fit }}</div><div class="col-sm-6 col-lg-3"><label class="form-label">{{ form.margin_mm.label }}</label>{{ form.margin_mm }}</div></div>
@@ -25,4 +25,11 @@
   </div></div>
   <p class="text-muted small mt-3">LibreOffice runs only while an Office document is being converted. A separate temporary profile prevents concurrent conversions from blocking one another.</p>
 </div></div>
+<script>(()=>{
+const input=document.getElementById('{{ form.documents.id_for_label }}'),settings=document.querySelector('[data-image-settings]');
+if(!input||!settings)return;
+const imageExtensions=new Set(['png','jpg','jpeg','webp','tif','tiff','bmp','heic','heif']);
+const update=()=>{settings.hidden=!Array.from(input.files||[]).some(file=>imageExtensions.has(file.name.toLowerCase().split('.').pop()))};
+input.addEventListener('change',update);update();
+})();</script>
 {% endblock %}
