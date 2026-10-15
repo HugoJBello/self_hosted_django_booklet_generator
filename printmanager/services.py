@@ -1,5 +1,6 @@
 import os
 import re
+import struct
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -335,8 +336,15 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
             "-dFIXEDMEDIA", "-dPDFFitPage", "-dAutoRotatePages=/PageByPage",
             f"-dDEVICEWIDTHPOINTS={width}", f"-dDEVICEHEIGHTPOINTS={height}",
         ]
-    if options.get("print-color-mode") == "monochrome" and device == "pwgraster":
-        args += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
+    if device == "pwgraster":
+        if options.get("print-color-mode") == "monochrome":
+            # Driverless monochrome printers commonly advertise only sGray_8.
+            # Ghostscript otherwise emits Black_1, which some firmware accepts
+            # as a job but renders as blank pages.
+            raster_setup = "<</cupsColorSpace 18 /cupsBitsPerColor 8 /cupsBitsPerPixel 8 /cupsColorOrder 0>>setpagedevice"
+        else:
+            raster_setup = "<</cupsColorSpace 19 /cupsBitsPerColor 8 /cupsBitsPerPixel 24 /cupsColorOrder 0>>setpagedevice"
+        args += ["-c", raster_setup, "-f"]
     if page_ranges:
         args.append(f"-sPageList={page_ranges}")
     args.append(str(path))
@@ -344,10 +352,25 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
         _run(args, timeout=settings.CUPS_CONVERSION_TIMEOUT)
         if not output_path.is_file() or output_path.stat().st_size == 0:
             raise CupsError("PDF conversion produced an empty print document.")
+        if document_format == "image/pwg-raster":
+            _validate_pwg_header(output_path, options)
         return output_path
     except Exception:
         output_path.unlink(missing_ok=True)
         raise
+
+
+def _validate_pwg_header(path, options):
+    """Reject PWG output that does not match the standard 8-bit color model."""
+    header = Path(path).read_bytes()[:408]
+    if len(header) < 408 or header[:4] != b"RaS2":
+        raise CupsError("PDF conversion produced an invalid PWG Raster document.")
+    bits_per_color = struct.unpack_from(">I", header, 388)[0]
+    bits_per_pixel = struct.unpack_from(">I", header, 392)[0]
+    color_space = struct.unpack_from(">I", header, 404)[0]
+    expected = (8, 8, 18) if options.get("print-color-mode") == "monochrome" else (8, 24, 19)
+    if (bits_per_color, bits_per_pixel, color_space) != expected:
+        raise CupsError("PDF conversion produced an unsupported PWG Raster color format.")
 
 
 def _pdf_contains_images(path) -> bool:

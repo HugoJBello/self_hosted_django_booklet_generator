@@ -103,7 +103,12 @@ class CupsParsingTests(TestCase):
 
         def create_output(args, **_kwargs):
             output = next(item.split("=", 1)[1] for item in args if item.startswith("-sOutputFile="))
-            Path(output).write_bytes(b"raster")
+            header = bytearray(408)
+            header[:4] = b"RaS2"
+            import struct
+            struct.pack_into(">II", header, 388, 8, 8)
+            struct.pack_into(">I", header, 404, 18)
+            Path(output).write_bytes(header)
             return ""
 
         run.side_effect = create_output
@@ -118,6 +123,7 @@ class CupsParsingTests(TestCase):
             self.assertIn("-dPDFFitPage", args)
             self.assertIn("-dDEVICEWIDTHPOINTS=841.89", args)
             self.assertIn("-dDEVICEHEIGHTPOINTS=595.28", args)
+            self.assertIn("<</cupsColorSpace 18 /cupsBitsPerColor 8 /cupsBitsPerPixel 8 /cupsColorOrder 0>>setpagedevice", args)
             output.unlink(missing_ok=True)
         finally:
             os.unlink(source.name)
