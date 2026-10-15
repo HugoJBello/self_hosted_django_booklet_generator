@@ -16,7 +16,7 @@ from .selectors import accessible_activity
 from .timetable_uploads import staged_upload_for_request
 from .workspace_files import workspace_pdf
 
-TOOL_URLS = {"booklets": "booklets:form", "joinpdf": "joinpdf:form", "splitpdf": "splitpdf:form", "ocrpdf": "ocrpdf:form", "diary": "diary:form", "calendarpdf": "calendarpdf:form", "printdocuments": "printmanager:print"}
+TOOL_URLS = {"booklets": "booklets:form", "joinpdf": "joinpdf:form", "splitpdf": "splitpdf:form", "ocrpdf": "ocrpdf:form", "diary": "diary:form", "calendarpdf": "calendarpdf:form", "documentconverter": "documentconverter:form", "printdocuments": "printmanager:print"}
 
 
 def accessible_artifact(request, public_id):

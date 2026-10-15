@@ -82,6 +82,7 @@
         <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'splitpdf' %}active{% endif %}" href="{% url 'splitpdf:form' %}"><i class="bi bi-scissors me-1"></i>Split</a></li>
         <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'diary' %}active{% endif %}" href="{% url 'diary:form' %}"><i class="bi bi-journal-text me-1"></i>Diary</a></li>
         <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'calendarpdf' %}active{% endif %}" href="{% url 'calendarpdf:form' %}"><i class="bi bi-calendar3 me-1"></i>Calendar</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'documentconverter' %}active{% endif %}" href="{% url 'documentconverter:form' %}"><i class="bi bi-file-earmark-arrow-down me-1"></i>Convert</a></li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {% if request.resolver_match.app_name == 'printmanager' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-printer me-1"></i>Print</a>
           <ul class="dropdown-menu mt-2">

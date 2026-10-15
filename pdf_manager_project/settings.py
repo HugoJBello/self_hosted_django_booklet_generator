@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "diary",
     "splitpdf",
     "calendarpdf",
+    "documentconverter",
     "accounts",
     "activity",
     "printmanager",
@@ -59,6 +60,7 @@ CUPS_COMMAND_TIMEOUT = int(os.environ.get("CUPS_COMMAND_TIMEOUT", "20"))
 CUPS_STATUS_TIMEOUT = int(os.environ.get("CUPS_STATUS_TIMEOUT", "4"))
 CUPS_CONVERSION_TIMEOUT = int(os.environ.get("CUPS_CONVERSION_TIMEOUT", "300"))
 CUPS_DISCOVERY_FILE = os.environ.get("CUPS_DISCOVERY_FILE", "").strip()
+OFFICE_CONVERSION_TIMEOUT = int(os.environ.get("OFFICE_CONVERSION_TIMEOUT", "180"))
 
 RQ_QUEUES = {
     "default": {

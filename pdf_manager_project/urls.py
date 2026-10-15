@@ -15,6 +15,7 @@ urlpatterns = [
     path("pdf_manager/", include("diary.urls")),
     path("pdf_manager/", include("splitpdf.urls")),
     path("pdf_manager/", include("calendarpdf.urls")),
+    path("pdf_manager/", include("documentconverter.urls")),
 ]
 
 # En dev: servir media

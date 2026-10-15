@@ -9,6 +9,7 @@ class Activity(models.Model):
         ("booklets", "Booklets"), ("joinpdf", "Join PDFs"), ("splitpdf", "Split PDF"),
         ("ocrpdf", "OCR"), ("diary", "Diary"), ("calendarpdf", "Class calendar"),
         ("printdocuments", "Print documents"),
+        ("documentconverter", "Convert to PDF"),
     ]
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pdf_activities")
     tool = models.CharField(max_length=32, choices=TOOL_CHOICES, db_index=True)
@@ -31,6 +32,7 @@ class Activity(models.Model):
             "booklets": "bi-book-half", "joinpdf": "bi-intersect", "splitpdf": "bi-scissors",
             "ocrpdf": "bi-textarea-t", "diary": "bi-journal-text", "calendarpdf": "bi-calendar3",
             "printdocuments": "bi-printer",
+            "documentconverter": "bi-file-earmark-arrow-down",
         }.get(self.tool, "bi-file-earmark-pdf")
 
 

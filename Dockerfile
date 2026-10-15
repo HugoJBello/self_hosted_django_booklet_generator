@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ghostscript \
     qpdf \
     fonts-dejavu-core \
+    fonts-liberation \
+    fonts-crosextra-carlito \
+    fonts-crosextra-caladea \
+    libreoffice-writer \
     texlive-latex-base \
     texlive-latex-recommended \
     texlive-latex-extra \

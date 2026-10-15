@@ -4,7 +4,7 @@ from django.db.models import Count, Q
 from .models import Activity
 
 
-SUPPORTED_TOOLS = {"booklets", "joinpdf", "splitpdf", "ocrpdf", "diary", "calendarpdf"}
+SUPPORTED_TOOLS = {"booklets", "joinpdf", "splitpdf", "ocrpdf", "diary", "calendarpdf", "documentconverter"}
 
 
 def frontend_assets(request):
