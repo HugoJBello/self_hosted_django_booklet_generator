@@ -17,13 +17,26 @@ from activity.models import Activity, Artifact
 from .models import Printer, PrintJob
 from .image_documents import image_layout
 from .services import (
-    CupsError, _convert_pdf, _normalize_urf_luminance, _select_document_format, parse_devices,
+    CupsError, _convert_pdf, _normalize_urf_luminance, _select_document_format,
+    _transport_options, parse_devices,
     parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
 )
 from .tasks import refresh_print_job, submit_print_job
 
 
 class CupsParsingTests(TestCase):
+    def test_raster_transport_does_not_reapply_layout(self):
+        requested = {
+            "media": "iso_a4_210x297mm", "orientation-requested": "4",
+            "print-scaling": "auto", "sides": "two-sided-long-edge",
+        }
+        prepared = _transport_options(requested, "image/urf")
+        self.assertNotIn("orientation-requested", prepared)
+        self.assertNotIn("print-scaling", prepared)
+        self.assertEqual(prepared["media"], "iso_a4_210x297mm")
+        self.assertEqual(prepared["sides"], "two-sided-long-edge")
+        self.assertIn("orientation-requested", requested)
+
     def test_urf_normalization_preserves_luminance_and_uses_w8(self):
         handle = tempfile.NamedTemporaryFile(suffix=".urf", delete=False)
         header = bytearray(32)

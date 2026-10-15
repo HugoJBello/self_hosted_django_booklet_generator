@@ -693,6 +693,14 @@ def certify_printer(printer):
     return report
 
 
+def _transport_options(options, document_format):
+    prepared = dict(options)
+    if document_format in {"image/pwg-raster", "image/urf"}:
+        prepared.pop("orientation-requested", None)
+        prepared.pop("print-scaling", None)
+    return prepared
+
+
 def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
     _validate_name(printer.name, "printer name")
     if not Path(path).is_file():
@@ -705,18 +713,22 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
     converted_path = None
     try:
         source_path = Path(path)
+        transport_options = _transport_options(merged, document_format)
         if document_format != "application/pdf" or contains_images:
             converted_path = _convert_pdf(source_path, document_format, merged, page_ranges)
             source_path = converted_path
+        # Orientation and scaling have already been baked into raster formats.
+        # Reapplying them in IPP can rotate the bitmap outside the physical
+        # imageable area on otherwise successful driverless jobs.
         # Validate directly against the printer. The classic CUPS IPP backend
         # silently replaced duplex with one-sided for pass-through URF jobs.
         _direct_ipp_request(
             printer=printer, source_path=source_path, title=title, copies=copies,
-            document_format=document_format, options=merged, operation="Validate-Job",
+            document_format=document_format, options=transport_options, operation="Validate-Job",
         )
         created = _direct_ipp_request(
             printer=printer, source_path=source_path, title=title, copies=copies,
-            document_format=document_format, options=merged, operation="Create-Job",
+            document_format=document_format, options=transport_options, operation="Create-Job",
         )
         job_id = re.search(r"job-id \(integer\) = (\d+)", created)
         job_uri = re.search(r"job-uri \(uri\) = (\S+)", created)
@@ -725,7 +737,7 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
         try:
             stored = _ipp_job_operation(printer=printer, job_uri=job_uri.group(1), operation="Get-Job-Attributes")
             effective = _effective_ipp_options(stored)
-            _verify_effective_options(merged, effective)
+            _verify_effective_options(transport_options, effective)
             _ipp_job_operation(
                 printer=printer, job_uri=job_uri.group(1), operation="Send-Document",
                 source_path=source_path, document_format=document_format,
