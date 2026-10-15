@@ -17,14 +17,32 @@ from activity.models import Activity, Artifact
 from .models import Printer, PrintJob
 from .image_documents import image_layout
 from .services import (
-    CupsError, _convert_pdf, _select_document_format, parse_devices,
+    CupsError, _convert_pdf, _normalize_urf_luminance, _select_document_format, parse_devices,
     parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
 )
 from .tasks import refresh_print_job, submit_print_job
 
 
 class CupsParsingTests(TestCase):
-    def test_image_pdf_prefers_pwg_raster_for_compatible_printers(self):
+    def test_urf_normalization_preserves_luminance_and_uses_w8(self):
+        handle = tempfile.NamedTemporaryFile(suffix=".urf", delete=False)
+        header = bytearray(32)
+        header[0] = 8
+        header[1] = 4
+        import struct
+        struct.pack_into(">II", header, 12, 4, 1)
+        handle.write(b"UNIRAST\0\0\0\0\0" + header + bytes((0, 253, 255, 0, 128, 255)))
+        handle.close()
+        try:
+            _normalize_urf_luminance(Path(handle.name))
+            normalized = Path(handle.name).read_bytes()
+            self.assertEqual(normalized[:8], b"UNIRAST\0")
+            self.assertEqual(normalized[13], 0)
+            self.assertEqual(normalized[44:], bytes((0, 253, 255, 0, 128, 255)))
+        finally:
+            os.unlink(handle.name)
+
+    def test_image_pdf_uses_printer_preferred_raster_format(self):
         handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         handle.close()
         image = io.BytesIO()
@@ -39,7 +57,7 @@ class CupsParsingTests(TestCase):
             "preferred_document_format": "image/urf",
         })()
         try:
-            self.assertEqual(_select_document_format(printer, Path(handle.name)), "image/pwg-raster")
+            self.assertEqual(_select_document_format(printer, Path(handle.name)), "image/urf")
         finally:
             os.unlink(handle.name)
 
@@ -93,7 +111,7 @@ class CupsParsingTests(TestCase):
             os.unlink(source.name)
 
     @patch("printmanager.services._run")
-    def test_pwg_conversion_fits_a3_pdf_to_requested_a4_landscape(self, run):
+    def test_pwg_conversion_uses_physical_a4_feed_dimensions(self, run):
         source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         source.close()
         document = fitz.open()
@@ -106,6 +124,7 @@ class CupsParsingTests(TestCase):
             header = bytearray(408)
             header[:4] = b"RaS2"
             import struct
+            struct.pack_into(">II", header, 376, 4961, 7016)
             struct.pack_into(">II", header, 388, 8, 8)
             struct.pack_into(">I", header, 404, 18)
             Path(output).write_bytes(header)
@@ -121,8 +140,8 @@ class CupsParsingTests(TestCase):
             self.assertIn("-r600", args)
             self.assertIn("-dFIXEDMEDIA", args)
             self.assertIn("-dPDFFitPage", args)
-            self.assertIn("-dDEVICEWIDTHPOINTS=841.89", args)
-            self.assertIn("-dDEVICEHEIGHTPOINTS=595.28", args)
+            self.assertIn("-dDEVICEWIDTHPOINTS=595.28", args)
+            self.assertIn("-dDEVICEHEIGHTPOINTS=841.89", args)
             self.assertIn("<</cupsColorSpace 18 /cupsBitsPerColor 8 /cupsBitsPerPixel 8 /cupsColorOrder 0>>setpagedevice", args)
             output.unlink(missing_ok=True)
         finally:

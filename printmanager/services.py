@@ -328,10 +328,14 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
     page_size = MEDIA_POINTS.get(str(options.get("media", "")).lower())
     if page_size:
         width, height = page_size
-        if str(options.get("orientation-requested")) == "4" and width < height:
-            width, height = height, width
-        elif str(options.get("orientation-requested")) == "3" and width > height:
-            width, height = height, width
+        # Raster dimensions describe the physical sheet as it moves through the
+        # printer. Keep its canonical feed orientation; orientation-requested
+        # tells the printer how the logical page is oriented on that sheet.
+        if document_format == "application/pdf":
+            if str(options.get("orientation-requested")) == "4" and width < height:
+                width, height = height, width
+            elif str(options.get("orientation-requested")) == "3" and width > height:
+                width, height = height, width
         args += [
             "-dFIXEDMEDIA", "-dPDFFitPage", "-dAutoRotatePages=/PageByPage",
             f"-dDEVICEWIDTHPOINTS={width}", f"-dDEVICEHEIGHTPOINTS={height}",
@@ -342,6 +346,7 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
             # Ghostscript otherwise emits Black_1, which some firmware accepts
             # as a job but renders as blank pages.
             raster_setup = "<</cupsColorSpace 18 /cupsBitsPerColor 8 /cupsBitsPerPixel 8 /cupsColorOrder 0>>setpagedevice"
+            args += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
         else:
             raster_setup = "<</cupsColorSpace 19 /cupsBitsPerColor 8 /cupsBitsPerPixel 24 /cupsColorOrder 0>>setpagedevice"
         args += ["-c", raster_setup, "-f"]
@@ -352,12 +357,100 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
         _run(args, timeout=settings.CUPS_CONVERSION_TIMEOUT)
         if not output_path.is_file() or output_path.stat().st_size == 0:
             raise CupsError("PDF conversion produced an empty print document.")
+        if document_format == "image/urf" and options.get("print-color-mode") == "monochrome":
+            _normalize_urf_luminance(output_path)
         if document_format == "image/pwg-raster":
             _validate_pwg_header(output_path, options)
         return output_path
     except Exception:
         output_path.unlink(missing_ok=True)
         raise
+
+
+def _encode_urf_row(row):
+    encoded = bytearray()
+    position = 0
+    while position < len(row):
+        run = 1
+        while position + run < len(row) and run < 128 and row[position + run] == row[position]:
+            run += 1
+        if run >= 2:
+            encoded.extend((run - 1, row[position]))
+            position += run
+            continue
+        start = position
+        position += 1
+        while position < len(row) and position - start < 128:
+            next_run = 1
+            while position + next_run < len(row) and next_run < 2 and row[position + next_run] == row[position]:
+                next_run += 1
+            if next_run >= 2:
+                break
+            position += 1
+        length = position - start
+        if length == 1:
+            encoded.extend((0, row[start]))
+        else:
+            encoded.append(257 - length)
+            encoded.extend(row[start:position])
+    return encoded
+
+
+def _normalize_urf_luminance(path):
+    """Convert Ghostscript DeviceW URF pixels to printer-standard W8."""
+    source = memoryview(Path(path).read_bytes())
+    if len(source) < 12 or bytes(source[:8]) != b"UNIRAST\0":
+        raise CupsError("PDF conversion produced an invalid URF document.")
+    position = 12
+    output = bytearray(source[:12])
+    pages = 0
+    while position < len(source):
+        if position + 32 > len(source):
+            raise CupsError("PDF conversion produced a truncated URF page header.")
+        header = bytearray(source[position:position + 32])
+        position += 32
+        bits, color_space = header[0], header[1]
+        width, height = struct.unpack_from(">II", header, 12)
+        if bits != 8 or color_space not in {0, 4} or not width or not height:
+            raise CupsError("PDF conversion produced an unsupported URF color format.")
+        header[1] = 0
+        output.extend(header)
+        rows_written = 0
+        while rows_written < height:
+            if position >= len(source):
+                raise CupsError("PDF conversion produced truncated URF image data.")
+            repeats = int(source[position]) + 1
+            position += 1
+            row = bytearray()
+            fill = 0
+            while len(row) < width:
+                if position >= len(source):
+                    raise CupsError("PDF conversion produced truncated URF image data.")
+                control = int(source[position])
+                position += 1
+                if control == 128:
+                    row.extend(bytes((fill,)) * (width - len(row)))
+                elif control <= 127:
+                    if position >= len(source):
+                        raise CupsError("PDF conversion produced truncated URF image data.")
+                    value = int(source[position])
+                    position += 1
+                    row.extend(bytes((value,)) * (control + 1))
+                else:
+                    length = 257 - control
+                    if position + length > len(source):
+                        raise CupsError("PDF conversion produced truncated URF image data.")
+                    row.extend(source[position:position + length])
+                    position += length
+            if len(row) != width or rows_written + repeats > height:
+                raise CupsError("PDF conversion produced invalid URF image dimensions.")
+            output.append(repeats - 1)
+            output.extend(_encode_urf_row(row))
+            rows_written += repeats
+        pages += 1
+    if not pages:
+        raise CupsError("PDF conversion produced an empty URF document.")
+    Path(path).write_bytes(output)
 
 
 def _validate_pwg_header(path, options):
@@ -371,6 +464,13 @@ def _validate_pwg_header(path, options):
     expected = (8, 8, 18) if options.get("print-color-mode") == "monochrome" else (8, 24, 19)
     if (bits_per_color, bits_per_pixel, color_space) != expected:
         raise CupsError("PDF conversion produced an unsupported PWG Raster color format.")
+    page_size = MEDIA_POINTS.get(str(options.get("media", "")).lower())
+    if page_size:
+        width, height = struct.unpack_from(">II", header, 376)
+        dpi = min(_resolution_dpi(options), 600)
+        expected_pixels = tuple(round(points * dpi / 72) for points in page_size)
+        if (width, height) != expected_pixels:
+            raise CupsError("PDF conversion produced PWG Raster dimensions that do not match the physical paper.")
 
 
 def _pdf_contains_images(path) -> bool:
@@ -389,11 +489,12 @@ def _select_document_format(printer, path=None):
         formats = identity.get("document_formats", [])
         preferred = identity.get("preferred_document_format", "")
     # Image-heavy PDFs expose firmware-specific PDF rendering bugs on several
-    # printer brands. Prefer a raster format for them regardless of the
-    # advertised preferred format. PDF-only devices receive a normalized,
-    # raster-backed PDF in submit_pdf.
+    # printer brands. Prefer the printer's native raster format; URF has a
+    # dedicated luminance device and avoids PWG colorspace reinterpretation.
+    # PDF-only devices receive a normalized, raster-backed PDF in submit_pdf.
     if path and _pdf_contains_images(path):
-        candidates = ("image/pwg-raster", "image/urf", "application/pdf", preferred)
+        raster_preferred = preferred if preferred in {"image/urf", "image/pwg-raster"} else ""
+        candidates = (raster_preferred, "image/urf", "image/pwg-raster", "application/pdf", preferred)
     else:
         candidates = (preferred, "application/pdf", "image/urf", "image/pwg-raster")
     for candidate in candidates:
