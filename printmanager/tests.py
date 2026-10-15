@@ -15,7 +15,7 @@ from PIL import Image
 from activity.models import Activity, Artifact
 
 from .models import Printer, PrintJob
-from .image_documents import image_layout
+from .image_documents import PAPER_SIZES, image_layout
 from .services import (
     CupsError, _convert_pdf, _normalize_urf_luminance, _select_document_format,
     _transport_options, parse_devices,
@@ -30,11 +30,13 @@ class CupsParsingTests(TestCase):
             "media": "iso_a4_210x297mm", "orientation-requested": "4",
             "print-scaling": "auto", "sides": "two-sided-long-edge",
         }
-        prepared = _transport_options(requested, "image/urf")
-        self.assertNotIn("orientation-requested", prepared)
-        self.assertNotIn("print-scaling", prepared)
-        self.assertEqual(prepared["media"], "iso_a4_210x297mm")
-        self.assertEqual(prepared["sides"], "two-sided-long-edge")
+        for document_format in ("image/urf", "image/pwg-raster"):
+            with self.subTest(document_format=document_format):
+                prepared = _transport_options(requested, document_format)
+                self.assertNotIn("orientation-requested", prepared)
+                self.assertNotIn("print-scaling", prepared)
+                self.assertEqual(prepared["media"], "iso_a4_210x297mm")
+                self.assertEqual(prepared["sides"], "two-sided-long-edge")
         self.assertIn("orientation-requested", requested)
 
     def test_urf_normalization_preserves_luminance_and_uses_w8(self):
@@ -355,7 +357,10 @@ class PrintingViewsTests(TestCase):
         output = activity.artifacts.get(kind="output")
         self.assertEqual(output.path, job.document_path)
         with fitz.open(output.path) as document:
-            self.assertGreater(document[0].rect.width, document[0].rect.height)
+            page = document[0]
+            self.assertAlmostEqual(page.rect.width, PAPER_SIZES["a4"][1], delta=.1)
+            self.assertAlmostEqual(page.rect.height, PAPER_SIZES["a4"][0], delta=.1)
+            self.assertTrue(page.get_images(full=True))
         for artifact in activity.artifacts.all():
             if os.path.exists(artifact.path):
                 os.unlink(artifact.path)
