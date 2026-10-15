@@ -187,6 +187,9 @@ Grupo: 2A
             self.assertIn("Original source", document[-1].get_text())
             self.assertIn("wide timetable.jpg", document[-1].get_text())
             self.assertTrue(document[-1].get_images(full=True))
+            for page in document:
+                self.assertAlmostEqual(page.rect.width, 841.89, delta=.1)
+                self.assertAlmostEqual(page.rect.height, 595.28, delta=.1)
 
     def test_summary_lists_every_date_without_clipping(self):
         days = {date(2026, 9, day) for day in range(1, 29)}

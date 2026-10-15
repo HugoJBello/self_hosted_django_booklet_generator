@@ -477,6 +477,17 @@ def _append_source_files(doc: fitz.Document, source_files) -> None:
             )
 
 
+def _normalize_pages_to_a4(source: fitz.Document) -> fitz.Document:
+    """Fit every generated page onto a standard A4 sheet without cropping."""
+    normalized = fitz.open()
+    for page_number, source_page in enumerate(source):
+        landscape = source_page.rect.width >= source_page.rect.height
+        width, height = ((841.89, 595.28) if landscape else (595.28, 841.89))
+        page = normalized.new_page(width=width, height=height)
+        page.show_pdf_page(page.rect, source, page_number, keep_proportion=True)
+    return normalized
+
+
 def make_pdf(events: set[Event], source_files=None) -> bytes:
     events = consolidate_events(events)
     if not events:
@@ -551,6 +562,8 @@ def make_pdf(events: set[Event], source_files=None) -> bytes:
                                          fontsize=room_size, fontname="dejavu", color=(0.35, 0.39, 0.46))
     add_weekly_summary(doc, events, FONT_PATH)
     _append_source_files(doc, source_files)
-    output = doc.tobytes(garbage=4, deflate=True)
+    normalized = _normalize_pages_to_a4(doc)
+    output = normalized.tobytes(garbage=4, deflate=True)
+    normalized.close()
     doc.close()
     return output
