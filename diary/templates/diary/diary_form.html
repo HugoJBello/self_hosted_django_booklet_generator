@@ -103,7 +103,10 @@
               <section class="settings-panel">
                 <div class="settings-panel-title">{{ form.class_timetables.label }}</div>
                 <div class="settings-panel-subtitle">Add classes to the existing weekly calendar boxes. Select one or several files, then add more or remove individual files. No summary page is added.</div>
-                {{ form.class_timetables }}
+                <div class="file-dropzone" data-file-dropzone>
+                  <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></span><div><div class="file-dropzone-title">Drop timetable files here or choose files</div><div class="file-dropzone-description">Choose one or several. You can add more at any time.</div></div></div>
+                  {{ form.class_timetables }}
+                </div>
                 <div class="form-text">{{ form.class_timetables.help_text }} PNG, JPG, WEBP, TIFF or PDF; up to 20 files of 25 MB each.</div>
                 {% for e in form.class_timetables.errors %}<div class="text-danger small mt-2">{{ e }}</div>{% endfor %}
                 {% include "calendarpdf/_upload_queue.html" %}

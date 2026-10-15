@@ -11,11 +11,8 @@
           {% csrf_token %}
           {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
           <label for="{{ form.images.id_for_label }}" class="form-label fw-semibold">{{ form.images.label }}</label>
-          <div id="dropzone" data-file-dropzone class="rounded-4 border border-2 p-3 p-sm-4 bg-light mb-2">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <i class="bi bi-cloud-arrow-up fs-4 text-primary" aria-hidden="true"></i>
-              <div><div class="fw-semibold">Add timetable files</div><div class="small text-muted">Choose one or several. You can add more at any time.</div></div>
-            </div>
+          <div id="dropzone" data-file-dropzone class="file-dropzone mb-2">
+            <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></span><div><div class="file-dropzone-title">Drop timetable files here or choose files</div><div class="file-dropzone-description">Choose one or several. You can add more at any time.</div></div></div>
             {{ form.images }}
           </div>
           <div class="form-text">{{ form.images.help_text }} PNG, JPG, WEBP, TIFF and PDF are supported; up to 20 files of 25 MB each.</div>

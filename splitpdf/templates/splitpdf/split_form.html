@@ -4,20 +4,6 @@
 
 {% block content %}
   <style>
-    .upload-dropzone {
-      border: 2px dashed #6c757d;
-      border-radius: 0.75rem;
-      padding: 1.5rem;
-      background: #f8f9fa;
-      transition: border-color 0.15s ease, background-color 0.15s ease;
-      cursor: pointer;
-    }
-
-    .upload-dropzone.is-dragover {
-      border-color: #0d6efd;
-      background: #eef5ff;
-    }
-
     .settings-grid {
       display: grid;
       grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
@@ -198,10 +184,6 @@
         padding: 0.85rem;
       }
 
-      .upload-dropzone {
-        padding: 1rem;
-      }
-
       .mode-option {
         padding: 0.7rem;
       }
@@ -301,9 +283,8 @@
 
             <section class="mb-4">
               <label class="form-label">{{ form.input_pdf.label }}</label>
-              <div class="upload-dropzone" id="upload-dropzone">
-                <p class="fw-semibold mb-1">Drop a PDF here or click to choose one</p>
-                <p class="text-muted mb-3 small">{{ form.input_pdf.help_text }}</p>
+              <div class="file-dropzone" id="upload-dropzone">
+                <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></span><div><div class="file-dropzone-title">Drop a PDF here or choose a file</div><div class="file-dropzone-description">{{ form.input_pdf.help_text }}</div></div></div>
                 {{ form.input_pdf }}
               </div>
               {% for e in form.input_pdf.errors %}

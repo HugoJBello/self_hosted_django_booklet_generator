@@ -5,20 +5,6 @@
 
 {% block content %}
   <style>
-    .upload-dropzone {
-      border: 2px dashed #6c757d;
-      border-radius: 1rem;
-      padding: 1.5rem;
-      background: #f8f9fa;
-      transition: border-color 0.15s ease, background-color 0.15s ease;
-      cursor: pointer;
-    }
-
-    .upload-dropzone.is-dragover {
-      border-color: #0d6efd;
-      background: #eef5ff;
-    }
-
     .file-config-card {
       border: 1px solid #dee2e6;
       border-radius: 1rem;
@@ -90,9 +76,8 @@
 
             <div class="mb-4">
               <label class="form-label">{{ form.input_pdf.label }}</label>
-              <div class="upload-dropzone" id="upload-dropzone">
-                <p class="fw-semibold mb-1">Drop PDFs here or click to choose files</p>
-                <p class="text-muted mb-3 small">{{ form.input_pdf.help_text }}</p>
+              <div class="file-dropzone" id="upload-dropzone">
+                <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></span><div><div class="file-dropzone-title">Drop PDFs here or choose files</div><div class="file-dropzone-description">{{ form.input_pdf.help_text }}</div></div></div>
                 {{ form.input_pdf }}
               </div>
               {% for e in form.input_pdf.errors %}

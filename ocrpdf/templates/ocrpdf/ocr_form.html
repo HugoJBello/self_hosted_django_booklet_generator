@@ -15,11 +15,8 @@
 
             <div class="mb-3">
               <label class="form-label" for="{{ form.input_pdf.id_for_label }}">{{ form.input_pdf.label }}</label>
-              <div class="rounded-3 border border-2 p-3 bg-light" data-file-dropzone>
-                <div class="d-flex align-items-center gap-2 mb-2">
-                  <i class="bi bi-cloud-arrow-up fs-4 text-success" aria-hidden="true"></i>
-                  <div><div class="fw-semibold">Drop PDFs here or choose files</div><div class="small text-muted">You can select one or several PDFs.</div></div>
-                </div>
+              <div class="file-dropzone" data-file-dropzone>
+                <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></span><div><div class="file-dropzone-title">Drop PDFs here or choose files</div><div class="file-dropzone-description">You can select one or several PDFs.</div></div></div>
                 {{ form.input_pdf }}
               </div>
               {% if form.input_pdf.help_text %}
