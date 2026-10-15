@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+import fitz
 from django.conf import settings
 
 
@@ -16,6 +17,18 @@ class CupsError(RuntimeError):
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
 SAFE_OPTION = re.compile(r"^[A-Za-z0-9_.-]+$")
 SAFE_PAGE_RANGES = re.compile(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$")
+MEDIA_POINTS = {
+    "a3": (841.89, 1190.55),
+    "iso_a3_297x420mm": (841.89, 1190.55),
+    "a4": (595.28, 841.89),
+    "iso_a4_210x297mm": (595.28, 841.89),
+    "a5": (419.53, 595.28),
+    "iso_a5_148x210mm": (419.53, 595.28),
+    "letter": (612.0, 792.0),
+    "na_letter_8.5x11in": (612.0, 792.0),
+    "legal": (612.0, 1008.0),
+    "na_legal_8.5x14in": (612.0, 1008.0),
+}
 
 
 def _run(args, *, timeout=None):
@@ -286,7 +299,10 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
     """Render a PDF to a format accepted natively by a driverless printer."""
     if page_ranges and not SAFE_PAGE_RANGES.fullmatch(page_ranges):
         raise CupsError("Invalid page range.")
-    if document_format == "image/pwg-raster":
+    if document_format == "application/pdf":
+        is_mono = options.get("print-color-mode") == "monochrome"
+        device, suffix = ("pdfimage8" if is_mono else "pdfimage24"), ".pdf"
+    elif document_format == "image/pwg-raster":
         device, suffix = "pwgraster", ".pwg"
     elif document_format == "image/urf":
         is_mono = options.get("print-color-mode") == "monochrome"
@@ -297,10 +313,28 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
     temporary = tempfile.NamedTemporaryFile(prefix="print-", suffix=suffix, delete=False)
     temporary.close()
     output_path = Path(temporary.name)
+    resolution = _resolution_dpi(options)
+    if document_format == "application/pdf":
+        # A moderate fixed resolution keeps the normalized PDF broadly
+        # compatible and prevents multi-page image documents becoming huge.
+        resolution = min(resolution, 300)
+    elif document_format in {"image/pwg-raster", "image/urf"}:
+        resolution = min(resolution, 600)
     args = [
         "gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE", f"-sDEVICE={device}",
-        f"-r{_resolution_dpi(options)}", f"-sOutputFile={output_path}",
+        f"-r{resolution}", f"-sOutputFile={output_path}",
     ]
+    page_size = MEDIA_POINTS.get(str(options.get("media", "")).lower())
+    if page_size:
+        width, height = page_size
+        if str(options.get("orientation-requested")) == "4" and width < height:
+            width, height = height, width
+        elif str(options.get("orientation-requested")) == "3" and width > height:
+            width, height = height, width
+        args += [
+            "-dFIXEDMEDIA", "-dPDFFitPage", "-dAutoRotatePages=/PageByPage",
+            f"-dDEVICEWIDTHPOINTS={width}", f"-dDEVICEHEIGHTPOINTS={height}",
+        ]
     if options.get("print-color-mode") == "monochrome" and device == "pwgraster":
         args += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
     if page_ranges:
@@ -316,17 +350,29 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
         raise
 
 
-def _select_document_format(printer):
+def _pdf_contains_images(path) -> bool:
+    try:
+        with fitz.open(path) as document:
+            return any(page.get_images(full=True) for page in document)
+    except (fitz.FileDataError, OSError, RuntimeError):
+        return False
+
+
+def _select_document_format(printer, path=None):
     formats = list(printer.document_formats or [])
     preferred = printer.preferred_document_format
     if not formats:
         identity = inspect_ipp_printer(printer.device_uri)
         formats = identity.get("document_formats", [])
         preferred = identity.get("preferred_document_format", "")
-    # Honour the printer's preferred format first. Driverless CUPS queues can
-    # expose only that direct pass-through MIME type even when the device itself
-    # advertises additional raster formats.
-    candidates = (preferred, "application/pdf", "image/urf", "image/pwg-raster")
+    # Image-heavy PDFs expose firmware-specific PDF rendering bugs on several
+    # printer brands. Prefer a raster format for them regardless of the
+    # advertised preferred format. PDF-only devices receive a normalized,
+    # raster-backed PDF in submit_pdf.
+    if path and _pdf_contains_images(path):
+        candidates = ("image/pwg-raster", "image/urf", "application/pdf", preferred)
+    else:
+        candidates = (preferred, "application/pdf", "image/urf", "image/pwg-raster")
     for candidate in candidates:
         if candidate in formats:
             return candidate
@@ -528,11 +574,14 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
     if not Path(path).is_file():
         raise CupsError("The PDF is no longer available.")
     merged = {**printer.default_options, **(options or {})}
-    document_format = _select_document_format(printer)
+    document_format = _select_document_format(printer, Path(path))
+    contains_images = _pdf_contains_images(Path(path))
+    if document_format in {"image/pwg-raster", "image/urf"} and _resolution_dpi(merged) > 600:
+        merged["printer-resolution"] = "600dpi"
     converted_path = None
     try:
         source_path = Path(path)
-        if document_format != "application/pdf":
+        if document_format != "application/pdf" or contains_images:
             converted_path = _convert_pdf(source_path, document_format, merged, page_ranges)
             source_path = converted_path
         # Validate directly against the printer. The classic CUPS IPP backend

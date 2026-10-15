@@ -2,6 +2,7 @@ import io
 import os
 import json
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -15,11 +16,112 @@ from activity.models import Activity, Artifact
 
 from .models import Printer, PrintJob
 from .image_documents import image_layout
-from .services import CupsError, parse_devices, parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status
+from .services import (
+    CupsError, _convert_pdf, _select_document_format, parse_devices,
+    parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
+)
 from .tasks import refresh_print_job, submit_print_job
 
 
 class CupsParsingTests(TestCase):
+    def test_image_pdf_prefers_pwg_raster_for_compatible_printers(self):
+        handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        handle.close()
+        image = io.BytesIO()
+        Image.new("RGB", (10, 10), "black").save(image, "PNG")
+        document = fitz.open()
+        page = document.new_page()
+        page.insert_image(page.rect, stream=image.getvalue())
+        document.save(handle.name)
+        document.close()
+        printer = type("Printer", (), {
+            "document_formats": ["image/urf", "image/pwg-raster"],
+            "preferred_document_format": "image/urf",
+        })()
+        try:
+            self.assertEqual(_select_document_format(printer, Path(handle.name)), "image/pwg-raster")
+        finally:
+            os.unlink(handle.name)
+
+    def test_image_pdf_prefers_urf_over_direct_pdf_without_pwg(self):
+        handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        handle.close()
+        image = io.BytesIO()
+        Image.new("RGB", (10, 10), "black").save(image, "PNG")
+        document = fitz.open()
+        page = document.new_page()
+        page.insert_image(page.rect, stream=image.getvalue())
+        document.save(handle.name)
+        document.close()
+        printer = type("Printer", (), {
+            "document_formats": ["application/pdf", "image/urf"],
+            "preferred_document_format": "application/pdf",
+        })()
+        try:
+            self.assertEqual(_select_document_format(printer, Path(handle.name)), "image/urf")
+        finally:
+            os.unlink(handle.name)
+
+    @patch("printmanager.services._run")
+    def test_pdf_only_printer_gets_raster_backed_normalized_pdf(self, run):
+        source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        source.close()
+        document = fitz.open()
+        document.new_page(width=1190.55, height=841.89)
+        document.save(source.name)
+        document.close()
+
+        def create_output(args, **_kwargs):
+            output = next(item.split("=", 1)[1] for item in args if item.startswith("-sOutputFile="))
+            Path(output).write_bytes(b"normalized pdf")
+            return ""
+
+        run.side_effect = create_output
+        try:
+            output = _convert_pdf(Path(source.name), "application/pdf", {
+                "media": "A4", "orientation-requested": "4",
+                "printer-resolution": "600dpi", "print-color-mode": "color",
+            })
+            args = run.call_args.args[0]
+            self.assertIn("-sDEVICE=pdfimage24", args)
+            self.assertIn("-r300", args)
+            self.assertIn("-dPDFFitPage", args)
+            self.assertIn("-dDEVICEWIDTHPOINTS=841.89", args)
+            self.assertIn("-dDEVICEHEIGHTPOINTS=595.28", args)
+            output.unlink(missing_ok=True)
+        finally:
+            os.unlink(source.name)
+
+    @patch("printmanager.services._run")
+    def test_pwg_conversion_fits_a3_pdf_to_requested_a4_landscape(self, run):
+        source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        source.close()
+        document = fitz.open()
+        document.new_page(width=1190.55, height=841.89)
+        document.save(source.name)
+        document.close()
+
+        def create_output(args, **_kwargs):
+            output = next(item.split("=", 1)[1] for item in args if item.startswith("-sOutputFile="))
+            Path(output).write_bytes(b"raster")
+            return ""
+
+        run.side_effect = create_output
+        try:
+            output = _convert_pdf(Path(source.name), "image/pwg-raster", {
+                "media": "iso_a4_210x297mm", "orientation-requested": "4",
+                "printer-resolution": "1200dpi", "print-color-mode": "monochrome",
+            })
+            args = run.call_args.args[0]
+            self.assertIn("-r600", args)
+            self.assertIn("-dFIXEDMEDIA", args)
+            self.assertIn("-dPDFFitPage", args)
+            self.assertIn("-dDEVICEWIDTHPOINTS=841.89", args)
+            self.assertIn("-dDEVICEHEIGHTPOINTS=595.28", args)
+            output.unlink(missing_ok=True)
+        finally:
+            os.unlink(source.name)
+
     @override_settings(CUPS_STATUS_TIMEOUT=7)
     @patch("printmanager.services._ipp_job_operation", return_value="job-state (enum) = processing")
     def test_job_status_uses_short_status_timeout(self, operation):
