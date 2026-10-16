@@ -76,7 +76,7 @@ class CupsParsingTests(TestCase):
         finally:
             os.unlink(handle.name)
 
-    def test_image_pdf_prefers_urf_over_direct_pdf_without_pwg(self):
+    def test_image_pdf_prefers_normalized_pdf_when_supported(self):
         handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         handle.close()
         image = io.BytesIO()
@@ -91,7 +91,7 @@ class CupsParsingTests(TestCase):
             "preferred_document_format": "application/pdf",
         })()
         try:
-            self.assertEqual(_select_document_format(printer, Path(handle.name)), "image/urf")
+            self.assertEqual(_select_document_format(printer, Path(handle.name)), "application/pdf")
         finally:
             os.unlink(handle.name)
 

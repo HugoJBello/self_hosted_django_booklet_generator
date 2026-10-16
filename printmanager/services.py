@@ -488,13 +488,16 @@ def _select_document_format(printer, path=None):
         identity = inspect_ipp_printer(printer.device_uri)
         formats = identity.get("document_formats", [])
         preferred = identity.get("preferred_document_format", "")
-    # Image-heavy PDFs expose firmware-specific PDF rendering bugs on several
-    # printer brands. Prefer the printer's native raster format; URF has a
-    # dedicated luminance device and avoids PWG colorspace reinterpretation.
-    # PDF-only devices receive a normalized, raster-backed PDF in submit_pdf.
+    # Prefer PDF whenever the printer advertises it.  Image-bearing documents
+    # are normalized to a raster-backed PDF by submit_pdf, which avoids both
+    # firmware PDF rendering bugs and overly optimistic URF/PWG declarations.
+    # Some printers accept a raster job during Validate/Create-Job and only
+    # abort it later with document-format-error (notably mixed vector/image
+    # booklets).  Keep native raster formats as fallbacks for printers which do
+    # not accept PDF at all.
     if path and _pdf_contains_images(path):
         raster_preferred = preferred if preferred in {"image/urf", "image/pwg-raster"} else ""
-        candidates = (raster_preferred, "image/urf", "image/pwg-raster", "application/pdf", preferred)
+        candidates = ("application/pdf", raster_preferred, "image/urf", "image/pwg-raster", preferred)
     else:
         candidates = (preferred, "application/pdf", "image/urf", "image/pwg-raster")
     for candidate in candidates:
