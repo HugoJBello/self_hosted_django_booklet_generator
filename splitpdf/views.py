@@ -189,7 +189,7 @@ def _context(request, form: SplitPdfForm | None = None, sections=None) -> dict[s
     split_mode = state.get("split_mode", "")
     if sections is None:
         sections = _sections_from_state(state)
-    if not sections and state.get("pdf_path"):
+    if not sections and state.get("pdf_path") and not state.get("preview_initialized"):
         try:
             if split_mode == "ranges":
                 sections = build_sections_for_page_ranges(state.get("page_ranges", ""), int(state["total_pages"]))
@@ -271,6 +271,7 @@ def split_view(request):
                 "split_mode": split_mode,
                 "page_ranges": page_ranges,
                 "preview_sections": _sections_to_state(sections),
+                "preview_initialized": False,
                 "outputs": [],
             }
             _save_state(request, state)
@@ -284,7 +285,7 @@ def split_view(request):
             form = SplitPdfForm(level_choices=_level_choices(toc_entries), initial=_initial_from_state(state))
             return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
 
-        if action in {"preview", "generate", "split_section", "merge_next"}:
+        if action in {"preview", "generate", "split_section", "merge_next", "delete_section"}:
             if not state.get("pdf_path"):
                 messages.error(request, "Upload a PDF before generating sections.")
                 return redirect("splitpdf:form")
@@ -338,7 +339,7 @@ def split_view(request):
                     sections = build_sections_for_level(toc_entries, int(state["total_pages"]), selected_level)
                 else:
                     sections = _sections_from_state(state)
-                    if not sections:
+                    if not sections and not state.get("preview_initialized"):
                         sections = build_sections_for_level(toc_entries, int(state["total_pages"]), selected_level)
             except Exception as exc:
                 messages.error(request, str(exc))
@@ -346,6 +347,7 @@ def split_view(request):
 
             if action == "preview":
                 state["preview_sections"] = _sections_to_state(sections)
+                state["preview_initialized"] = True
                 state["outputs"] = []
                 _save_state(request, state)
                 return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
@@ -355,13 +357,47 @@ def split_view(request):
                     messages.warning(request, "Interactive split is only available in table-of-contents mode.")
                     return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
                 section_id = request.POST.get("section_id", "")
-                updated_sections = _split_preview_section(sections, section_id, toc_entries, int(state["total_pages"]))
+                split_strategy = request.POST.get("split_strategy", "automatic")
+                split_after_page = None
+                if split_strategy == "page":
+                    try:
+                        split_after_page = int(request.POST.get("split_page", ""))
+                    except (TypeError, ValueError):
+                        messages.error(request, "Choose a valid page after which to split the section.")
+                        return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
+                try:
+                    updated_sections = _split_preview_section(
+                        sections,
+                        section_id,
+                        split_after_page=split_after_page,
+                    )
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
                 if _section_ids(updated_sections) == _section_ids(sections):
                     messages.warning(request, "That section cannot be split any further.")
                 else:
                     sections = updated_sections
                     messages.success(request, "Section split updated.")
                 state["preview_sections"] = _sections_to_state(sections)
+                state["preview_initialized"] = True
+                state["outputs"] = []
+                _save_state(request, state)
+                return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
+
+            if action == "delete_section":
+                if split_mode != "toc":
+                    messages.warning(request, "Interactive deletion is only available in table-of-contents mode.")
+                    return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
+                section_id = request.POST.get("section_id", "")
+                updated_sections = _delete_preview_section(sections, section_id)
+                if len(updated_sections) == len(sections):
+                    messages.warning(request, "That section is no longer in the preview.")
+                else:
+                    sections = updated_sections
+                    messages.success(request, "Section removed from the output preview.")
+                state["preview_sections"] = _sections_to_state(sections)
+                state["preview_initialized"] = True
                 state["outputs"] = []
                 _save_state(request, state)
                 return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
@@ -378,6 +414,7 @@ def split_view(request):
                     sections = updated_sections
                     messages.success(request, "Sections merged.")
                 state["preview_sections"] = _sections_to_state(sections)
+                state["preview_initialized"] = True
                 state["outputs"] = []
                 _save_state(request, state)
                 return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
@@ -521,17 +558,10 @@ def _sections_for_template(
     split_mode: str = "toc",
     input_pdf_path: str = "",
 ) -> list[dict[str, Any]]:
-    thumbnail_cache: dict[int, str] = {}
-
     def thumbnail(page_number: int) -> str:
-        if split_mode != "ranges" or not input_pdf_path:
+        if not input_pdf_path:
             return ""
-        if page_number not in thumbnail_cache:
-            try:
-                thumbnail_cache[page_number] = render_page_thumbnail_data_uri(input_pdf_path, page_number)
-            except Exception:
-                thumbnail_cache[page_number] = ""
-        return thumbnail_cache[page_number]
+        return reverse("splitpdf:thumbnail", kwargs={"page_number": page_number})
 
     return [
         {
@@ -557,13 +587,12 @@ def _sections_for_template(
 def _split_preview_section(
     sections: list[SplitSection],
     section_id: str,
-    toc_entries: list[TocEntry],
-    total_pages: int,
+    split_after_page: int | None = None,
 ) -> list[SplitSection]:
     for idx, section in enumerate(sections):
         if section.section_id != section_id:
             continue
-        child_sections = split_section_for_preview(section)
+        child_sections = split_section_for_preview(section, split_after_page=split_after_page)
         if not child_sections:
             return sections
         return renumber_sections([*sections[:idx], *child_sections, *sections[idx + 1 :]])
@@ -576,6 +605,10 @@ def _merge_preview_section(sections: list[SplitSection], section_id: str) -> lis
             merged = merge_adjacent_sections(section, sections[idx + 1])
             return renumber_sections([*sections[:idx], merged, *sections[idx + 2 :]])
     return sections
+
+
+def _delete_preview_section(sections: list[SplitSection], section_id: str) -> list[SplitSection]:
+    return renumber_sections([section for section in sections if section.section_id != section_id])
 
 
 def _section_ids(sections: list[SplitSection]) -> list[str]:

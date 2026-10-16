@@ -260,7 +260,29 @@ def renumber_sections(sections: list[SplitSection]) -> list[SplitSection]:
     ]
 
 
-def split_section_for_preview(section: SplitSection) -> list[SplitSection]:
+def split_section_for_preview(
+    section: SplitSection,
+    split_after_page: int | None = None,
+) -> list[SplitSection]:
+    if split_after_page is not None:
+        if split_after_page < section.start_page or split_after_page >= section.end_page:
+            raise ValueError(
+                f"Choose a break page from {section.start_page} to {section.end_page - 1}."
+            )
+        first = SplitSectionPart(
+            level=section.level,
+            title=f"{section.title} part 1",
+            start_page=section.start_page,
+            end_page=split_after_page,
+        )
+        second = SplitSectionPart(
+            level=section.level,
+            title=f"{section.title} part 2",
+            start_page=split_after_page + 1,
+            end_page=section.end_page,
+        )
+        return renumber_sections([_section_from_part(1, first), _section_from_part(2, second)])
+
     parts = section.included_parts
     if len(parts) > 1:
         return renumber_sections([_section_from_part(index, part) for index, part in enumerate(parts, start=1)])

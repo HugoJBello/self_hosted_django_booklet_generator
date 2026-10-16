@@ -63,6 +63,25 @@ class SplitPdfServiceTests(SimpleTestCase):
             self.assertEqual([child.title for child in children], ["Chapter One part 1", "Chapter One part 2"])
             self.assertEqual([(child.start_page, child.end_page) for child in children], [(1, 2), (3, 4)])
 
+    def test_section_can_be_split_after_an_exact_page(self):
+        section = SplitSection(
+            index=1, level=1, title="Long chapter", start_page=3, end_page=9,
+            filename="01_Long_chapter.pdf",
+        )
+
+        children = split_section_for_preview(section, split_after_page=7)
+
+        self.assertEqual([(child.start_page, child.end_page) for child in children], [(3, 7), (8, 9)])
+
+    def test_exact_split_page_must_be_inside_section(self):
+        section = SplitSection(
+            index=1, level=1, title="Chapter", start_page=3, end_page=9,
+            filename="01_Chapter.pdf",
+        )
+
+        with self.assertRaisesMessage(ValueError, "Choose a break page from 3 to 8"):
+            split_section_for_preview(section, split_after_page=9)
+
     def test_adjacent_sections_can_be_merged_and_renamed(self):
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")
@@ -384,6 +403,60 @@ class SplitPdfViewTests(TestCase):
         preview = client.session["splitpdf_state"]["preview_sections"]
         self.assertEqual(len(preview), 1)
         self.assertEqual(preview[0]["title"], "Chapter One + Chapter Two")
+
+    def test_preview_section_can_be_deleted_then_restored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf_with_toc(source_path)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+
+        self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+        self.client.post(reverse("splitpdf:form"), {"action": "preview", "split_mode": "toc", "selected_level": "1"})
+        first_id = self.client.session["splitpdf_state"]["preview_sections"][0]["section_id"]
+
+        deleted = self.client.post(reverse("splitpdf:form"), {
+            "action": "delete_section", "section_id": first_id,
+            "split_mode": "toc", "selected_level": "1",
+        })
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual([item["title"] for item in self.client.session["splitpdf_state"]["preview_sections"]], ["Chapter Two"])
+
+        generated = self.client.post(reverse("splitpdf:form"), {
+            "action": "generate", "split_mode": "toc", "selected_level": "1",
+        })
+        self.assertEqual(generated.status_code, 200)
+        outputs = self.client.session["splitpdf_state"]["outputs"]
+        self.assertEqual([(item["title"], item["start_page"], item["end_page"]) for item in outputs], [("Chapter Two", 5, 5)])
+
+        refreshed = self.client.post(reverse("splitpdf:form"), {
+            "action": "preview", "split_mode": "toc", "selected_level": "1",
+        })
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertEqual([item["title"] for item in self.client.session["splitpdf_state"]["preview_sections"]], ["Chapter One", "Chapter Two"])
+
+    def test_preview_section_can_be_split_after_selected_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf_with_toc(source_path)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+
+        self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+        self.client.post(reverse("splitpdf:form"), {"action": "preview", "split_mode": "toc", "selected_level": "1"})
+        first_id = self.client.session["splitpdf_state"]["preview_sections"][0]["section_id"]
+
+        response = self.client.post(reverse("splitpdf:form"), {
+            "action": "split_section", "section_id": first_id,
+            "split_mode": "toc", "selected_level": "1",
+            "split_strategy": "page", "split_page": "3",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        preview = self.client.session["splitpdf_state"]["preview_sections"]
+        self.assertEqual([(item["start_page"], item["end_page"]) for item in preview], [(1, 3), (4, 4), (5, 5)])
+        self.assertContains(response, "Refresh preview")
+        self.assertContains(response, "First · p. 1")
 
     def test_download_all_returns_zip_with_generated_pdfs(self):
         client = self.client

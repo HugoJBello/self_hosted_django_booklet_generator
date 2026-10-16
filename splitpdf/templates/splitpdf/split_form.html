@@ -174,6 +174,107 @@
       white-space: nowrap;
     }
 
+    .toc-disclosure {
+      border: 1px solid #dee2e6;
+      border-radius: .75rem;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .toc-disclosure summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: .9rem 1rem;
+      cursor: pointer;
+      font-weight: 700;
+      list-style: none;
+    }
+
+    .toc-disclosure summary::-webkit-details-marker { display: none; }
+    .toc-disclosure[open] summary { border-bottom: 1px solid #e9ecef; }
+
+    .section-editor {
+      border: 1px solid #dce5f2;
+      border-radius: 1rem;
+      padding: 1.1rem;
+      background: linear-gradient(180deg, #f8fbff 0, #fff 10rem);
+      box-shadow: 0 .35rem 1.2rem rgba(34, 57, 89, .07);
+    }
+
+    .section-editor-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: .85rem;
+    }
+
+    .section-card-list { display: grid; gap: .85rem; }
+
+    .section-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 2rem 12rem minmax(0, 1fr);
+      gap: 1rem;
+      align-items: start;
+      padding: 1rem;
+      border: 1px solid #dfe5ec;
+      border-radius: .85rem;
+      background: #fff;
+      transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+
+    .section-card:hover {
+      border-color: #9ec5fe;
+      box-shadow: 0 .35rem 1rem rgba(13, 110, 253, .08);
+      transform: translateY(-1px);
+    }
+
+    .section-order {
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: #0d6efd;
+      color: #fff;
+      font-weight: 700;
+      font-size: .85rem;
+    }
+
+    .section-thumbnails { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+    .section-thumbnail { margin: 0; min-width: 0; border: 1px solid #e2e7ed; border-radius: .55rem; overflow: hidden; background: #f8f9fa; }
+    .section-thumbnail img { display: block; width: 100%; height: 5.5rem; object-fit: contain; background: #fff; }
+    .section-thumbnail figcaption { padding: .3rem .35rem; border-top: 1px solid #edf0f3; color: #6c757d; font-size: .68rem; font-weight: 700; text-align: center; white-space: nowrap; }
+    .section-card-body { min-width: 0; }
+    .section-range { display: flex; flex-wrap: wrap; gap: .3rem .75rem; color: #6c757d; font-size: .82rem; }
+    .section-range strong { color: #343a40; }
+    .section-filename { display: block; margin-top: .55rem; padding: .35rem .5rem; border-radius: .4rem; background: #f5f7fa; color: #52606d; overflow-wrap: anywhere; }
+    .section-parts { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
+    .section-parts span { padding: .25rem .45rem; border: 1px solid #e4e9ef; border-radius: 999px; background: #fff; color: #5c6773; font-size: .75rem; }
+    .section-controls { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .8rem; }
+
+    .split-options {
+      margin-top: .85rem;
+      padding: .85rem;
+      border: 1px solid #b6d4fe;
+      border-radius: .7rem;
+      background: #f2f7ff;
+    }
+
+    .split-options-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem 1rem; margin-bottom: .65rem; }
+    .split-options-heading span { color: #6c757d; font-size: .8rem; }
+    .split-choice { display: flex; gap: .6rem; align-items: start; padding: .5rem; border-radius: .5rem; cursor: pointer; }
+    .split-choice:hover { background: #e7f1ff; }
+    .split-choice span { display: grid; }
+    .split-choice small { color: #6c757d; }
+    .split-page-picker { max-width: 22rem; margin: .4rem 0 0 1.9rem; }
+
+    .empty-preview { display: grid; justify-items: center; gap: .35rem; padding: 2.5rem 1rem; border: 1px dashed #adb5bd; border-radius: .8rem; color: #6c757d; text-align: center; }
+    .empty-preview i { font-size: 2rem; }
+
     @media (max-width: 767.98px) {
       .tool-page, .tool-page > .card, .tool-page .card-body {
         min-width: 0;
@@ -261,6 +362,20 @@
       .range-thumbnail-grid {
         grid-template-columns: 1fr;
       }
+
+      .section-editor { padding: .85rem; }
+      .section-editor-header { flex-direction: column; }
+      .section-editor-header .btn { width: 100%; }
+      .section-card { grid-template-columns: 2rem minmax(0, 1fr); gap: .75rem; padding: .8rem; }
+      .section-thumbnails { grid-column: 1 / -1; grid-row: 2; }
+      .section-card-body { grid-column: 1 / -1; grid-row: 3; }
+      .section-thumbnail img { height: 8rem; }
+      .section-controls .btn { flex: 1 1 auto; }
+      .split-page-picker { margin-left: 0; max-width: none; }
+    }
+
+    @media (min-width: 768px) and (max-width: 991.98px) {
+      .section-card { grid-template-columns: 2rem 10rem minmax(0, 1fr); }
     }
 
     @media (max-width: 991.98px) {
@@ -280,6 +395,8 @@
             {% csrf_token %}
             <input type="hidden" name="action" id="split-action" value="">
             <input type="hidden" name="section_id" id="split-section-id" value="">
+            <input type="hidden" name="split_strategy" id="split-strategy" value="automatic">
+            <input type="hidden" name="split_page" id="split-page" value="">
 
             <section class="mb-4">
               <label class="form-label">{{ form.input_pdf.label }}</label>
@@ -455,100 +572,99 @@
                 </section>
               </div>
 
-              {% if split_mode == "toc" %}<div class="settings-grid mb-4">
-                <section id="toc-map-panel">
-                  <h2 class="h5 mb-2">Contents map</h2>
-                  <div class="toc-map">
+              {% if split_mode == "toc" %}
+                <details class="toc-disclosure mb-3" id="toc-map-panel">
+                  <summary><span><i class="bi bi-list-nested me-2"></i>Table of contents</span><span class="text-muted small">{{ toc_entries|length }} entries</span></summary>
+                  <div class="toc-map border-0 rounded-0">
                     {% for entry in toc_entries %}
                       <div class="toc-entry {% if entry.level == selected_level %}is-selected-level{% endif %}">
-                        <div class="text-break" style="padding-left: {% widthratio entry.level 1 16 %}px;">
-                          <span class="text-muted small">L{{ entry.level }}</span>
-                          {{ entry.title }}
-                        </div>
+                        <div class="text-break" style="padding-left: {% widthratio entry.level 1 16 %}px;"><span class="text-muted small">L{{ entry.level }}</span> {{ entry.title }}</div>
                         <div class="text-muted text-nowrap">p. {{ entry.page }}</div>
                       </div>
                     {% endfor %}
                   </div>
-                </section>
+                </details>
 
-                <section>
-                  <h2 class="h5 mb-2">Editable split preview</h2>
-                  <div class="preview-summary">
-                    <span class="badge text-bg-primary">{{ section_count }} PDFs</span>
-                    <span class="badge text-bg-light border">{{ final_page_count }} source pages</span>
-                    <span class="text-muted small">Split a section into its next TOC level or merge it with the next output.</span>
-                  </div>
-                    <div class="border rounded-3 overflow-hidden">
-                      <div class="table-responsive">
-                        <table class="table table-sm mb-0 align-middle split-responsive-table">
-                          <thead class="table-light">
-                            <tr>
-                              <th scope="col">PDF</th>
-                              <th scope="col">Pages</th>
-                              <th scope="col">Filename</th>
-                              <th scope="col" class="text-end">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {% for section in sections %}
-                              <tr>
-                                <td class="text-break preview-title" data-label="PDF">
-                                  <div>
-                                    <span class="fw-semibold">{{ section.index }}.</span>
-                                    {{ section.title }}
-                                  </div>
-                                  <div class="preview-meta">
-                                    <span class="badge text-bg-light border">L{{ section.level }}</span>
-                                    {% if section.part_count > 1 %}
-                                      <span class="badge text-bg-secondary">{{ section.part_count }} included blocks</span>
-                                    {% endif %}
-                                  </div>
-                                  <ul class="preview-includes">
-                                    {% for part in section.included_parts %}
-                                      <li class="preview-include-item">
-                                        <span class="badge text-bg-light border">L{{ part.level }}</span>
-                                        <span>{{ part.title }}</span>
-                                        <span class="preview-include-pages">p. {{ part.start_page }}-{{ part.end_page }}</span>
-                                      </li>
-                                    {% endfor %}
-                                  </ul>
-                                </td>
-                                <td class="text-nowrap" data-label="Pages">{{ section.start_page }}-{{ section.end_page }} · {{ section.page_count }}</td>
-                                <td class="text-break" data-label="Filename"><code>{{ section.filename }}</code></td>
-                                <td data-label="Actions">
-                                  <div class="preview-actions">
-                                    <button
-                                      class="btn btn-sm btn-outline-primary"
-                                      type="submit"
-                                      data-action="split_section"
-                                      data-section-id="{{ section.section_id }}"
-                                      {% if not section.can_split %}disabled{% endif %}
-                                    >
-                                      Split
-                                    </button>
-                                    <button
-                                      class="btn btn-sm btn-outline-secondary"
-                                      type="submit"
-                                      data-action="merge_next"
-                                      data-section-id="{{ section.section_id }}"
-                                      {% if not section.can_merge %}disabled{% endif %}
-                                    >
-                                      Merge next
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            {% empty %}
-                              <tr>
-                                <td colspan="4" class="text-muted">No split preview is available.</td>
-                              </tr>
-                            {% endfor %}
-                          </tbody>
-                        </table>
-                      </div>
+                <section class="section-editor mb-4" aria-labelledby="editable-preview-title">
+                  <div class="section-editor-header">
+                    <div>
+                      <div class="text-uppercase small fw-bold text-primary mb-1">Output plan</div>
+                      <h2 class="h4 mb-1" id="editable-preview-title">Editable split preview</h2>
+                      <p class="text-muted mb-0">Each card becomes one PDF. Remove, divide, or join cards before generating.</p>
                     </div>
+                    <button class="btn btn-outline-primary flex-shrink-0" type="submit" data-action="preview" title="Restore the preview from the selected table-of-contents level">
+                      <i class="bi bi-arrow-clockwise me-1"></i>Refresh preview
+                    </button>
+                  </div>
+                  <div class="preview-summary">
+                    <span class="badge rounded-pill text-bg-primary">{{ section_count }} PDFs</span>
+                    <span class="badge rounded-pill text-bg-light border">{{ final_page_count }} source pages</span>
+                    <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Refresh restores deleted, split, and merged sections.</span>
+                  </div>
+
+                  <div class="section-card-list">
+                    {% for section in sections %}
+                      <article class="section-card" data-section-card="{{ section.section_id }}">
+                        <div class="section-order" aria-label="Output {{ section.index }}">{{ section.index }}</div>
+                        <div class="section-thumbnails" aria-label="First and last pages">
+                          <figure class="section-thumbnail">
+                            {% if section.first_page_thumbnail %}<img loading="lazy" src="{{ section.first_page_thumbnail }}" alt="First page of {{ section.title }}">{% endif %}
+                            <figcaption>First · p. {{ section.start_page }}</figcaption>
+                          </figure>
+                          <figure class="section-thumbnail">
+                            {% if section.last_page_thumbnail %}<img loading="lazy" src="{{ section.last_page_thumbnail }}" alt="Last page of {{ section.title }}">{% endif %}
+                            <figcaption>Last · p. {{ section.end_page }}</figcaption>
+                          </figure>
+                        </div>
+                        <div class="section-card-body">
+                          <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
+                            <div>
+                              <h3 class="h6 mb-1 text-break">{{ section.title }}</h3>
+                              <div class="section-range"><strong>Pages {{ section.start_page }}–{{ section.end_page }}</strong><span>{{ section.page_count }} page{{ section.page_count|pluralize }}</span><span>Level {{ section.level }}</span></div>
+                            </div>
+                            {% if section.part_count > 1 %}<span class="badge text-bg-secondary">{{ section.part_count }} joined sections</span>{% endif %}
+                          </div>
+                          <code class="section-filename">{{ section.filename }}</code>
+                          {% if section.part_count > 1 %}
+                            <div class="section-parts">
+                              {% for part in section.included_parts %}<span>{{ part.title }} · p. {{ part.start_page }}–{{ part.end_page }}</span>{% endfor %}
+                            </div>
+                          {% endif %}
+
+                          <div class="section-controls">
+                            <button class="btn btn-sm btn-primary split-toggle" type="button" aria-expanded="false" {% if not section.can_split %}disabled{% endif %}><i class="bi bi-scissors me-1"></i>Split</button>
+                            <button class="btn btn-sm btn-outline-secondary" type="submit" data-action="merge_next" data-section-id="{{ section.section_id }}" {% if not section.can_merge %}disabled{% endif %}><i class="bi bi-link-45deg me-1"></i>Merge next</button>
+                            <button class="btn btn-sm btn-outline-danger" type="submit" data-action="delete_section" data-section-id="{{ section.section_id }}" data-confirm-delete="true"><i class="bi bi-trash me-1"></i>Delete</button>
+                          </div>
+
+                          <div class="split-options" hidden>
+                            <div class="split-options-heading"><strong>Where should this section break?</strong><span>Only this card will be divided.</span></div>
+                            <label class="split-choice">
+                              <input class="form-check-input split-choice-input" type="radio" data-split-choice value="automatic" checked>
+                              <span><strong>Automatic</strong><small>Restore joined TOC sections, or divide this range near the middle.</small></span>
+                            </label>
+                            <label class="split-choice">
+                              <input class="form-check-input split-choice-input" type="radio" data-split-choice value="page">
+                              <span><strong>Choose the break page</strong><small>The first PDF ends on this page; the next starts on the following page.</small></span>
+                            </label>
+                            <div class="split-page-picker" hidden>
+                              <label class="form-label small fw-semibold mb-1">First PDF ends after page</label>
+                              <input class="form-control form-control-sm" type="number" data-split-page min="{{ section.start_page }}" max="{{ section.end_page|add:'-1' }}" value="{{ section.start_page }}" inputmode="numeric">
+                              <div class="form-text">Choose {{ section.start_page }}–{{ section.end_page|add:'-1' }}. The second PDF begins on the next page.</div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2 mt-3">
+                              <button class="btn btn-sm btn-primary" type="submit" data-action="split_section" data-section-id="{{ section.section_id }}">Apply split</button>
+                              <button class="btn btn-sm btn-link text-secondary split-cancel" type="button">Cancel</button>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    {% empty %}
+                      <div class="empty-preview"><i class="bi bi-file-earmark-x"></i><strong>No output sections remain</strong><span>Use “Refresh preview” to restore the original sections.</span></div>
+                    {% endfor %}
+                  </div>
                 </section>
-              </div>{% endif %}
+              {% endif %}
 
               {% if outputs %}
                 <section class="mb-2">
@@ -601,6 +717,8 @@
       const form = document.getElementById("split-form");
       const actionInput = document.getElementById("split-action");
       const sectionInput = document.getElementById("split-section-id");
+      const splitStrategyInput = document.getElementById("split-strategy");
+      const splitPageInput = document.getElementById("split-page");
       const dropzone = document.getElementById("upload-dropzone");
       const fileInput = form.querySelector('input[type="file"][name="input_pdf"]');
       const applyBooklets = form.querySelector('input[name="apply_booklets"]');
@@ -812,14 +930,51 @@
           syncRangesFromRows();
         });
       }
+      form.querySelectorAll(".section-card").forEach((card) => {
+        const toggle = card.querySelector(".split-toggle");
+        const panel = card.querySelector(".split-options");
+        const cancel = card.querySelector(".split-cancel");
+        const choices = Array.from(card.querySelectorAll("[data-split-choice]"));
+        const pagePicker = card.querySelector(".split-page-picker");
+        const refreshSplitChoice = () => {
+          const strategy = choices.find((choice) => choice.checked)?.value || "automatic";
+          if (pagePicker) pagePicker.hidden = strategy !== "page";
+        };
+        const closePanel = () => {
+          if (panel) panel.hidden = true;
+          if (toggle) toggle.setAttribute("aria-expanded", "false");
+        };
+        toggle?.addEventListener("click", () => {
+          const willOpen = panel?.hidden ?? false;
+          form.querySelectorAll(".split-options").forEach((other) => { other.hidden = true; });
+          form.querySelectorAll(".split-toggle").forEach((other) => other.setAttribute("aria-expanded", "false"));
+          if (panel) panel.hidden = !willOpen;
+          toggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
+          if (willOpen) panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+        cancel?.addEventListener("click", closePanel);
+        choices.forEach((choice) => choice.addEventListener("change", refreshSplitChoice));
+        refreshSplitChoice();
+      });
       form.addEventListener("submit", (event) => {
         syncRangesFromRows();
         const requestedAction = event.submitter?.dataset?.action || "";
+        if (event.submitter?.dataset?.confirmDelete === "true" && !window.confirm("Remove this section from the output? You can restore it with Refresh preview.")) {
+          event.preventDefault();
+          return;
+        }
         if (actionInput && requestedAction) {
           actionInput.value = requestedAction;
         }
         if (sectionInput) {
           sectionInput.value = event.submitter?.dataset?.sectionId || "";
+        }
+        if (requestedAction === "split_section") {
+          const card = event.submitter.closest(".section-card");
+          const strategy = card?.querySelector("[data-split-choice]:checked")?.value || "automatic";
+          const page = card?.querySelector("[data-split-page]")?.value || "";
+          if (splitStrategyInput) splitStrategyInput.value = strategy;
+          if (splitPageInput) splitPageInput.value = strategy === "page" ? page : "";
         }
       });
       initRanges();
