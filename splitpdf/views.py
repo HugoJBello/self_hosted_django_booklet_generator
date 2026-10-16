@@ -27,6 +27,7 @@ from .services import (
     count_pdf_pages,
     extract_toc,
     merge_adjacent_sections,
+    merge_sections,
     renumber_sections,
     render_page_thumbnail_data_uri,
     section_can_split,
@@ -285,7 +286,10 @@ def split_view(request):
             form = SplitPdfForm(level_choices=_level_choices(toc_entries), initial=_initial_from_state(state))
             return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
 
-        if action in {"preview", "generate", "split_section", "merge_next", "delete_section"}:
+        if action in {
+            "preview", "generate", "split_section", "merge_next", "delete_section",
+            "merge_selected", "delete_selected", "reorder_sections",
+        }:
             if not state.get("pdf_path"):
                 messages.error(request, "Upload a PDF before generating sections.")
                 return redirect("splitpdf:form")
@@ -402,6 +406,48 @@ def split_view(request):
                 _save_state(request, state)
                 return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
 
+            if action == "delete_selected":
+                selected_ids = _posted_section_ids(request.POST.get("selected_sections", ""))
+                updated_sections = [section for section in sections if section.section_id not in selected_ids]
+                if not selected_ids or len(updated_sections) == len(sections):
+                    messages.warning(request, "Select at least one section to delete.")
+                else:
+                    sections = renumber_sections(updated_sections)
+                    messages.success(request, f"Removed {len(selected_ids)} selected section(s) from the output.")
+                state["preview_sections"] = _sections_to_state(sections)
+                state["preview_initialized"] = True
+                state["outputs"] = []
+                _save_state(request, state)
+                return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
+
+            if action == "merge_selected":
+                selected_ids = _posted_section_ids(request.POST.get("selected_sections", ""))
+                try:
+                    sections = _merge_selected_sections(sections, selected_ids)
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
+                messages.success(request, f"Merged {len(selected_ids)} sections into one output.")
+                state["preview_sections"] = _sections_to_state(sections)
+                state["preview_initialized"] = True
+                state["outputs"] = []
+                _save_state(request, state)
+                return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
+
+            if action == "reorder_sections":
+                ordered_ids = _posted_section_ids(request.POST.get("ordered_sections", ""))
+                try:
+                    sections = _reorder_preview_sections(sections, ordered_ids)
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
+                messages.success(request, "Output order updated.")
+                state["preview_sections"] = _sections_to_state(sections)
+                state["preview_initialized"] = True
+                state["outputs"] = []
+                _save_state(request, state)
+                return render(request, "splitpdf/split_form.html", _context(request, form=form, sections=sections))
+
             if action == "merge_next":
                 if split_mode != "toc":
                     messages.warning(request, "Interactive merge is only available in table-of-contents mode.")
@@ -452,10 +498,14 @@ def split_view(request):
                     "start_page": output.start_page,
                     "end_page": output.end_page,
                     "page_count": output.page_count,
+                    "source_ranges": ", ".join(
+                        f"{part.start_page}–{part.end_page}"
+                        for part in section.included_parts
+                    ),
                     "booklet_applied": output.booklet_applied,
                     "download_url": reverse("splitpdf:download", kwargs={"output_id": output.output_id}),
                 }
-                for output in outputs
+                for output, section in zip(outputs, final_sections)
             ]
             options_data = {key: value for key, value in form.cleaned_data.items() if key != "input_pdf"}
             activity = record_activity(
@@ -609,6 +659,31 @@ def _merge_preview_section(sections: list[SplitSection], section_id: str) -> lis
 
 def _delete_preview_section(sections: list[SplitSection], section_id: str) -> list[SplitSection]:
     return renumber_sections([section for section in sections if section.section_id != section_id])
+
+
+def _posted_section_ids(raw_ids: str) -> list[str]:
+    return list(dict.fromkeys(value.strip() for value in raw_ids.split(",") if value.strip()))
+
+
+def _merge_selected_sections(sections: list[SplitSection], selected_ids: list[str]) -> list[SplitSection]:
+    selected = set(selected_ids)
+    chosen = [section for section in sections if section.section_id in selected]
+    if len(chosen) < 2:
+        raise ValueError("Select at least two sections to merge.")
+    if len(chosen) != len(selected):
+        raise ValueError("One of the selected sections is no longer available. Refresh and try again.")
+    merged = merge_sections(chosen)
+    first_position = min(index for index, section in enumerate(sections) if section.section_id in selected)
+    remaining = [section for section in sections if section.section_id not in selected]
+    remaining.insert(first_position, merged)
+    return renumber_sections(remaining)
+
+
+def _reorder_preview_sections(sections: list[SplitSection], ordered_ids: list[str]) -> list[SplitSection]:
+    current = {section.section_id: section for section in sections}
+    if len(ordered_ids) != len(sections) or set(ordered_ids) != set(current):
+        raise ValueError("The section list changed before it could be reordered. Refresh and try again.")
+    return renumber_sections([current[section_id] for section_id in ordered_ids])
 
 
 def _section_ids(sections: list[SplitSection]) -> list[str]:

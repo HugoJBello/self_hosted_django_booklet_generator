@@ -53,7 +53,7 @@ class SplitSection:
 
     @property
     def page_count(self) -> int:
-        return self.end_page - self.start_page + 1
+        return sum(part.page_count for part in self.included_parts)
 
     @property
     def included_parts(self) -> tuple[SplitSectionPart, ...]:
@@ -265,23 +265,28 @@ def split_section_for_preview(
     split_after_page: int | None = None,
 ) -> list[SplitSection]:
     if split_after_page is not None:
-        if split_after_page < section.start_page or split_after_page >= section.end_page:
-            raise ValueError(
-                f"Choose a break page from {section.start_page} to {section.end_page - 1}."
-            )
-        first = SplitSectionPart(
-            level=section.level,
-            title=f"{section.title} part 1",
-            start_page=section.start_page,
-            end_page=split_after_page,
-        )
-        second = SplitSectionPart(
-            level=section.level,
-            title=f"{section.title} part 2",
-            start_page=split_after_page + 1,
-            end_page=section.end_page,
-        )
-        return renumber_sections([_section_from_part(1, first), _section_from_part(2, second)])
+        left_parts: list[SplitSectionPart] = []
+        right_parts: list[SplitSectionPart] = []
+        found = False
+        for part in section.included_parts:
+            if not found and part.start_page <= split_after_page <= part.end_page:
+                found = True
+                if split_after_page >= part.start_page:
+                    left_parts.append(_slice_part(part, part.start_page, split_after_page))
+                if split_after_page < part.end_page:
+                    right_parts.append(_slice_part(part, split_after_page + 1, part.end_page))
+            elif found:
+                right_parts.append(part)
+            else:
+                left_parts.append(part)
+        if not found or not left_parts or not right_parts:
+            valid_pages = sorted({page for part in section.included_parts for page in range(part.start_page, part.end_page)})
+            valid_hint = f"{valid_pages[0]}–{valid_pages[-1]}" if valid_pages else "inside the section"
+            raise ValueError(f"Choose a break page ({valid_hint}) that leaves pages on both sides.")
+        return renumber_sections([
+            _section_from_parts(1, left_parts, f"{section.title} part 1"),
+            _section_from_parts(2, right_parts, f"{section.title} part 2"),
+        ])
 
     parts = section.included_parts
     if len(parts) > 1:
@@ -310,17 +315,26 @@ def split_section_for_preview(
 
 
 def merge_adjacent_sections(first: SplitSection, second: SplitSection) -> SplitSection:
-    title = _merged_title(first.title, second.title)
+    return merge_sections([first, second])
+
+
+def merge_sections(sections: list[SplitSection]) -> SplitSection:
+    if len(sections) < 2:
+        raise ValueError("Select at least two sections to merge.")
+    title = sections[0].title
+    for section in sections[1:]:
+        title = _merged_title(title, section.title)
+    parts = tuple(part for section in sections for part in section.included_parts)
     return SplitSection(
-        index=first.index,
-        level=min(first.level, second.level),
+        index=sections[0].index,
+        level=min(section.level for section in sections),
         title=title,
-        start_page=min(first.start_page, second.start_page),
-        end_page=max(first.end_page, second.end_page),
-        filename=section_filename(first.index, title),
+        start_page=parts[0].start_page,
+        end_page=parts[-1].end_page,
+        filename=section_filename(sections[0].index, title),
         section_id=_section_id(),
-        toc_indexes=(*first.toc_indexes, *second.toc_indexes),
-        parts=(*first.included_parts, *second.included_parts),
+        toc_indexes=tuple(index for section in sections for index in section.toc_indexes),
+        parts=parts,
     )
 
 
@@ -342,7 +356,7 @@ def split_pdf_by_sections(
 
     for section in sections:
         section_pdf_path = _unique_path(output_dir, section.filename)
-        _write_pdf_range(input_pdf_path, section_pdf_path, section.start_page, section.end_page)
+        _write_pdf_parts(input_pdf_path, section_pdf_path, section.included_parts)
         final_path = section_pdf_path
         final_filename = os.path.basename(final_path)
         booklet_applied = False
@@ -413,13 +427,26 @@ def _apply_booklet(
 
 
 def _write_pdf_range(input_pdf_path: str, output_pdf_path: str, start_page: int, end_page: int) -> None:
+    _write_pdf_parts(
+        input_pdf_path,
+        output_pdf_path,
+        (SplitSectionPart(level=0, title="Pages", start_page=start_page, end_page=end_page),),
+    )
+
+
+def _write_pdf_parts(
+    input_pdf_path: str,
+    output_pdf_path: str,
+    parts: tuple[SplitSectionPart, ...],
+) -> None:
     with fitz.open(input_pdf_path) as source_doc:
         total_pages = len(source_doc)
-        start_index = _clamp_page(start_page, total_pages) - 1
-        end_index = _clamp_page(end_page, total_pages) - 1
         output_doc = fitz.open()
         try:
-            output_doc.insert_pdf(source_doc, from_page=start_index, to_page=end_index)
+            for part in parts:
+                start_index = _clamp_page(part.start_page, total_pages) - 1
+                end_index = _clamp_page(part.end_page, total_pages) - 1
+                output_doc.insert_pdf(source_doc, from_page=start_index, to_page=end_index)
             output_doc.save(output_pdf_path, garbage=4, deflate=True)
         finally:
             output_doc.close()
@@ -448,6 +475,30 @@ def _section_from_part(index: int, part: SplitSectionPart) -> SplitSection:
         section_id=_section_id(),
         toc_indexes=toc_indexes,
         parts=(part,),
+    )
+
+
+def _section_from_parts(index: int, parts: list[SplitSectionPart], title: str) -> SplitSection:
+    return SplitSection(
+        index=index,
+        level=min(part.level for part in parts),
+        title=title,
+        start_page=parts[0].start_page,
+        end_page=parts[-1].end_page,
+        filename=section_filename(index, title),
+        section_id=_section_id(),
+        toc_indexes=tuple(part.toc_index for part in parts if part.toc_index is not None),
+        parts=tuple(parts),
+    )
+
+
+def _slice_part(part: SplitSectionPart, start_page: int, end_page: int) -> SplitSectionPart:
+    return SplitSectionPart(
+        level=part.level,
+        title=part.title,
+        start_page=start_page,
+        end_page=end_page,
+        toc_index=part.toc_index,
     )
 
 

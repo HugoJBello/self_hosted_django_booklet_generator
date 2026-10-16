@@ -232,6 +232,12 @@
       transform: translateY(-1px);
     }
 
+    .section-card.is-selected { border-color: #6ea8fe; box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .1); }
+    .section-card.is-dragging { opacity: .45; transform: scale(.99); }
+    .section-card-leading { display: grid; justify-items: center; gap: .45rem; }
+    .section-drag-handle { border: 0; padding: .05rem .3rem; background: transparent; color: #7b8794; cursor: grab; font-size: 1.15rem; line-height: 1; }
+    .section-drag-handle:active { cursor: grabbing; }
+
     .section-order {
       display: grid;
       place-items: center;
@@ -255,6 +261,21 @@
     .section-parts { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
     .section-parts span { padding: .25rem .45rem; border: 1px solid #e4e9ef; border-radius: 999px; background: #fff; color: #5c6773; font-size: .75rem; }
     .section-controls { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .8rem; }
+
+    .selection-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .85rem; padding: .65rem .75rem; border: 1px solid #dce5f2; border-radius: .7rem; background: rgba(255, 255, 255, .85); }
+    .selection-status, .selection-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; }
+    .selection-count { font-size: .85rem; font-weight: 700; }
+
+    .split-dialog { width: min(34rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); padding: 1.25rem; border: 0; border-radius: 1rem; box-shadow: 0 1.25rem 4rem rgba(15, 23, 42, .28); overflow: auto; }
+    .split-dialog::backdrop { background: rgba(15, 23, 42, .5); backdrop-filter: blur(2px); }
+    .dialog-icon { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; margin-bottom: .75rem; border-radius: .7rem; font-size: 1.2rem; }
+    .dialog-icon.primary { color: #0d6efd; background: #e7f1ff; }
+    .dialog-icon.danger { color: #b02a37; background: #f8d7da; }
+    .dialog-callout { margin-top: .85rem; padding: .7rem .8rem; border-radius: .6rem; background: #f5f7fa; color: #52606d; font-size: .85rem; }
+    .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .55rem; margin-top: 1rem; }
+    .reorder-dialog-list { display: grid; gap: .55rem; max-height: 50vh; overflow: auto; }
+    .reorder-dialog-item { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: .65rem; align-items: center; padding: .55rem; border: 1px solid #e1e6ec; border-radius: .6rem; }
+    .reorder-dialog-item select { min-width: 0; }
 
     .split-options {
       margin-top: .85rem;
@@ -372,6 +393,11 @@
       .section-thumbnail img { height: 8rem; }
       .section-controls .btn { flex: 1 1 auto; }
       .split-page-picker { margin-left: 0; max-width: none; }
+      .selection-toolbar { align-items: stretch; flex-direction: column; }
+      .selection-actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .selection-actions .btn:first-child { grid-column: 1 / -1; }
+      .dialog-actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .split-dialog { padding: 1rem; }
     }
 
     @media (min-width: 768px) and (max-width: 991.98px) {
@@ -397,6 +423,8 @@
             <input type="hidden" name="section_id" id="split-section-id" value="">
             <input type="hidden" name="split_strategy" id="split-strategy" value="automatic">
             <input type="hidden" name="split_page" id="split-page" value="">
+            <input type="hidden" name="selected_sections" id="selected-sections" value="">
+            <input type="hidden" name="ordered_sections" id="ordered-sections" value="">
 
             <section class="mb-4">
               <label class="form-label">{{ form.input_pdf.label }}</label>
@@ -599,13 +627,26 @@
                   <div class="preview-summary">
                     <span class="badge rounded-pill text-bg-primary">{{ section_count }} PDFs</span>
                     <span class="badge rounded-pill text-bg-light border">{{ final_page_count }} source pages</span>
-                    <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Refresh restores deleted, split, and merged sections.</span>
+                    <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Select any cards, then merge or delete them together.</span>
                   </div>
 
-                  <div class="section-card-list">
+                  <div class="selection-toolbar" aria-live="polite">
+                    <div class="selection-status"><span class="selection-count">0 selected</span><button class="btn btn-sm btn-link p-0 select-all-sections" type="button">Select all</button></div>
+                    <div class="selection-actions">
+                      <button class="btn btn-sm btn-outline-secondary open-reorder-dialog" type="button" {% if section_count < 2 %}disabled{% endif %}><i class="bi bi-arrow-down-up me-1"></i>Reorder</button>
+                      <button class="btn btn-sm btn-outline-primary open-merge-dialog" type="button" disabled><i class="bi bi-intersect me-1"></i>Merge selected</button>
+                      <button class="btn btn-sm btn-outline-danger open-delete-dialog" type="button" disabled><i class="bi bi-trash me-1"></i>Delete selected</button>
+                    </div>
+                  </div>
+
+                  <div class="section-card-list" id="section-card-list">
                     {% for section in sections %}
-                      <article class="section-card" data-section-card="{{ section.section_id }}">
-                        <div class="section-order" aria-label="Output {{ section.index }}">{{ section.index }}</div>
+                      <article class="section-card" draggable="true" data-section-card="{{ section.section_id }}" data-section-title="{{ section.title }}" data-part-count="{{ section.part_count }}" data-start-page="{{ section.start_page }}" data-end-page="{{ section.end_page }}">
+                        <div class="section-card-leading">
+                          <input class="form-check-input section-selector" type="checkbox" value="{{ section.section_id }}" aria-label="Select {{ section.title }}">
+                          <button class="section-drag-handle" type="button" aria-label="Drag to reorder {{ section.title }}" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></button>
+                          <div class="section-order" aria-label="Output {{ section.index }}">{{ section.index }}</div>
+                        </div>
                         <div class="section-thumbnails" aria-label="First and last pages">
                           <figure class="section-thumbnail">
                             {% if section.first_page_thumbnail %}<img loading="lazy" src="{{ section.first_page_thumbnail }}" alt="First page of {{ section.title }}">{% endif %}
@@ -620,42 +661,21 @@
                           <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
                             <div>
                               <h3 class="h6 mb-1 text-break">{{ section.title }}</h3>
-                              <div class="section-range"><strong>Pages {{ section.start_page }}–{{ section.end_page }}</strong><span>{{ section.page_count }} page{{ section.page_count|pluralize }}</span><span>Level {{ section.level }}</span></div>
+                              <div class="section-range"><strong>{% if section.part_count > 1 %}{{ section.part_count }} source ranges{% else %}Pages {{ section.start_page }}–{{ section.end_page }}{% endif %}</strong><span>{{ section.page_count }} page{{ section.page_count|pluralize }}</span><span>Level {{ section.level }}</span></div>
                             </div>
                             {% if section.part_count > 1 %}<span class="badge text-bg-secondary">{{ section.part_count }} joined sections</span>{% endif %}
                           </div>
                           <code class="section-filename">{{ section.filename }}</code>
                           {% if section.part_count > 1 %}
                             <div class="section-parts">
-                              {% for part in section.included_parts %}<span>{{ part.title }} · p. {{ part.start_page }}–{{ part.end_page }}</span>{% endfor %}
+                              {% for part in section.included_parts %}<span data-part-start="{{ part.start_page }}" data-part-end="{{ part.end_page }}">{{ part.title }} · p. {{ part.start_page }}–{{ part.end_page }}</span>{% endfor %}
                             </div>
+                          {% else %}
+                            {% for part in section.included_parts %}<span class="d-none" data-part-start="{{ part.start_page }}" data-part-end="{{ part.end_page }}"></span>{% endfor %}
                           {% endif %}
 
                           <div class="section-controls">
-                            <button class="btn btn-sm btn-primary split-toggle" type="button" aria-expanded="false" {% if not section.can_split %}disabled{% endif %}><i class="bi bi-scissors me-1"></i>Split</button>
-                            <button class="btn btn-sm btn-outline-secondary" type="submit" data-action="merge_next" data-section-id="{{ section.section_id }}" {% if not section.can_merge %}disabled{% endif %}><i class="bi bi-link-45deg me-1"></i>Merge next</button>
-                            <button class="btn btn-sm btn-outline-danger" type="submit" data-action="delete_section" data-section-id="{{ section.section_id }}" data-confirm-delete="true"><i class="bi bi-trash me-1"></i>Delete</button>
-                          </div>
-
-                          <div class="split-options" hidden>
-                            <div class="split-options-heading"><strong>Where should this section break?</strong><span>Only this card will be divided.</span></div>
-                            <label class="split-choice">
-                              <input class="form-check-input split-choice-input" type="radio" data-split-choice value="automatic" checked>
-                              <span><strong>Automatic</strong><small>Restore joined TOC sections, or divide this range near the middle.</small></span>
-                            </label>
-                            <label class="split-choice">
-                              <input class="form-check-input split-choice-input" type="radio" data-split-choice value="page">
-                              <span><strong>Choose the break page</strong><small>The first PDF ends on this page; the next starts on the following page.</small></span>
-                            </label>
-                            <div class="split-page-picker" hidden>
-                              <label class="form-label small fw-semibold mb-1">First PDF ends after page</label>
-                              <input class="form-control form-control-sm" type="number" data-split-page min="{{ section.start_page }}" max="{{ section.end_page|add:'-1' }}" value="{{ section.start_page }}" inputmode="numeric">
-                              <div class="form-text">Choose {{ section.start_page }}–{{ section.end_page|add:'-1' }}. The second PDF begins on the next page.</div>
-                            </div>
-                            <div class="d-flex flex-wrap gap-2 mt-3">
-                              <button class="btn btn-sm btn-primary" type="submit" data-action="split_section" data-section-id="{{ section.section_id }}">Apply split</button>
-                              <button class="btn btn-sm btn-link text-secondary split-cancel" type="button">Cancel</button>
-                            </div>
+                            <button class="btn btn-sm btn-outline-primary open-split-dialog" type="button" {% if not section.can_split %}disabled{% endif %}><i class="bi bi-scissors me-1"></i>Split options</button>
                           </div>
                         </div>
                       </article>
@@ -663,6 +683,50 @@
                       <div class="empty-preview"><i class="bi bi-file-earmark-x"></i><strong>No output sections remain</strong><span>Use “Refresh preview” to restore the original sections.</span></div>
                     {% endfor %}
                   </div>
+
+                  <dialog class="split-dialog" id="delete-sections-dialog">
+                    <div class="dialog-icon danger"><i class="bi bi-trash"></i></div>
+                    <h3 class="h5">Delete selected sections?</h3>
+                    <p class="text-muted delete-dialog-copy mb-0"></p>
+                    <div class="dialog-callout">They will disappear from the preview and will not be generated. Refresh preview can restore them.</div>
+                    <div class="dialog-actions"><button class="btn btn-outline-secondary dialog-cancel" type="button">Cancel</button><button class="btn btn-danger" type="submit" data-action="delete_selected">Delete sections</button></div>
+                  </dialog>
+
+                  <dialog class="split-dialog" id="merge-sections-dialog">
+                    <div class="dialog-icon primary"><i class="bi bi-intersect"></i></div>
+                    <h3 class="h5">Merge selected sections?</h3>
+                    <p class="text-muted merge-dialog-copy mb-0"></p>
+                    <div class="dialog-callout">Pages are combined in the current card order. The merged result can be selected and merged again.</div>
+                    <div class="dialog-actions"><button class="btn btn-outline-secondary dialog-cancel" type="button">Cancel</button><button class="btn btn-primary" type="submit" data-action="merge_selected">Merge into one PDF</button></div>
+                  </dialog>
+
+                  <dialog class="split-dialog split-config-dialog" id="split-section-dialog">
+                    <div class="dialog-icon primary"><i class="bi bi-scissors"></i></div>
+                    <h3 class="h5">Split section</h3>
+                    <p class="text-muted split-dialog-title mb-2"></p>
+                    <label class="split-choice split-unmerge-choice">
+                      <input class="form-check-input" type="radio" name="dialog_split_choice" value="automatic" checked>
+                      <span><strong class="split-auto-title">Automatic split</strong><small class="split-auto-help">Divide this section near the middle.</small></span>
+                    </label>
+                    <label class="split-choice">
+                      <input class="form-check-input" type="radio" name="dialog_split_choice" value="page">
+                      <span><strong>Split after an original page</strong><small>Use the page number shown in the source PDF, including inside a merged section.</small></span>
+                    </label>
+                    <div class="split-page-picker" hidden>
+                      <label class="form-label small fw-semibold mb-1">First output ends after original page</label>
+                      <input class="form-control" type="number" id="dialog-split-page" inputmode="numeric">
+                      <div class="form-text split-page-help"></div>
+                    </div>
+                    <div class="dialog-actions"><button class="btn btn-outline-secondary dialog-cancel" type="button">Cancel</button><button class="btn btn-primary apply-dialog-split" type="submit" data-action="split_section">Apply split</button></div>
+                  </dialog>
+
+                  <dialog class="split-dialog reorder-dialog" id="reorder-sections-dialog">
+                    <div class="dialog-icon primary"><i class="bi bi-arrow-down-up"></i></div>
+                    <h3 class="h5">Reorder output PDFs</h3>
+                    <p class="text-muted mb-2">Choose each output position. You can also close this dialog and drag cards directly.</p>
+                    <div class="reorder-dialog-list"></div>
+                    <div class="dialog-actions"><button class="btn btn-outline-secondary dialog-cancel" type="button">Cancel</button><button class="btn btn-primary apply-dialog-order" type="submit" data-action="reorder_sections">Apply order</button></div>
+                  </dialog>
                 </section>
               {% endif %}
 
@@ -687,7 +751,7 @@
                           {% for output in outputs %}
                             <tr>
                               <td class="text-break" data-label="Section">{{ output.title }}</td>
-                              <td class="text-nowrap" data-label="Pages">{{ output.start_page }}-{{ output.end_page }} · {{ output.page_count }}</td>
+                              <td class="text-nowrap" data-label="Pages">{{ output.source_ranges|default:output.start_page }}{% if not output.source_ranges %}-{{ output.end_page }}{% endif %} · {{ output.page_count }}</td>
                               <td class="text-break" data-label="Output">
                                 <code>{{ output.filename }}</code>
                                 {% if output.booklet_applied %}
@@ -719,6 +783,8 @@
       const sectionInput = document.getElementById("split-section-id");
       const splitStrategyInput = document.getElementById("split-strategy");
       const splitPageInput = document.getElementById("split-page");
+      const selectedSectionsInput = document.getElementById("selected-sections");
+      const orderedSectionsInput = document.getElementById("ordered-sections");
       const dropzone = document.getElementById("upload-dropzone");
       const fileInput = form.querySelector('input[type="file"][name="input_pdf"]');
       const applyBooklets = form.querySelector('input[name="apply_booklets"]');
@@ -930,39 +996,124 @@
           syncRangesFromRows();
         });
       }
-      form.querySelectorAll(".section-card").forEach((card) => {
-        const toggle = card.querySelector(".split-toggle");
-        const panel = card.querySelector(".split-options");
-        const cancel = card.querySelector(".split-cancel");
-        const choices = Array.from(card.querySelectorAll("[data-split-choice]"));
-        const pagePicker = card.querySelector(".split-page-picker");
-        const refreshSplitChoice = () => {
-          const strategy = choices.find((choice) => choice.checked)?.value || "automatic";
-          if (pagePicker) pagePicker.hidden = strategy !== "page";
-        };
-        const closePanel = () => {
-          if (panel) panel.hidden = true;
-          if (toggle) toggle.setAttribute("aria-expanded", "false");
-        };
-        toggle?.addEventListener("click", () => {
-          const willOpen = panel?.hidden ?? false;
-          form.querySelectorAll(".split-options").forEach((other) => { other.hidden = true; });
-          form.querySelectorAll(".split-toggle").forEach((other) => other.setAttribute("aria-expanded", "false"));
-          if (panel) panel.hidden = !willOpen;
-          toggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
-          if (willOpen) panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        });
-        cancel?.addEventListener("click", closePanel);
-        choices.forEach((choice) => choice.addEventListener("change", refreshSplitChoice));
-        refreshSplitChoice();
+      const cardList = document.getElementById("section-card-list");
+      const cards = () => Array.from(cardList?.querySelectorAll(".section-card") || []);
+      const selectedIds = () => cards().filter((card) => card.querySelector(".section-selector")?.checked).map((card) => card.dataset.sectionCard);
+      const selectionCount = form.querySelector(".selection-count");
+      const mergeSelectionButton = form.querySelector(".open-merge-dialog");
+      const deleteSelectionButton = form.querySelector(".open-delete-dialog");
+      const selectAllButton = form.querySelector(".select-all-sections");
+      const deleteDialog = document.getElementById("delete-sections-dialog");
+      const mergeDialog = document.getElementById("merge-sections-dialog");
+      const splitDialog = document.getElementById("split-section-dialog");
+      const reorderDialog = document.getElementById("reorder-sections-dialog");
+
+      const showDialog = (dialog) => {
+        if (!dialog) return;
+        if (typeof dialog.showModal === "function") dialog.showModal();
+        else dialog.setAttribute("open", "");
+      };
+      const closeDialog = (dialog) => {
+        if (!dialog) return;
+        if (typeof dialog.close === "function") dialog.close();
+        else dialog.removeAttribute("open");
+      };
+      form.querySelectorAll(".dialog-cancel").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog"))));
+      form.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) closeDialog(dialog);
+      }));
+
+      const refreshSelection = () => {
+        const ids = selectedIds();
+        if (selectedSectionsInput) selectedSectionsInput.value = ids.join(",");
+        if (selectionCount) selectionCount.textContent = `${ids.length} selected`;
+        if (mergeSelectionButton) mergeSelectionButton.disabled = ids.length < 2;
+        if (deleteSelectionButton) deleteSelectionButton.disabled = ids.length < 1;
+        cards().forEach((card) => card.classList.toggle("is-selected", card.querySelector(".section-selector")?.checked));
+        if (selectAllButton) selectAllButton.textContent = ids.length === cards().length && ids.length ? "Clear selection" : "Select all";
+      };
+      cards().forEach((card) => card.querySelector(".section-selector")?.addEventListener("change", refreshSelection));
+      selectAllButton?.addEventListener("click", () => {
+        const shouldSelect = selectedIds().length !== cards().length;
+        cards().forEach((card) => { card.querySelector(".section-selector").checked = shouldSelect; });
+        refreshSelection();
       });
+      deleteSelectionButton?.addEventListener("click", () => {
+        const count = selectedIds().length;
+        deleteDialog.querySelector(".delete-dialog-copy").textContent = `You are about to remove ${count} selected output${count === 1 ? "" : "s"}.`;
+        showDialog(deleteDialog);
+      });
+      mergeSelectionButton?.addEventListener("click", () => {
+        const chosen = cards().filter((card) => card.querySelector(".section-selector")?.checked);
+        mergeDialog.querySelector(".merge-dialog-copy").textContent = chosen.map((card) => card.dataset.sectionTitle).join(" → ");
+        showDialog(mergeDialog);
+      });
+
+      let activeSplitCard = null;
+      const splitChoices = Array.from(splitDialog?.querySelectorAll('input[name="dialog_split_choice"]') || []);
+      const splitPagePicker = splitDialog?.querySelector(".split-page-picker");
+      const dialogSplitPage = document.getElementById("dialog-split-page");
+      const refreshDialogSplit = () => {
+        const strategy = splitChoices.find((choice) => choice.checked)?.value || "automatic";
+        if (splitPagePicker) splitPagePicker.hidden = strategy !== "page";
+      };
+      splitChoices.forEach((choice) => choice.addEventListener("change", refreshDialogSplit));
+      form.querySelectorAll(".open-split-dialog").forEach((button) => button.addEventListener("click", () => {
+        activeSplitCard = button.closest(".section-card");
+        const partCount = Number(activeSplitCard.dataset.partCount || 1);
+        const ranges = Array.from(activeSplitCard.querySelectorAll("[data-part-start]")).map((part) => `${part.dataset.partStart}–${part.dataset.partEnd}`);
+        splitDialog.querySelector(".split-dialog-title").textContent = activeSplitCard.dataset.sectionTitle;
+        splitDialog.querySelector(".split-auto-title").textContent = partCount > 1 ? "Unmerge original sections" : "Automatic split";
+        splitDialog.querySelector(".split-auto-help").textContent = partCount > 1 ? `Restore its ${partCount} component sections as separate outputs.` : "Divide this section near the middle.";
+        splitDialog.querySelector('input[value="automatic"]').checked = true;
+        dialogSplitPage.value = activeSplitCard.dataset.startPage;
+        splitDialog.querySelector(".split-page-help").textContent = `Available original ranges: ${ranges.join(", ")}. The break must leave pages on both sides.`;
+        refreshDialogSplit();
+        showDialog(splitDialog);
+      }));
+
+      const fillReorderDialog = () => {
+        const currentCards = cards();
+        const list = reorderDialog.querySelector(".reorder-dialog-list");
+        list.innerHTML = "";
+        currentCards.forEach((card, index) => {
+          const row = document.createElement("label");
+          row.className = "reorder-dialog-item";
+          const select = document.createElement("select");
+          select.className = "form-select form-select-sm";
+          select.dataset.reorderId = card.dataset.sectionCard;
+          currentCards.forEach((_, position) => select.add(new Option(`Position ${position + 1}`, String(position + 1), false, position === index)));
+          const title = document.createElement("span");
+          title.className = "text-break small fw-semibold";
+          title.textContent = card.dataset.sectionTitle;
+          row.append(select, title);
+          list.appendChild(row);
+        });
+      };
+      form.querySelector(".open-reorder-dialog")?.addEventListener("click", () => { fillReorderDialog(); showDialog(reorderDialog); });
+
+      let draggedCard = null;
+      cards().forEach((card) => {
+        const handle = card.querySelector(".section-drag-handle");
+        handle?.addEventListener("pointerdown", () => { card.draggable = true; });
+        handle?.addEventListener("pointerup", () => { card.draggable = false; });
+        card.addEventListener("dragstart", () => { draggedCard = card; card.classList.add("is-dragging"); });
+        card.addEventListener("dragend", () => { card.classList.remove("is-dragging"); card.draggable = false; draggedCard = null; });
+        card.addEventListener("dragover", (event) => event.preventDefault());
+        card.addEventListener("drop", (event) => {
+          event.preventDefault();
+          if (!draggedCard || draggedCard === card) return;
+          const box = card.getBoundingClientRect();
+          cardList.insertBefore(draggedCard, event.clientY < box.top + box.height / 2 ? card : card.nextSibling);
+          if (orderedSectionsInput) orderedSectionsInput.value = cards().map((item) => item.dataset.sectionCard).join(",");
+          if (actionInput) actionInput.value = "reorder_sections";
+          form.requestSubmit();
+        });
+      });
+      refreshSelection();
       form.addEventListener("submit", (event) => {
         syncRangesFromRows();
         const requestedAction = event.submitter?.dataset?.action || "";
-        if (event.submitter?.dataset?.confirmDelete === "true" && !window.confirm("Remove this section from the output? You can restore it with Refresh preview.")) {
-          event.preventDefault();
-          return;
-        }
         if (actionInput && requestedAction) {
           actionInput.value = requestedAction;
         }
@@ -970,11 +1121,15 @@
           sectionInput.value = event.submitter?.dataset?.sectionId || "";
         }
         if (requestedAction === "split_section") {
-          const card = event.submitter.closest(".section-card");
-          const strategy = card?.querySelector("[data-split-choice]:checked")?.value || "automatic";
-          const page = card?.querySelector("[data-split-page]")?.value || "";
+          const strategy = splitChoices.find((choice) => choice.checked)?.value || "automatic";
           if (splitStrategyInput) splitStrategyInput.value = strategy;
-          if (splitPageInput) splitPageInput.value = strategy === "page" ? page : "";
+          if (splitPageInput) splitPageInput.value = strategy === "page" ? dialogSplitPage.value : "";
+          if (sectionInput) sectionInput.value = activeSplitCard?.dataset.sectionCard || "";
+        }
+        if (requestedAction === "reorder_sections") {
+          const selections = Array.from(reorderDialog.querySelectorAll("[data-reorder-id]"));
+          selections.sort((a, b) => Number(a.value) - Number(b.value));
+          if (orderedSectionsInput) orderedSectionsInput.value = selections.map((select) => select.dataset.reorderId).join(",");
         }
       });
       initRanges();

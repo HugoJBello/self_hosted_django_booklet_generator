@@ -20,6 +20,7 @@ from .services import (
     build_sections_for_level,
     extract_toc,
     merge_adjacent_sections,
+    merge_sections,
     section_filename,
     split_section_for_preview,
     split_pdf_by_sections,
@@ -79,8 +80,35 @@ class SplitPdfServiceTests(SimpleTestCase):
             filename="01_Chapter.pdf",
         )
 
-        with self.assertRaisesMessage(ValueError, "Choose a break page from 3 to 8"):
+        with self.assertRaisesMessage(ValueError, "leaves pages on both sides"):
             split_section_for_preview(section, split_after_page=9)
+
+    def test_non_contiguous_merge_writes_only_its_component_pages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            output_dir = os.path.join(tmp, "outputs")
+            _create_pdf(source_path, page_count=6)
+            first = SplitSection(index=1, level=1, title="First", start_page=1, end_page=2, filename="first.pdf")
+            last = SplitSection(index=2, level=1, title="Last", start_page=5, end_page=6, filename="last.pdf")
+            merged = merge_sections([first, last])
+
+            outputs = split_pdf_by_sections(source_path, [merged], output_dir, SplitPdfJobOptions())
+
+            self.assertEqual(outputs[0].page_count, 4)
+            with fitz.open(outputs[0].path) as document:
+                self.assertEqual([page.get_text().strip() for page in document], ["Page 1", "Page 2", "Page 5", "Page 6"])
+
+    def test_merged_section_can_split_at_original_page_inside_a_component(self):
+        first = SplitSection(index=1, level=1, title="First", start_page=1, end_page=3, filename="first.pdf")
+        last = SplitSection(index=2, level=1, title="Last", start_page=8, end_page=10, filename="last.pdf")
+        merged = merge_sections([first, last])
+
+        children = split_section_for_preview(merged, split_after_page=9)
+
+        self.assertEqual(
+            [[(part.start_page, part.end_page) for part in child.included_parts] for child in children],
+            [[(1, 3), (8, 9)], [(10, 10)]],
+        )
 
     def test_adjacent_sections_can_be_merged_and_renamed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -457,6 +485,54 @@ class SplitPdfViewTests(TestCase):
         self.assertEqual([(item["start_page"], item["end_page"]) for item in preview], [(1, 3), (4, 4), (5, 5)])
         self.assertContains(response, "Refresh preview")
         self.assertContains(response, "First · p. 1")
+
+    def test_multiple_selected_sections_can_be_merged_deleted_and_reordered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf_with_toc(source_path)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+
+        self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+        self.client.post(reverse("splitpdf:form"), {"action": "preview", "split_mode": "toc", "selected_level": "2"})
+        sections = self.client.session["splitpdf_state"]["preview_sections"]
+
+        merged_response = self.client.post(reverse("splitpdf:form"), {
+            "action": "merge_selected", "selected_sections": f'{sections[0]["section_id"]},{sections[2]["section_id"]}',
+            "split_mode": "toc", "selected_level": "2",
+        })
+        self.assertEqual(merged_response.status_code, 200)
+        merged = self.client.session["splitpdf_state"]["preview_sections"]
+        self.assertEqual(len(merged), 2)
+        self.assertEqual([(part["start_page"], part["end_page"]) for part in merged[0]["parts"]], [(2, 2), (5, 5)])
+
+        reordered_response = self.client.post(reverse("splitpdf:form"), {
+            "action": "reorder_sections", "ordered_sections": f'{merged[1]["section_id"]},{merged[0]["section_id"]}',
+            "split_mode": "toc", "selected_level": "2",
+        })
+        self.assertEqual(reordered_response.status_code, 200)
+        reordered = self.client.session["splitpdf_state"]["preview_sections"]
+        self.assertEqual([item["title"] for item in reordered], ["Details", "Scope + Results"])
+
+        generated_response = self.client.post(reverse("splitpdf:form"), {
+            "action": "generate", "split_mode": "toc", "selected_level": "2",
+        })
+        self.assertEqual(generated_response.status_code, 200)
+        activity = Activity.objects.filter(tool="splitpdf").latest("pk")
+        self.client.get(reverse("splitpdf:clear"))
+        self.client.post(reverse("activity:reopen", args=[activity.pk]))
+        reopened = self.client.get(reverse("splitpdf:form"))
+        restored = self.client.session["splitpdf_state"]["preview_sections"]
+        self.assertEqual([item["title"] for item in restored], ["Details", "Scope + Results"])
+        self.assertEqual([(part["start_page"], part["end_page"]) for part in restored[1]["parts"]], [(2, 2), (5, 5)])
+        self.assertContains(reopened, "Scope + Results")
+
+        deleted_response = self.client.post(reverse("splitpdf:form"), {
+            "action": "delete_selected", "selected_sections": f'{reordered[0]["section_id"]},{reordered[1]["section_id"]}',
+            "split_mode": "toc", "selected_level": "2",
+        })
+        self.assertEqual(deleted_response.status_code, 200)
+        self.assertEqual(self.client.session["splitpdf_state"]["preview_sections"], [])
 
     def test_download_all_returns_zip_with_generated_pdfs(self):
         client = self.client
