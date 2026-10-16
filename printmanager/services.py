@@ -488,18 +488,11 @@ def _select_document_format(printer, path=None):
         identity = inspect_ipp_printer(printer.device_uri)
         formats = identity.get("document_formats", [])
         preferred = identity.get("preferred_document_format", "")
-    # Prefer PDF whenever the printer advertises it.  Image-bearing documents
-    # are normalized to a raster-backed PDF by submit_pdf, which avoids both
-    # firmware PDF rendering bugs and overly optimistic URF/PWG declarations.
-    # Some printers accept a raster job during Validate/Create-Job and only
-    # abort it later with document-format-error (notably mixed vector/image
-    # booklets).  Keep native raster formats as fallbacks for printers which do
-    # not accept PDF at all.
-    if path and _pdf_contains_images(path):
-        raster_preferred = preferred if preferred in {"image/urf", "image/pwg-raster"} else ""
-        candidates = ("application/pdf", raster_preferred, "image/urf", "image/pwg-raster", preferred)
-    else:
-        candidates = (preferred, "application/pdf", "image/urf", "image/pwg-raster")
+    # Preserve the original PDF whenever the printer accepts it.  This keeps
+    # text and vector graphics intact and also avoids printers which advertise
+    # URF/PWG support but abort those jobs later with document-format-error.
+    # Raster conversion remains available only for printers without PDF input.
+    candidates = ("application/pdf", preferred, "image/urf", "image/pwg-raster")
     for candidate in candidates:
         if candidate in formats:
             return candidate
@@ -710,14 +703,13 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
         raise CupsError("The PDF is no longer available.")
     merged = {**printer.default_options, **(options or {})}
     document_format = _select_document_format(printer, Path(path))
-    contains_images = _pdf_contains_images(Path(path))
     if document_format in {"image/pwg-raster", "image/urf"} and _resolution_dpi(merged) > 600:
         merged["printer-resolution"] = "600dpi"
     converted_path = None
     try:
         source_path = Path(path)
         transport_options = _transport_options(merged, document_format)
-        if document_format != "application/pdf" or contains_images:
+        if document_format != "application/pdf":
             converted_path = _convert_pdf(source_path, document_format, merged, page_ranges)
             source_path = converted_path
         # Orientation and scaling have already been baked into raster formats.

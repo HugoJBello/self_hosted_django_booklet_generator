@@ -20,6 +20,7 @@ from .services import (
     CupsError, _convert_pdf, _normalize_urf_luminance, _select_document_format,
     _transport_options, parse_devices,
     parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
+    submit_pdf,
 )
 from .tasks import refresh_print_job, submit_print_job
 
@@ -76,7 +77,7 @@ class CupsParsingTests(TestCase):
         finally:
             os.unlink(handle.name)
 
-    def test_image_pdf_prefers_normalized_pdf_when_supported(self):
+    def test_image_pdf_prefers_original_pdf_when_supported(self):
         handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         handle.close()
         image = io.BytesIO()
@@ -92,6 +93,39 @@ class CupsParsingTests(TestCase):
         })()
         try:
             self.assertEqual(_select_document_format(printer, Path(handle.name)), "application/pdf")
+        finally:
+            os.unlink(handle.name)
+
+    @patch("printmanager.services._convert_pdf")
+    @patch("printmanager.services._ipp_job_operation")
+    @patch("printmanager.services._direct_ipp_request")
+    def test_pdf_is_submitted_unchanged_without_rasterizing(self, direct, operation, convert):
+        handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        handle.close()
+        image = io.BytesIO()
+        Image.new("RGB", (10, 10), "black").save(image, "PNG")
+        document = fitz.open()
+        page = document.new_page()
+        page.insert_text((72, 72), "Vector text must remain vector text")
+        page.insert_image(fitz.Rect(72, 90, 82, 100), stream=image.getvalue())
+        document.save(handle.name)
+        document.close()
+        printer = type("Printer", (), {
+            "name": "office", "device_uri": "ipp://printer/ipp/print",
+            "default_options": {},
+            "document_formats": ["application/pdf", "image/urf"],
+            "preferred_document_format": "image/urf",
+        })()
+        direct.side_effect = [
+            "", "job-id (integer) = 42\njob-uri (uri) = ipp://printer/jobs/42",
+        ]
+        operation.side_effect = ["", ""]
+        try:
+            submit_pdf(printer=printer, path=handle.name, title="booklet.pdf")
+            convert.assert_not_called()
+            sent = operation.call_args_list[-1].kwargs
+            self.assertEqual(sent["document_format"], "application/pdf")
+            self.assertEqual(sent["source_path"], Path(handle.name))
         finally:
             os.unlink(handle.name)
 
