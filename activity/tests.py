@@ -62,6 +62,13 @@ class FooterWatermarkTests(TestCase):
                 self.assertEqual(tuple(page.rect), (0, 0, 595, 842))
                 self.assertIn("Existing content", page.get_text())
             self.assertNotIn("*", document[1].get_text())
+            self.assertEqual(len(document[0].get_drawings()), 1)
+            self.assertEqual(len(document[1].get_drawings()), 0)
+            self.assertEqual(len(document[-1].get_drawings()), 1)
+            self.assertEqual(document[0].get_drawings()[0]["fill"], (0.0, 0.0, 0.0))
+            self.assertEqual(document[-1].get_drawings()[0]["fill"], (0.0, 0.0, 0.0))
+            self.assertEqual(len(document[0].get_drawings()[0]["items"]), 3)
+            self.assertEqual(document[-1].get_drawings()[0]["items"][0][0], "re")
             for page, right in ((document[0], True), (document[-1], False)):
                 footer = [line for block in page.get_text("dict")["blocks"] if "lines" in block
                           for line in block["lines"] if any("18/10/26" in span["text"] or "Revisión" in span["text"]
@@ -71,6 +78,7 @@ class FooterWatermarkTests(TestCase):
                 self.assertTrue(all(line["bbox"][0] > 300 for line in footer) if right
                                 else all(line["bbox"][2] < 300 for line in footer))
                 self.assertTrue(all(line["bbox"][2] < 595 for line in footer))
+                self.assertTrue(all(span["color"] == 0 for line in footer for span in line["spans"]))
 
     def test_booklet_activity_uses_first_and_last_pages_like_other_pdfs(self):
         owner = get_user_model().objects.create_user("footer-booklet")
@@ -81,9 +89,9 @@ class FooterWatermarkTests(TestCase):
                     "watermark": True, "booklet_layout": layout,
                 }, outputs=[{"name": "booklet.pdf", "path": path}])
                 with fitz.open(path) as document:
-                    self.assertEqual(document[0].get_text().count("*"), 1)
-                    self.assertEqual(document[1].get_text().count("*"), 0)
-                    self.assertEqual(document[-1].get_text().count("*"), 1)
+                    self.assertEqual(len(document[0].get_drawings()), 1)
+                    self.assertEqual(len(document[1].get_drawings()), 0)
+                    self.assertEqual(len(document[-1].get_drawings()), 1)
 
     def test_section_numbers_are_separate_from_the_general_footer(self):
         path = self._pdf(pages=4)
@@ -95,8 +103,8 @@ class FooterWatermarkTests(TestCase):
             self.assertIn("s2.1", document[1].get_text())
             self.assertIn("s2.2", document[2].get_text())
             self.assertIn("s2.2", document[3].get_text())
-            self.assertIn("*", document[1].get_text())
-            self.assertIn("*", document[2].get_text())
+            self.assertEqual(len(document[1].get_drawings()), 1)
+            self.assertEqual(len(document[2].get_drawings()), 1)
 
     def test_section_numbers_can_be_disabled_independently(self):
         owner = get_user_model().objects.create_user("section-toggle")
@@ -108,7 +116,7 @@ class FooterWatermarkTests(TestCase):
                 }, outputs=[{"name": "split.pdf", "path": path, "section_marks": [(0, 2, "s1")]}])
                 with fitz.open(path) as document:
                     self.assertEqual("s1" in document[0].get_text(), enabled)
-                    self.assertIn("*", document[0].get_text())
+                    self.assertEqual(len(document[0].get_drawings()), 1)
 
     def test_rotated_page_footer_remains_at_visual_bottom(self):
         path = self._pdf(pages=1)

@@ -42,7 +42,7 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
             if font_name != "helv":
                 page.insert_font(fontname=font_name, fontfile=str(FONT_PATH))
             width, height = page.rect.width, page.rect.height
-            # 10 mm maximum height. The star sits closest to the physical corner.
+            # 10 mm maximum height. The symbol sits closest to the physical corner.
             font_size = 6.5
             inset = 14.0  # About 5 mm from the trim edge for ordinary printers.
             baseline = height - inset - 2.0
@@ -56,21 +56,28 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
             def put(text, visual_x, visual_y):
                 point = fitz.Point(visual_x, visual_y) * page.derotation_matrix
                 page.insert_text(point, text, fontsize=font_size, fontname=font_name,
-                                 color=(0.32, 0.32, 0.32), rotate=(-page.rotation) % 360,
+                                 color=(0, 0, 0), rotate=(-page.rotation) % 360,
                                  overlay=True)
 
-            star = "*"
-            star_width = font.text_length(star, fontsize=font_size)
-            footer_width = star_width + 3 + max(font.text_length(line, fontsize=font_size) for line in lines)
+            symbol_width = 6.0
+            symbol_x = width - inset - symbol_width if right else inset
+            symbol_y = baseline - 6.0
             if right:
-                put(star, width - inset - star_width, baseline)
-                text_right = width - inset - star_width - 3
+                vertices = ((symbol_x, symbol_y), (symbol_x + symbol_width, symbol_y + 3.0),
+                            (symbol_x, symbol_y + 6.0))
+            else:
+                vertices = ((symbol_x, symbol_y), (symbol_x + symbol_width, symbol_y),
+                            (symbol_x + symbol_width, symbol_y + 6.0), (symbol_x, symbol_y + 6.0))
+            page.draw_polyline([fitz.Point(x, y) * page.derotation_matrix for x, y in vertices],
+                               color=(0, 0, 0), fill=(0, 0, 0), closePath=True, overlay=True)
+            footer_width = symbol_width + 3 + max(font.text_length(line, fontsize=font_size) for line in lines)
+            if right:
+                text_right = symbol_x - 3
                 for line_index, line in enumerate(lines):
                     line_width = font.text_length(line, fontsize=font_size)
                     put(line, text_right - line_width, baseline - 7.5 * (len(lines) - 1 - line_index))
             else:
-                put(star, inset, baseline)
-                text_left = inset + star_width + 3
+                text_left = symbol_x + symbol_width + 3
                 for line_index, line in enumerate(lines):
                     put(line, text_left, baseline - 7.5 * (len(lines) - 1 - line_index))
 
@@ -88,7 +95,7 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
                 visual_y = page.rect.height - 16.0
                 point = fitz.Point(visual_x, visual_y) * page.derotation_matrix
                 page.insert_text(point, section_label, fontsize=5.8, fontname=font_name,
-                                 color=(0.42, 0.42, 0.42), rotate=(-page.rotation) % 360,
+                                 color=(0, 0, 0), rotate=(-page.rotation) % 360,
                                  overlay=True)
 
         directory = os.path.dirname(path) or "."

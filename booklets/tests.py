@@ -136,8 +136,12 @@ class BookletsViewTests(TestCase):
                 artifact_id = response.context["results"][0]["artifact_id"]
                 with fitz.open(Artifact.objects.get(pk=artifact_id).path) as document:
                     self.assertGreater(document.page_count, 1)
-                    self.assertEqual(document[0].get_text().count("*"), 1)
-                    self.assertEqual(document[-1].get_text().count("*"), 1)
+                    self.assertNotIn("*", document[0].get_text())
+                    self.assertNotIn("*", document[-1].get_text())
+                    self.assertTrue(any(drawing["fill"] == (0.0, 0.0, 0.0)
+                                        for drawing in document[0].get_drawings()))
+                    self.assertTrue(any(drawing["fill"] == (0.0, 0.0, 0.0)
+                                        for drawing in document[-1].get_drawings()))
                     for page_number in range(1, document.page_count - 1):
                         self.assertNotIn("*", document[page_number].get_text())
 
