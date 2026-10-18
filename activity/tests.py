@@ -7,10 +7,11 @@ from PIL import Image
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, SimpleTestCase
+from django.template.loader import render_to_string
 from django.urls import reverse
 
 from .models import Artifact
-from .services import record_activity
+from .services import record_activity, watermark_at_top
 from .filenames import generated_pdf_name, portable_stem
 from .watermark import numbered_sections, stamp_pdf
 from booklets.forms import BookletForm
@@ -37,6 +38,26 @@ class BookletDefaultsTests(SimpleTestCase):
             with self.subTest(form=type(form).__name__):
                 self.assertTrue(form.fields["watermark_section_index"].initial)
                 self.assertFalse(form.fields["watermark"].initial)
+
+    def test_watermark_options_start_hidden_and_selected(self):
+        for form in (BookletForm(), SplitPdfForm(), DiaryForm()):
+            with self.subTest(form=type(form).__name__):
+                self.assertTrue(form.fields["watermark_filename"].initial)
+                markup = render_to_string("activity/watermark_option.html", {"form": form})
+                self.assertIn("data-watermark-options hidden", markup)
+                self.assertIn('name="watermark_filename"', markup)
+                self.assertIn('id="id_watermark_filename" checked', markup)
+        checked = render_to_string("activity/watermark_option.html", {
+            "form": BookletForm(data={"watermark": "on", "watermark_filename": "on"}),
+        })
+        self.assertIn("data-watermark-options >", checked)
+
+    def test_only_prepared_flipped_a5_booklets_use_top_watermark(self):
+        self.assertTrue(watermark_at_top("booklets", {"booklet_layout": "flipped_a4", "flipped_a4_prepare_for_a5_printing": True}))
+        self.assertTrue(watermark_at_top("splitpdf", {"apply_booklets": True, "booklet_layout": "flipped_a4", "flipped_a4_prepare_for_a5_printing": True}))
+        self.assertTrue(watermark_at_top("diary", {"output_mode": "flipped_a4", "flipped_a4_prepare_for_a5_printing": True}))
+        self.assertFalse(watermark_at_top("splitpdf", {"apply_booklets": False, "booklet_layout": "flipped_a4", "flipped_a4_prepare_for_a5_printing": True}))
+        self.assertFalse(watermark_at_top("booklets", {"booklet_layout": "side_by_side", "flipped_a4_prepare_for_a5_printing": True}))
 
 
 class FooterWatermarkTests(TestCase):
@@ -129,6 +150,19 @@ class FooterWatermarkTests(TestCase):
             self.assertEqual(page.rotation, 90)
             pixmap = page.get_pixmap(clip=fitz.Rect(0, page.rect.height - 28, page.rect.width, page.rect.height), alpha=False)
             self.assertTrue(any(channel < 180 for channel in pixmap.samples))
+
+    def test_prepared_flipped_a5_footer_is_at_the_top_with_section_numbers(self):
+        path = self._pdf(pages=2)
+        stamp_pdf(path, filename="prepared.pdf", section_marks=[(0, 1, "s1")], at_top=True)
+        with fitz.open(path) as document:
+            for page in document:
+                self.assertEqual(tuple(page.rect), (0, 0, 595, 842))
+                self.assertLess(page.get_drawings()[0]["rect"].y1, 28.35)
+                footer = [span for block in page.get_text("dict")["blocks"] if "lines" in block
+                          for line in block["lines"] for span in line["spans"]
+                          if "prepared.pdf" in span["text"] or "s1" in span["text"]]
+                self.assertEqual(len(footer), 2)
+                self.assertTrue(all(span["bbox"][3] < 28.35 for span in footer))
 
 class GeneratedFilenameTests(TestCase):
     def test_name_is_descriptive_portable_and_bounded(self):

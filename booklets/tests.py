@@ -163,6 +163,24 @@ class BookletsViewTests(TestCase):
                     self.assertIn("s1.2", content)
                     self.assertIn("*", content)  # Original source marker remains.
 
+    def test_flipped_a5_watermark_is_at_top_of_final_pages(self):
+        self.client.get(reverse("booklets:clear"))
+        response = self.client.post(reverse("booklets:form"), data={
+            "input_pdf": [SimpleUploadedFile("source.pdf", build_pdf_bytes(4), content_type="application/pdf")],
+            "processing_mode": "separate", "booklet_layout": "flipped_a4",
+            "flipped_a4_prepare_for_a5_printing": "on", "flipped_a4_split_mode": "vector",
+            "watermark": "on", "watermark_filename": "on", "watermark_section_index": "on",
+            "file_add_watermark_0": "false",
+        })
+        self.assertEqual(response.status_code, 200)
+        artifact_id = response.context["results"][0]["artifact_id"]
+        with fitz.open(Artifact.objects.get(pk=artifact_id).path) as document:
+            for page in (document[0], document[-1]):
+                footer_shapes = [drawing for drawing in page.get_drawings()
+                                 if drawing["fill"] == (0.0, 0.0, 0.0) and drawing["rect"].y1 < 28.35]
+                self.assertTrue(footer_shapes)
+                self.assertIn("s1", page.get_text())
+
     def test_flipped_a4_quality_profiles_preserve_old_low_and_high_as_lower_options(self):
         form = BookletForm()
 

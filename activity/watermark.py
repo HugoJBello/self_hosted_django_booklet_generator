@@ -20,7 +20,8 @@ def numbered_sections(ranges: tuple[tuple[int, int], ...], *, parent: int | None
 
 
 def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
-              section_marks: tuple[tuple[int, int, str], ...] | list[tuple[int, int, str]] = ()) -> None:
+              section_marks: tuple[tuple[int, int, str], ...] | list[tuple[int, int, str]] = (),
+              at_top: bool = False) -> None:
     """Overlay a footer on the first and last physical pages, without resizing pages."""
     generated_at = timezone.localtime(generated_at or timezone.now())
     label = generated_at.strftime("%d/%m/%y %H:%M")
@@ -45,7 +46,7 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
             # 10 mm maximum height. The symbol sits closest to the physical corner.
             font_size = 6.5
             inset = 14.0  # About 5 mm from the trim edge for ordinary printers.
-            baseline = height - inset - 2.0
+            baseline = inset + 9.5 if at_top else height - inset - 2.0
             available = min(width * 0.44, 220.0)
             lines = [label]
             if basename:
@@ -92,7 +93,7 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
                 neighbor_width = footer_width + 8.0 if (page_number, right) in corners else 0.0
                 visual_x = (page.rect.width - 14.0 - neighbor_width - label_width
                             if right else 14.0 + neighbor_width)
-                visual_y = page.rect.height - 16.0
+                visual_y = 23.5 if at_top else page.rect.height - 16.0
                 point = fitz.Point(visual_x, visual_y) * page.derotation_matrix
                 page.insert_text(point, section_label, fontsize=5.8, fontname=font_name,
                                  color=(0, 0, 0), rotate=(-page.rotation) % 360,

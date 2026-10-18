@@ -11,6 +11,19 @@ from .filenames import generated_pdf_name
 from .watermark import stamp_pdf
 
 
+def watermark_at_top(tool, options):
+    """A5 prepared flipped booklets need their footer on the upper edge."""
+    if not options.get("flipped_a4_prepare_for_a5_printing"):
+        return False
+    if tool == "diary":
+        return options.get("output_mode") == "flipped_a4"
+    if tool == "booklets":
+        return options.get("booklet_layout") == "flipped_a4"
+    if tool == "splitpdf":
+        return bool(options.get("apply_booklets") and options.get("booklet_layout") == "flipped_a4")
+    return False
+
+
 def json_safe(value):
     if isinstance(value, dict):
         return {str(key): json_safe(item) for key, item in value.items()}
@@ -41,7 +54,8 @@ def record_activity(*, owner, tool, title, options, inputs=(), outputs=(), resto
                 name = generated_pdf_name(source_names=source_names, tool=tool, detail=name, index=index if len(entries) > 1 else None, used_names=used_names)
             if kind == "output" and options.get("watermark") and str(entry.get("content_type") or "application/pdf") == "application/pdf":
                 stamp_pdf(path, filename=name if options.get("watermark_filename") else "",
-                          section_marks=entry.get("section_marks", ()) if options.get("watermark_section_index") else ())
+                          section_marks=entry.get("section_marks", ()) if options.get("watermark_section_index") else (),
+                          at_top=watermark_at_top(tool, options))
             artifacts.append(Artifact(activity=activity, kind=kind, name=name, path=path, content_type=str(entry.get("content_type") or "application/pdf"), size=os.path.getsize(path) if os.path.isfile(path) else 0))
     Artifact.objects.bulk_create(artifacts)
     return activity

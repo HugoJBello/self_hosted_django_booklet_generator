@@ -13,6 +13,6 @@ class WatermarkFields(forms.Form):
     watermark_filename = forms.BooleanField(
         label="Include file name",
         required=False,
-        initial=False,
+        initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )

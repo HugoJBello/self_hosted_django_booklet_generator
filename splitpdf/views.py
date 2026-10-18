@@ -181,7 +181,7 @@ def _initial_from_state(state: dict[str, Any], selected_level: int | None = None
         "flipped_a4_center_gap_cm": state.get("flipped_a4_center_gap_cm", 1.0),
         "flipped_a4_prepare_for_a5_printing": state.get("flipped_a4_prepare_for_a5_printing", False),
         "watermark": state.get("watermark", False),
-        "watermark_filename": state.get("watermark_filename", False),
+        "watermark_filename": state.get("watermark_filename", True),
         "watermark_section_index": state.get("watermark_section_index", True),
     }
     return initial

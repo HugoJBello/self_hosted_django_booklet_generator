@@ -288,6 +288,31 @@ class PrintingViewsTests(TestCase):
         self.assertContains(response, f'id="printer-{self.printer.pk}" checked')
         self.assertContains(response, "Ready")
 
+    def test_upload_panel_contains_watermark_controls(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("printmanager:print"))
+        html = response.content.decode()
+        upload = html.split('id="upload-source"', 1)[1].split('id="recent-source"', 1)[0]
+        self.assertIn('id="print-watermark-container"', upload)
+        self.assertIn('data-watermark-options hidden', upload)
+        self.assertEqual(html.count('name="watermark"'), 1)
+
+    def test_uploaded_pdf_can_be_watermarked_before_printing(self):
+        self.client.force_login(self.user)
+        with fitz.open() as document:
+            document.new_page()
+            upload = SimpleUploadedFile("upload.pdf", document.tobytes(), content_type="application/pdf")
+        response = self.client.post(reverse("printmanager:print"), {
+            "printer": self.printer.pk, "source": "upload", "copies": 1,
+            "document": upload, "watermark": "on", "watermark_filename": "on",
+        })
+        self.assertEqual(response.status_code, 302)
+        job = PrintJob.objects.get()
+        with fitz.open(job.document_path) as document:
+            self.assertIn("upload.pdf", document[0].get_text())
+            self.assertEqual(len(document[0].get_drawings()), 2)
+        os.unlink(job.document_path)
+
     def test_user_can_attempt_an_offline_printer(self):
         self.availability.side_effect = None
         self.availability.return_value = [
