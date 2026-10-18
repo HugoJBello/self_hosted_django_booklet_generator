@@ -43,13 +43,14 @@ def converter_view(request):
                 options.update({"office_converter": "LibreOffice Writer", "office_layout": "Original document"})
             if has_image_sources:
                 options.update({f"image_{key}": value for key, value in image_options.items()})
+            options.update({key: form.cleaned_data[key] for key in ("watermark", "watermark_filename")})
             activity = record_activity(
                 owner=request.user, tool="documentconverter",
                 title=converted[0]["source_name"] if len(converted) == 1 else f"{len(converted)} converted documents",
                 options=options,
                 inputs=[{"name": item["source_name"], "path": item["source_path"], "content_type": item["content_type"]} for item in converted],
                 outputs=[{"name": item["output_name"], "path": item["output_path"], "content_type": "application/pdf"} for item in converted],
-                restore_state={"form_initial": image_options},
+                restore_state={"form_initial": {**image_options, **{key: options[key] for key in ("watermark", "watermark_filename")}}},
             )
             for artifact in activity.artifacts.filter(kind="input"):
                 sources.append({
@@ -64,7 +65,7 @@ def converter_view(request):
                     "preview_url": reverse("activity:preview", args=[artifact.public_id]),
                     "download_url": reverse("activity:file", args=[artifact.public_id]),
                 })
-            form = ConvertDocumentsForm(initial=image_options)
+            form = ConvertDocumentsForm(initial={**image_options, **{key: options[key] for key in ("watermark", "watermark_filename")}})
     return render(request, "documentconverter/form.html", {
         "form": form,
         "results": results,

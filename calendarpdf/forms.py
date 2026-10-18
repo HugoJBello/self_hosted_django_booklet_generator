@@ -1,4 +1,5 @@
 from django import forms
+from activity.watermark_form import WatermarkFields
 
 
 class MultiImageInput(forms.FileInput):
@@ -36,7 +37,7 @@ class SubjectFilterForm(forms.Form):
     )
 
 
-class CalendarForm(SubjectFilterForm):
+class CalendarForm(SubjectFilterForm, WatermarkFields):
     images = ImageFilesField(
         label="Compact timetables",
         required=False,

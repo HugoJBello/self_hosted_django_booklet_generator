@@ -180,6 +180,8 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "margin_cm": form.cleaned_data.get("margin_cm", 1.0),
             "preserve_file_parity": form.cleaned_data.get("preserve_file_parity", True),
             "generate_cover": form.cleaned_data.get("generate_cover", False),
+            "watermark": form.cleaned_data.get("watermark", False),
+            "watermark_filename": form.cleaned_data.get("watermark_filename", False),
             "side_by_side_prepare_for_portrait_printing": form.cleaned_data.get(
                 "side_by_side_prepare_for_portrait_printing",
                 True,

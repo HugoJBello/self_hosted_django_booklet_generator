@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from django import forms
+from activity.watermark_form import WatermarkFields
 
 
 class MultiFileInput(forms.FileInput):
@@ -35,7 +36,7 @@ class JoinUploadForm(forms.Form):
         )
 
 
-class JoinRunForm(forms.Form):
+class JoinRunForm(WatermarkFields):
     preserve_parity = forms.BooleanField(
         label="Preserve print parity (sections start on odd pages)",
         required=False,

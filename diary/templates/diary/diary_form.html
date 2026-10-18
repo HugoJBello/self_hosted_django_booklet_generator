@@ -251,6 +251,7 @@
               </section>
             </div>
 
+            {% include "activity/watermark_option.html" %}
             <div class="d-flex gap-2 mt-4">
               <button class="btn btn-primary" type="submit">{% if result_download_url %}Generate again{% else %}Generate diary{% endif %}</button>
               {% if result_download_url %}

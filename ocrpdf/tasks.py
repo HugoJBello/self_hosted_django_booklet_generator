@@ -6,6 +6,7 @@ from django.conf import settings
 
 from activity.models import Artifact
 from activity.filenames import generated_pdf_name
+from activity.watermark import stamp_pdf
 
 from .models import OcrJob
 from .services import build_ocr_pipeline
@@ -30,6 +31,9 @@ def run_ocr_job(job_id: str) -> None:
             force_ocr=job.force_ocr,
             optimize=job.optimize,
         )
+        if job.activity_id and job.activity.options.get("watermark"):
+            name = generated_pdf_name(source_names=[job.original_name], tool="ocrpdf") if job.activity.options.get("watermark_filename") else ""
+            stamp_pdf(result.output_pdf_path, filename=name)
         job.output_path = result.output_pdf_path
         job.status = "done"
         job.save(update_fields=["output_path", "status", "updated_at"])

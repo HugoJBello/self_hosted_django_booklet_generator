@@ -74,7 +74,8 @@ def ocr_view(request):
                 saved_inputs.append({"name": f.name, "path": upload_path})
                 queued_data.append((f.name, upload_path))
 
-            options = {"language": language, "deskew": deskew, "rotate_pages": rotate_pages, "force_ocr": force_ocr, "optimize": optimize}
+            options = {"language": language, "deskew": deskew, "rotate_pages": rotate_pages, "force_ocr": force_ocr, "optimize": optimize,
+                       "watermark": form.cleaned_data["watermark"], "watermark_filename": form.cleaned_data["watermark_filename"]}
             activity = record_activity(owner=request.user, tool="ocrpdf", title=f"OCR for {len(saved_inputs)} PDF(s)", options=options, inputs=saved_inputs, restore_state={"form_initial": options}, status="queued")
             for original_name, upload_path in queued_data:
                 job_id = uuid.uuid4().hex
@@ -115,6 +116,8 @@ def ocr_view(request):
                             "rotate_pages": rotate_pages,
                             "force_ocr": force_ocr,
                             "optimize": str(optimize),
+                            "watermark": options["watermark"],
+                            "watermark_filename": options["watermark_filename"],
                         }
                     ),
                     "jobs": created_jobs,

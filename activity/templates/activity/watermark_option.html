@@ -1,0 +1,11 @@
+<div class="border rounded-3 p-3 my-3 bg-light">
+  <div class="form-check">
+    {{ form.watermark }}
+    <label class="form-check-label fw-semibold" for="{{ form.watermark.id_for_label }}">{{ form.watermark.label }}</label>
+  </div>
+  <div class="form-text mb-2">A small date and time footer at the document edges, without changing page size.</div>
+  <div class="form-check ms-3">
+    {{ form.watermark_filename }}
+    <label class="form-check-label" for="{{ form.watermark_filename.id_for_label }}">{{ form.watermark_filename.label }}</label>
+  </div>
+</div>

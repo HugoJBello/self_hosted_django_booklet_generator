@@ -233,6 +233,7 @@
               </section>
             </div>
 
+            {% include "activity/watermark_option.html" %}
             <div class="d-flex gap-2 mt-4">
               <button class="btn btn-primary" type="submit">Generate booklets</button>
               <a class="btn btn-outline-secondary" href="{% url 'booklets:clear' %}">Clear all</a>
@@ -314,7 +315,7 @@
                     <div class="col-md-4 d-flex align-items-end">
                       <div class="form-check mb-2">
                         <input type="checkbox" class="form-check-input watermark-input" checked>
-                        <label class="form-check-label">Add watermark (*)</label>
+                        <label class="form-check-label">Mark this source with (*)</label>
                       </div>
                     </div>
                   </div>

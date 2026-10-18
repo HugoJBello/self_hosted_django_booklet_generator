@@ -117,6 +117,7 @@
               </div>
             </div>
 
+            {% include "activity/watermark_option.html" with form=run_form %}
             <div class="d-flex gap-2 mt-4">
               <button class="btn btn-success" type="submit" {% if not items or items|length == 0 %}disabled{% endif %}>
                 Join PDF

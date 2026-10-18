@@ -1,16 +1,82 @@
 import io
 import os
 import tempfile
+import datetime as dt
 import fitz
 from PIL import Image
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, SimpleTestCase
 from django.urls import reverse
 
 from .models import Artifact
 from .services import record_activity
 from .filenames import generated_pdf_name, portable_stem
+from .watermark import stamp_pdf
+
+
+class FooterWatermarkTests(SimpleTestCase):
+    def _pdf(self, pages=3):
+        handle, path = tempfile.mkstemp(suffix=".pdf")
+        os.close(handle)
+        document = fitz.open()
+        for _ in range(pages):
+            page = document.new_page(width=595, height=842)
+            page.insert_text((100, 100), "Existing content")
+        document.save(path)
+        document.close()
+        self.addCleanup(lambda: os.unlink(path))
+        return path
+
+    def test_regular_pdf_first_and_last_corners_and_bounded_filename(self):
+        path = self._pdf()
+        stamp_pdf(path, filename="Revisión " + "larguísimo" * 40 + ".pdf",
+                  generated_at=dt.datetime(2026, 10, 18, 14, 30, tzinfo=dt.timezone.utc))
+        with fitz.open(path) as document:
+            self.assertEqual(document.page_count, 3)
+            for page in document:
+                self.assertEqual(tuple(page.rect), (0, 0, 595, 842))
+                self.assertIn("Existing content", page.get_text())
+            self.assertNotIn("18/10/26", document[1].get_text())
+            for page, right in ((document[0], True), (document[-1], False)):
+                footer = [line for block in page.get_text("dict")["blocks"] if "lines" in block
+                          for line in block["lines"] if any("18/10/26" in span["text"] or "Revisión" in span["text"]
+                                                           for span in line["spans"])]
+                self.assertEqual(len(footer), 2)
+                self.assertLess(max(line["bbox"][3] for line in footer) - min(line["bbox"][1] for line in footer), 28.35)
+                self.assertTrue(all(line["bbox"][0] > 300 for line in footer) if right
+                                else all(line["bbox"][2] < 300 for line in footer))
+                self.assertTrue(all(line["bbox"][2] < 595 for line in footer))
+
+    def test_booklet_places_both_corners_on_first_physical_sheet(self):
+        path = self._pdf()
+        stamp_pdf(path, booklet=True)
+        with fitz.open(path) as document:
+            self.assertEqual(document[0].get_text().count("*"), 2)
+            self.assertEqual(document[-1].get_text().count("*"), 0)
+
+    def test_rotated_page_footer_remains_at_visual_bottom(self):
+        path = self._pdf(pages=1)
+        with fitz.open(path) as document:
+            document[0].set_rotation(90)
+            document.saveIncr()
+        stamp_pdf(path, booklet=True)
+        with fitz.open(path) as document:
+            page = document[0]
+            self.assertEqual(page.rotation, 90)
+            pixmap = page.get_pixmap(clip=fitz.Rect(0, page.rect.height - 28, page.rect.width, page.rect.height), alpha=False)
+            self.assertTrue(any(channel < 180 for channel in pixmap.samples))
+
+    def test_flipped_booklet_marks_both_outer_edges_of_first_sheet(self):
+        path = self._pdf()
+        stamp_pdf(path, booklet=True, flipped=True)
+        with fitz.open(path) as document:
+            page = document[0]
+            top = page.get_pixmap(clip=fitz.Rect(300, 0, 595, 28), alpha=False)
+            bottom = page.get_pixmap(clip=fitz.Rect(0, 814, 295, 842), alpha=False)
+            self.assertTrue(any(channel < 180 for channel in top.samples))
+            self.assertTrue(any(channel < 180 for channel in bottom.samples))
+            self.assertNotIn("*", document[-1].get_text())
 
 
 class GeneratedFilenameTests(TestCase):

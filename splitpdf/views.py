@@ -179,6 +179,8 @@ def _initial_from_state(state: dict[str, Any], selected_level: int | None = None
         "flipped_a4_split_mode": state.get("flipped_a4_split_mode", "vector"),
         "flipped_a4_center_gap_cm": state.get("flipped_a4_center_gap_cm", 1.0),
         "flipped_a4_prepare_for_a5_printing": state.get("flipped_a4_prepare_for_a5_printing", False),
+        "watermark": state.get("watermark", False),
+        "watermark_filename": state.get("watermark_filename", False),
     }
     return initial
 
@@ -315,6 +317,8 @@ def split_view(request):
                     "split_mode": split_mode,
                     "page_ranges": form.cleaned_data.get("page_ranges", ""),
                     "apply_booklets": bool(form.cleaned_data["apply_booklets"]),
+                    "watermark": bool(form.cleaned_data["watermark"]),
+                    "watermark_filename": bool(form.cleaned_data["watermark_filename"]),
                     "booklet_layout": form.cleaned_data["booklet_layout"],
                     "max_pages_per_split": form.cleaned_data["max_pages_per_split"],
                     "margin_cm": form.cleaned_data["margin_cm"],

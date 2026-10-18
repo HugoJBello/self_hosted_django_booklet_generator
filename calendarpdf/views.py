@@ -65,6 +65,8 @@ def calendar_view(request):
                     options = {
                         "filter_subjects": form.cleaned_data["filter_subjects"],
                         "subject_filter": form.cleaned_data["subject_filter"],
+                        "watermark": form.cleaned_data["watermark"],
+                        "watermark_filename": form.cleaned_data["watermark_filename"],
                     }
                     activity = record_activity(
                         owner=request.user, tool="calendarpdf", title=f"Calendar from {len(staged_uploads)} timetable(s)",

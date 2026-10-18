@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django import forms
+from activity.watermark_form import WatermarkFields
 
 from printmanager.forms import MultipleFileField, MultipleFileInput
 from printmanager.image_documents import IMAGE_SUFFIXES, PAPER_SIZES
@@ -8,7 +9,7 @@ from printmanager.image_documents import IMAGE_SUFFIXES, PAPER_SIZES
 OFFICE_SUFFIXES = {".doc", ".docx", ".odt"}
 
 
-class ConvertDocumentsForm(forms.Form):
+class ConvertDocumentsForm(WatermarkFields):
     documents = MultipleFileField(
         label="Documents or images",
         widget=MultipleFileInput(attrs={
@@ -23,7 +24,9 @@ class ConvertDocumentsForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
+        for name, field in self.fields.items():
+            if name in ("watermark", "watermark_filename"):
+                continue
             field.widget.attrs["class"] = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
 
     def clean_documents(self):

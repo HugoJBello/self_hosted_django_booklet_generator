@@ -2,6 +2,7 @@ import json
 import re
 
 from django import forms
+from activity.watermark_form import WatermarkFields
 
 from .models import Printer
 from .image_documents import IMAGE_SUFFIXES
@@ -58,7 +59,7 @@ class PrinterForm(forms.ModelForm):
         return instance
 
 
-class PrintForm(forms.Form):
+class PrintForm(WatermarkFields):
     printer = forms.ModelChoiceField(queryset=Printer.objects.none(), empty_label=None)
     source = forms.ChoiceField(choices=(("upload", "Upload documents"), ("recent", "Choose PDFs from recent activity"), ("job", "Reuse a print job")), widget=forms.RadioSelect)
     source_job = forms.IntegerField(required=False, widget=forms.HiddenInput)

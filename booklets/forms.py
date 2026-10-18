@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from django import forms
+from activity.watermark_form import WatermarkFields
 
 
 class MultiFileInput(forms.FileInput):
@@ -30,7 +31,7 @@ class MultipleFileField(forms.FileField):
         return [forms.FileField.clean(self, data, initial)]
 
 
-class BookletForm(forms.Form):
+class BookletForm(WatermarkFields):
     input_pdf = MultipleFileField(
         label="Upload PDF(s)",
         required=False,

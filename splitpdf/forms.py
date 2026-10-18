@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from django import forms
+from activity.watermark_form import WatermarkFields
 
 
-class SplitPdfForm(forms.Form):
+class SplitPdfForm(WatermarkFields):
     input_pdf = forms.FileField(
         label="Upload PDF",
         required=False,

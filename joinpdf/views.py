@@ -138,6 +138,8 @@ def join_view(request):
                 _save_items(request, items)
                 preserve_parity = bool(run_form.cleaned_data.get("preserve_parity"))
                 generate_cover = bool(run_form.cleaned_data.get("generate_cover"))
+                watermark = bool(run_form.cleaned_data.get("watermark"))
+                watermark_filename = bool(run_form.cleaned_data.get("watermark_filename"))
 
                 input_paths = [it.get("path") for it in items if it.get("path")]
                 display_names = [it.get("name", os.path.basename(it.get("path", ""))) for it in items if it.get("path")]
@@ -156,7 +158,8 @@ def join_view(request):
                 # Keep the list intact in case the user wants to join again with different options.
                 messages.success(request, "Joined PDF generated successfully.")
                 download_url = reverse("joinpdf:download", kwargs={"job_id": result.job_id})
-                options = {"preserve_parity": preserve_parity, "generate_cover": generate_cover}
+                options = {"preserve_parity": preserve_parity, "generate_cover": generate_cover,
+                           "watermark": watermark, "watermark_filename": watermark_filename}
                 activity = record_activity(
                     owner=request.user, tool="joinpdf", title=f"Joined {len(items)} PDF(s)", options=options,
                     inputs=[{"name": item.get("name"), "path": item["path"]} for item in items],
@@ -177,6 +180,8 @@ def join_view(request):
                             initial={
                                 "preserve_parity": preserve_parity,
                                 "generate_cover": generate_cover,
+                                "watermark": watermark,
+                                "watermark_filename": watermark_filename,
                             }
                         ),
                         "items": items,

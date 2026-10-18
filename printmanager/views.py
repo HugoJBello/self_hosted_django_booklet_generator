@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import uuid
 from functools import wraps
 
@@ -18,6 +19,7 @@ from django.views.decorators.cache import never_cache
 
 from activity.models import Artifact
 from activity.services import record_activity
+from activity.watermark import stamp_pdf
 
 from .forms import PrinterForm, PrintForm
 from .image_documents import convert_uploaded_image, is_supported_image
@@ -288,6 +290,19 @@ def print_document(request):
                     documents = [{"path": source_job.document_path, "name": source_job.document_name}]
                 else:
                     form.add_error("source_job", "This print document is no longer available.")
+                    documents = []
+            if documents and data["watermark"]:
+                try:
+                    stamped_dir = os.path.join(settings.MEDIA_ROOT, "print_watermark", uuid.uuid4().hex)
+                    os.makedirs(stamped_dir, exist_ok=True)
+                    for index, document in enumerate(documents):
+                        if not document.get("source_path"):
+                            copied_path = os.path.join(stamped_dir, f"{index + 1}.pdf")
+                            shutil.copy2(document["path"], copied_path)
+                            document["path"] = copied_path
+                        stamp_pdf(document["path"], filename=document["name"] if data["watermark_filename"] else "")
+                except (OSError, ValueError, fitz.FileDataError) as exc:
+                    form.add_error(None, f"The PDF footer could not be added: {exc}")
                     documents = []
             options = dict(data["extra_options"])
             for key in ("media", "sides", "orientation_requested", "print_color_mode"):
