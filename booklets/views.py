@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import uuid
 
+import fitz
 from django.conf import settings
 from django.contrib import messages
 from django.http import FileResponse, Http404
@@ -12,10 +13,10 @@ from django.urls import reverse
 
 from activity.services import record_activity
 from activity.models import Artifact
-from activity.workspaces import prepare_workspace
+from activity.workspaces import continue_workspace, prepare_workspace
 from activity.watermark import numbered_sections
 
-from .forms import BookletForm
+from .forms import BookletForm, BookletUploadForm
 from .flipped_a4 import build_flipped_a4_booklets_pipeline
 from .services import SourcePdfSpec, build_booklets_pipeline
 
@@ -100,7 +101,7 @@ def _legacy_items_from_uploads(files, request) -> list[dict]:
 def _items_from_request(request, files) -> list[dict]:
     posted_count = request.POST.get("file_count")
     if posted_count is None:
-        return _legacy_items_from_uploads(files, request)
+        return _legacy_items_from_uploads(files, request) if files else _get_items(request)
 
     try:
         count = int(posted_count)
@@ -162,15 +163,13 @@ def _items_for_template(items: list[dict]) -> list[dict]:
             "id": item.get("id", ""),
             "name": item.get("name", os.path.basename(item.get("path", ""))),
             "size": item.get("size", 0),
+            "page_count": item.get("page_count"),
             "parity": "true" if item.get("same_page_parity", True) else "false",
             "margin": str(item.get("margin_cm", 1.0)),
             "watermark": bool(item.get("add_watermark", False)),
             "preview_url": reverse("activity:workspace_preview", kwargs={"tool": "booklets", "file_id": item.get("id") or str(index)}),
         })
     return template_items
-
-    return specs
-
 
 def _build_initial_form(form: BookletForm) -> BookletForm:
     return BookletForm(
@@ -197,19 +196,61 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
     )
 
 
+def _render_booklets(request, *, form, items, results=(), upload_form=None):
+    return render(request, "booklets/booklets_form.html", {
+        "form": form,
+        "upload_form": upload_form or BookletUploadForm(),
+        "results": results,
+        "booklet_items": _items_for_template(items),
+    })
+
+
 def booklets_view(request):
     prepare_workspace(request, "booklets", SESSION_KEY)
     results = []
     items = _get_items(request)
 
     if request.method == "POST":
+        if request.POST.get("action") == "upload":
+            upload_form = BookletUploadForm(request.POST, request.FILES)
+            if upload_form.is_valid():
+                new_items = []
+                saved_paths = []
+                try:
+                    retained_items = _items_from_request(request, [])
+                    for uploaded in upload_form.cleaned_data["input_pdf"]:
+                        path = _save_uploaded_file(uploaded)
+                        saved_paths.append(path)
+                        with fitz.open(path) as document:
+                            if not document.is_pdf or not document.page_count:
+                                raise ValueError(f"'{uploaded.name}' is not a readable PDF with pages.")
+                            page_count = document.page_count
+                        new_items.append({
+                            "id": uuid.uuid4().hex, "name": uploaded.name, "path": path,
+                            "size": uploaded.size, "page_count": page_count,
+                            "same_page_parity": True, "margin_cm": 1.0, "add_watermark": True,
+                        })
+                except (fitz.FileDataError, OSError, ValueError) as exc:
+                    for path in saved_paths:
+                        if os.path.exists(path):
+                            os.unlink(path)
+                    upload_form.add_error("input_pdf", f"A PDF could not be loaded: {exc}")
+                else:
+                    _save_items(request, retained_items + new_items)
+                    if request.POST.get("processing_mode"):
+                        settings_form = BookletForm(request.POST)
+                        if settings_form.is_valid():
+                            request.session["booklets_pending_options"] = {
+                                key: value for key, value in settings_form.cleaned_data.items() if key != "input_pdf"
+                            }
+                    messages.success(request, f"{len(new_items)} PDF(s) uploaded. Review the files and generate your booklets.")
+                    continue_workspace(request, "booklets")
+                    return redirect("booklets:form")
+            return _render_booklets(request, form=BookletForm(), items=items, upload_form=upload_form)
+
         form = BookletForm(request.POST, request.FILES)
         if not form.is_valid():
-            return render(
-                request,
-                "booklets/booklets_form.html",
-                {"form": form, "results": [], "booklet_items": _items_for_template(items)},
-            )
+            return _render_booklets(request, form=form, items=items)
 
         files = form.cleaned_data.get("input_pdf") or request.FILES.getlist("input_pdf")
         processing_mode = form.cleaned_data["processing_mode"]
@@ -234,20 +275,12 @@ def booklets_view(request):
             items = _items_from_request(request, files)
             _save_items(request, items)
             if not items:
-                messages.error(request, "No file was received.")
-                return render(
-                    request,
-                    "booklets/booklets_form.html",
-                    {"form": form, "results": [], "booklet_items": _items_for_template(items)},
-                )
+                messages.error(request, "Upload at least one PDF before generating booklets.")
+                return _render_booklets(request, form=form, items=items)
             specs = _specs_from_items(items, margin_cm=margin_cm)
         except ValueError as exc:
             messages.error(request, str(exc))
-            return render(
-                request,
-                "booklets/booklets_form.html",
-                {"form": form, "results": [], "booklet_items": _items_for_template(items)},
-            )
+            return _render_booklets(request, form=form, items=items)
 
         try:
             pipeline = build_flipped_a4_booklets_pipeline if flipped_a4 else build_booklets_pipeline
@@ -319,30 +352,23 @@ def booklets_view(request):
             )
             output_artifacts = list(activity.artifacts.filter(kind="output"))
             for result_item, artifact in zip(results, output_artifacts):
+                result_item["filename"] = artifact.name
+                result_item["size"] = artifact.size
                 result_item["download_url"] = reverse("activity:file", kwargs={"public_id": artifact.public_id})
                 result_item["preview_url"] = reverse("activity:preview", kwargs={"public_id": artifact.public_id})
                 result_item["artifact_id"] = artifact.pk
 
-        return render(
-            request,
-            "booklets/booklets_form.html",
-            {
-                "form": _build_initial_form(form),
-                "results": results,
-                "booklet_items": _items_for_template(items),
-            },
-        )
+        return _render_booklets(request, form=_build_initial_form(form), items=items, results=results)
 
-    initial = request.session.pop("activity_initial_booklets", None)
-    return render(
-        request,
-        "booklets/booklets_form.html",
-        {"form": BookletForm(initial=initial), "results": results, "booklet_items": _items_for_template(items)},
-    )
+    initial = request.session.pop("booklets_pending_options", None)
+    if initial is None:
+        initial = request.session.pop("activity_initial_booklets", None)
+    return _render_booklets(request, form=BookletForm(initial=initial), items=items)
 
 
 def clear_booklets(request):
     _save_items(request, [])
+    request.session.pop("booklets_pending_options", None)
     messages.success(request, "File list cleared.")
     return redirect("booklets:form")
 

@@ -69,21 +69,41 @@
     <div class="tool-page col-12 col-xl-10">
       <h1 class="h3 mb-3"><i class="bi bi-book-half text-primary me-2" aria-hidden="true"></i>Generate booklets</h1>
 
-      <div class="card shadow-sm mb-4">
+      <section class="card shadow-sm mb-4" id="booklet-upload-step">
         <div class="card-body">
-          <form method="post" enctype="multipart/form-data" id="booklet-form">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <span class="badge rounded-pill text-bg-primary">1</span>
+            <div><h2 class="h5 mb-1">Upload source PDFs</h2><p class="text-muted small mb-0">Upload files first. Then review their order and booklet settings below.</p></div>
+          </div>
+          <form method="post" enctype="multipart/form-data" id="booklet-upload-form">
             {% csrf_token %}
-
-            <div class="mb-4">
-              <label class="form-label">{{ form.input_pdf.label }}</label>
-              <div class="file-dropzone" id="upload-dropzone">
-                <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></span><div><div class="file-dropzone-title">Drop PDFs here or choose files</div><div class="file-dropzone-description">{{ form.input_pdf.help_text }}</div></div></div>
-                {{ form.input_pdf }}
-              </div>
-              {% for e in form.input_pdf.errors %}
-                <div class="text-danger small mt-2">{{ e }}</div>
-              {% endfor %}
+            <input type="hidden" name="action" value="upload">
+            <label class="form-label" for="{{ upload_form.input_pdf.id_for_label }}">{{ upload_form.input_pdf.label }}</label>
+            <div class="file-dropzone" id="upload-dropzone">
+              <div class="file-dropzone-header"><span class="file-dropzone-icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></span><div><div class="file-dropzone-title">Drop PDFs here or choose files</div><div class="file-dropzone-description">{{ upload_form.input_pdf.help_text }}</div></div></div>
+              {{ upload_form.input_pdf }}
             </div>
+            {% for error in upload_form.input_pdf.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
+            <div id="upload-selection" class="small text-muted mt-2" aria-live="polite">No new PDFs selected.</div>
+            <button class="btn btn-primary mt-3" type="submit"><i class="bi bi-cloud-arrow-up me-1"></i>Upload PDFs</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="card shadow-sm mb-4" id="booklet-generate-step">
+        <div class="card-body">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <span class="badge rounded-pill text-bg-primary">2</span>
+            <div><h2 class="h5 mb-1">Configure and generate</h2><p class="text-muted small mb-0">Set the booklet layout, review each uploaded file, then generate the print PDFs.</p></div>
+          </div>
+          {% if booklet_items %}
+            <div class="alert alert-primary py-2 small">{{ booklet_items|length }} PDF{{ booklet_items|length|pluralize }} ready. You can reorder or remove files below before generating.</div>
+          {% else %}
+            <div class="alert alert-light border py-2 small">Upload at least one PDF to enable generation.</div>
+          {% endif %}
+          <form method="post" id="booklet-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="generate">
 
             <div class="generation-settings">
               <section class="settings-panel">
@@ -234,42 +254,6 @@
             </div>
 
             {% include "activity/watermark_option.html" %}
-            <div class="d-flex gap-2 mt-4">
-              <button class="btn btn-primary" type="submit">Generate booklets</button>
-              <a class="btn btn-outline-secondary" href="{% url 'booklets:clear' %}">Clear all</a>
-            </div>
-
-            {% if results and results|length > 0 %}
-              <div class="mt-4">
-                <h2 class="h5 mb-3">Results</h2>
-
-                <div class="border rounded-4 overflow-hidden">
-                  <div class="table-responsive">
-                    <table class="table mb-0 align-middle">
-                      <thead class="table-light">
-                        <tr>
-                          <th scope="col">File</th>
-                          <th scope="col" style="width: 1%;">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% for r in results %}
-                          <tr>
-                            <td class="text-break">{{ r.original_name }}</td>
-                            <td class="text-nowrap">
-                              {% include "activity/pdf_actions.html" with preview_url=r.preview_url download_url=r.download_url pdf_name=r.original_name artifact_id=r.artifact_id %}
-                            </td>
-                          </tr>
-                        {% endfor %}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <p class="text-muted mt-2 mb-0">Adjust any setting below and generate again to replace these results.</p>
-              </div>
-            {% endif %}
-
             <div class="mt-4">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h2 class="h5 mb-0">File settings</h2>
@@ -324,9 +308,40 @@
                 </div>
               </template>
             </div>
+            <div class="d-flex flex-wrap gap-2 mt-4">
+              <button class="btn btn-primary" type="submit" {% if not booklet_items %}disabled{% endif %}>Generate booklets</button>
+              {% if booklet_items %}<a class="btn btn-outline-secondary" href="{% url 'booklets:clear' %}">Clear uploaded files</a>{% endif %}
+            </div>
           </form>
         </div>
-      </div>
+      </section>
+
+      {% if results %}
+        <section class="card shadow-sm mb-4 border-success" id="booklet-results" aria-labelledby="booklet-results-title">
+          <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+              <div class="d-flex align-items-center gap-3"><span class="badge rounded-pill text-bg-success">3</span><h2 class="h5 mb-0" id="booklet-results-title">Results</h2></div>
+              <span class="badge text-bg-success">{{ results|length }} PDF{{ results|length|pluralize }} generated</span>
+            </div>
+            <div class="border rounded-3 overflow-hidden">
+              <div class="table-responsive">
+                <table class="table mb-0 align-middle">
+                  <thead class="table-light"><tr><th scope="col">Source</th><th scope="col">Generated PDF</th><th scope="col" style="width:1%">Actions</th></tr></thead>
+                  <tbody>
+                    {% for result in results %}
+                      <tr>
+                        <td class="text-break">{{ result.original_name }}</td>
+                        <td class="text-break"><strong>{{ result.filename }}</strong><div class="small text-muted">{{ result.size|filesizeformat }}</div></td>
+                        <td class="text-nowrap">{% include "activity/pdf_actions.html" with preview_url=result.preview_url download_url=result.download_url pdf_name=result.filename artifact_id=result.artifact_id %}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      {% endif %}
     </div>
   </div>
 
@@ -334,7 +349,9 @@
   <script>
     (() => {
       const form = document.getElementById("booklet-form");
-      const fileInput = form.querySelector('input[type="file"][name="input_pdf"]');
+      const uploadForm = document.getElementById("booklet-upload-form");
+      const fileInput = uploadForm.querySelector('input[type="file"][name="input_pdf"]');
+      const uploadSelection = document.getElementById("upload-selection");
       const dropzone = document.getElementById("upload-dropzone");
       const list = document.getElementById("file-config-list");
       const fileListError = document.getElementById("file-list-error");
@@ -358,22 +375,12 @@
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
       };
 
-      const syncInputFiles = () => {
-        const transfer = new DataTransfer();
-        selectedItems.forEach((item) => {
-          if (item.file) {
-            transfer.items.add(item.file);
-          }
-        });
-        fileInput.files = transfer.files;
-      };
-
       const rebuildHiddenInputs = (card, item, index) => {
         const hidden = card.querySelector(".hidden-inputs");
         const parity = card.querySelector(".parity-select").value;
         const margin = card.querySelector(".margin-input").value || "1.0";
         const watermark = card.querySelector(".watermark-input").checked ? "true" : "false";
-        const newIndex = item.id ? "" : selectedItems.slice(0, index + 1).filter((candidate) => !candidate.id).length - 1;
+        const newIndex = "";
 
         hidden.innerHTML = `
           <input type="hidden" name="file_item_id_${index}" value="${item.id || ""}">
@@ -394,23 +401,21 @@
           const card = fragment.querySelector(".file-config-card");
           card.dataset.index = index;
 
-          const fileName = item.file ? item.file.name : item.name;
-          const fileSize = item.file ? item.file.size : item.size;
+          const fileName = item.name;
+          const fileSize = item.size;
           card.querySelector(".file-name").textContent = `${index + 1}. ${fileName}`;
-          card.querySelector(".file-meta").textContent = item.id ? `${formatBytes(fileSize)} · uploaded` : formatBytes(fileSize);
+          card.querySelector(".file-meta").textContent = `${formatBytes(fileSize)} · ${item.page_count ? `${item.page_count} pages · ` : ""}uploaded`;
           card.querySelector(".parity-select").value = item.parity;
           card.querySelector(".margin-input").value = item.margin;
           card.querySelector(".watermark-input").checked = item.watermark;
           const sourcePreview = card.querySelector(".preview-source");
           sourcePreview.classList.add("pdf-preview-trigger");
-          if (item.file && !item.preview_url) item.preview_url = URL.createObjectURL(item.file);
           sourcePreview.dataset.pdfPreview = item.preview_url;
           sourcePreview.dataset.pdfDownload = sourcePreview.dataset.pdfPreview;
           sourcePreview.dataset.pdfName = fileName;
 
           card.querySelector(".remove-file").addEventListener("click", () => {
             selectedItems.splice(index, 1);
-            syncInputFiles();
             refreshCards();
           });
 
@@ -450,33 +455,12 @@
             const toIndex = Number(card.dataset.index);
             const [moved] = selectedItems.splice(fromIndex, 1);
             selectedItems.splice(toIndex, 0, moved);
-            syncInputFiles();
             refreshCards();
           });
 
           rebuildHiddenInputs(card, item, index);
           list.appendChild(fragment);
         });
-      };
-
-      const addFiles = (incomingFiles) => {
-        const pdfFiles = Array.from(incomingFiles).filter((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
-        if (!pdfFiles.length) {
-          return;
-        }
-        selectedItems = selectedItems.concat(
-          pdfFiles.map((file) => ({
-            file,
-            id: "",
-            name: file.name,
-            size: file.size,
-            parity: "true",
-            margin: "1.0",
-            watermark: true,
-          }))
-        );
-        syncInputFiles();
-        refreshCards();
       };
 
       const refreshModeUI = () => {
@@ -504,9 +488,13 @@
         }
       };
 
-      fileInput.addEventListener("change", (event) => {
-        addFiles(event.target.files);
-      });
+      const showUploadSelection = () => {
+        const files = Array.from(fileInput.files || []);
+        uploadSelection.textContent = files.length
+          ? `${files.length} PDF${files.length === 1 ? "" : "s"} selected: ${files.map((file) => file.name).join(", ")}`
+          : "No new PDFs selected.";
+      };
+      fileInput.addEventListener("change", showUploadSelection);
 
       dropzone.addEventListener("click", (event) => {
         if (event.target !== fileInput) {
@@ -524,7 +512,8 @@
         dropzone.addEventListener(eventName, (event) => {
           event.preventDefault();
           if (eventName === "drop") {
-            addFiles(event.dataTransfer.files);
+            fileInput.files = event.dataTransfer.files;
+            showUploadSelection();
           }
           dropzone.classList.remove("is-dragover");
         });
@@ -534,11 +523,27 @@
       layoutInputs.forEach((input) => input.addEventListener("change", refreshLayoutUI));
       splitModeInputs.forEach((input) => input.addEventListener("change", refreshSplitModeUI));
 
-      form.addEventListener("submit", () => {
-        refreshCards();
-        if (form.dataset.chunkUploadReady !== "true") {
-          syncInputFiles();
+      form.addEventListener("submit", refreshCards);
+
+      const uploadState = document.createElement("div");
+      uploadState.hidden = true;
+      uploadForm.append(uploadState);
+      uploadForm.addEventListener("submit", (event) => {
+        if (!fileInput.files.length && uploadForm.dataset.chunkUploadReady !== "true") {
+          event.preventDefault();
+          fileInput.focus();
+          return;
         }
+        refreshCards();
+        const settings = Array.from(new FormData(form), ([name, value]) => {
+          if (name === "csrfmiddlewaretoken" || name === "action") return null;
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = name;
+          input.value = value;
+          return input;
+        }).filter(Boolean);
+        uploadState.replaceChildren(...settings);
       });
 
       form.addEventListener("submit", (event) => {
@@ -551,10 +556,12 @@
         fileListError.scrollIntoView({ block: "center", behavior: "smooth" });
       });
 
-      syncInputFiles();
       refreshCards();
+      showUploadSelection();
       refreshModeUI();
       refreshLayoutUI();
+      const results = document.getElementById("booklet-results");
+      if (results) requestAnimationFrame(() => results.scrollIntoView({block: "start"}));
     })();
   </script>
 {% endblock %}

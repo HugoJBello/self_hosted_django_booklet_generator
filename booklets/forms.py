@@ -31,6 +31,23 @@ class MultipleFileField(forms.FileField):
         return [forms.FileField.clean(self, data, initial)]
 
 
+class BookletUploadForm(forms.Form):
+    input_pdf = MultipleFileField(
+        label="Upload PDF(s)",
+        required=True,
+        help_text="Select or drag one or more PDFs. Upload them before configuring the booklets.",
+        widget=MultiFileInput(attrs={"multiple": True, "class": "form-control", "accept": "application/pdf,.pdf"}),
+    )
+
+    def clean_input_pdf(self):
+        files = self.cleaned_data["input_pdf"]
+        if not files:
+            raise forms.ValidationError("Select at least one PDF to upload.")
+        if any(not uploaded.name.lower().endswith(".pdf") for uploaded in files):
+            raise forms.ValidationError("Choose PDF files only.")
+        return files
+
+
 class BookletForm(WatermarkFields):
     input_pdf = MultipleFileField(
         label="Upload PDF(s)",

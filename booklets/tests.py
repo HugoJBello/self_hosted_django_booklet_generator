@@ -55,6 +55,69 @@ class BookletsViewTests(TestCase):
         self.assertEqual(form.fields["margin_cm"].initial, 1.0)
         self.assertContains(self.client.get(reverse("booklets:form")), "Outer margin (cm)")
 
+    def test_upload_and_generation_are_separate_steps_with_results_below(self):
+        initial = self.client.get(reverse("booklets:form"))
+        self.assertContains(initial, 'id="booklet-upload-form"')
+        self.assertContains(initial, 'id="booklet-form"')
+        self.assertNotContains(initial, 'id="booklet-results"')
+
+        upload = self.client.post(reverse("booklets:form"), {
+            "action": "upload",
+            "input_pdf": [SimpleUploadedFile("source.pdf", build_pdf_bytes(4), content_type="application/pdf")],
+        })
+        self.assertRedirects(upload, reverse("booklets:form"), fetch_redirect_response=False)
+        self.assertFalse(os.path.exists(os.path.join(TEST_MEDIA_ROOT, "booklets_outputs")))
+        items = self.client.session["booklets_items"]
+        self.assertEqual(len(items), 1)
+
+        staged = self.client.get(reverse("booklets:form"))
+        self.assertContains(staged, "1 PDF ready")
+        self.assertContains(staged, "source.pdf")
+        result = self.client.post(reverse("booklets:form"), {
+            "action": "generate", "processing_mode": "separate", "booklet_layout": "side_by_side",
+            "file_count": "1", "file_item_id_0": items[0]["id"],
+            "file_same_page_parity_0": "true", "file_margin_0": "1.0", "file_add_watermark_0": "false",
+        })
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(len(result.context["results"]), 1)
+        html = result.content.decode()
+        self.assertIn('id="booklet-results"', html)
+        self.assertLess(html.index('</form>', html.index('id="booklet-form"')), html.index('id="booklet-results"'))
+        self.assertContains(result, result.context["results"][0]["filename"])
+
+    def test_second_upload_preserves_reordered_file_settings(self):
+        self.client.post(reverse("booklets:form"), {
+            "action": "upload",
+            "input_pdf": [SimpleUploadedFile("first.pdf", build_pdf_bytes(2), content_type="application/pdf")],
+        })
+        first = self.client.session["booklets_items"][0]
+        second = self.client.post(reverse("booklets:form"), {
+            "action": "upload", "file_count": "1", "file_item_id_0": first["id"],
+            "file_same_page_parity_0": "false", "file_margin_0": "1.5", "file_add_watermark_0": "false",
+            "processing_mode": "combined", "booklet_layout": "flipped_a4",
+            "input_pdf": [SimpleUploadedFile("second.pdf", build_pdf_bytes(3), content_type="application/pdf")],
+        })
+        self.assertRedirects(second, reverse("booklets:form"), fetch_redirect_response=False)
+        items = self.client.session["booklets_items"]
+        self.assertEqual([item["name"] for item in items], ["first.pdf", "second.pdf"])
+        self.assertFalse(items[0]["same_page_parity"])
+        self.assertEqual(items[0]["margin_cm"], 1.5)
+        self.assertFalse(items[0]["add_watermark"])
+        staged = self.client.get(reverse("booklets:form"))
+        self.assertEqual(staged.context["form"]["processing_mode"].value(), "combined")
+        self.assertEqual(staged.context["form"]["booklet_layout"].value(), "flipped_a4")
+
+    def test_upload_rejects_invalid_pdf_before_generation(self):
+        empty = self.client.post(reverse("booklets:form"), {"action": "upload"})
+        self.assertContains(empty, "Select at least one PDF to upload.")
+        response = self.client.post(reverse("booklets:form"), {
+            "action": "upload",
+            "input_pdf": [SimpleUploadedFile("broken.pdf", b"invalid", content_type="application/pdf")],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A PDF could not be loaded")
+        self.assertEqual(self.client.session.get("booklets_items", []), [])
+
     def test_prepare_pages_for_specs_inserts_blank_to_preserve_even_start(self):
         tmpdir = tempfile.mkdtemp(prefix="booklets_specs_")
         try:
