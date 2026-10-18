@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 import uuid
+from contextlib import contextmanager
+from dataclasses import replace
 
 import fitz
 from django.conf import settings
@@ -10,11 +14,12 @@ from django.contrib import messages
 from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from activity.services import record_activity
 from activity.models import Artifact
 from activity.workspaces import continue_workspace, prepare_workspace
-from activity.watermark import numbered_sections
+from activity.watermark import numbered_sections, stamp_pdf
 
 from .forms import BookletForm, BookletUploadForm
 from .flipped_a4 import build_flipped_a4_booklets_pipeline
@@ -67,6 +72,43 @@ def _save_uploaded_file(uploaded_file) -> str:
         for chunk in uploaded_file.chunks():
             out.write(chunk)
     return upload_path
+
+
+@contextmanager
+def _combined_source_specs(specs, items, *, watermark: bool, include_filename: bool,
+                           side_by_side: bool):
+    """Stamp temporary source copies while keeping uploaded PDFs reusable."""
+    if not watermark:
+        yield specs
+        return
+
+    with tempfile.TemporaryDirectory(prefix="booklets_watermark_") as directory:
+        prepared_specs = []
+        generated_at = timezone.now()
+        for index, (spec, item) in enumerate(zip(specs, items), start=1):
+            source_name = str(item.get("name") or os.path.basename(spec.input_pdf_path))
+            safe_name = os.path.basename(source_name.replace("\\", "/")) or f"source-{index}.pdf"
+            source_dir = os.path.join(directory, str(index))
+            os.makedirs(source_dir)
+            source_copy = os.path.join(source_dir, safe_name)
+            shutil.copyfile(spec.input_pdf_path, source_copy)
+            stamp_pdf(source_copy, filename=source_name if include_filename else "", generated_at=generated_at)
+            if side_by_side:
+                # Its content detector must see the original page bounds. Keep
+                # the prepared mark in a transparent layer for the same cell.
+                overlay_path = os.path.join(source_dir, "watermark_overlay.pdf")
+                with fitz.open(spec.input_pdf_path) as original, fitz.open() as overlay:
+                    for page in original:
+                        overlay.new_page(width=page.rect.width, height=page.rect.height)
+                    overlay.save(overlay_path)
+                stamp_pdf(overlay_path, filename=source_name if include_filename else "",
+                          generated_at=generated_at)
+                prepared_specs.append(replace(spec, input_pdf_path=source_copy,
+                                              render_pdf_path=spec.input_pdf_path,
+                                              watermark_overlay_path=overlay_path))
+            else:
+                prepared_specs.append(replace(spec, input_pdf_path=source_copy))
+        yield prepared_specs
 
 
 def _parse_margin(value: str | None, filename: str) -> float:
@@ -285,14 +327,12 @@ def booklets_view(request):
         try:
             pipeline = build_flipped_a4_booklets_pipeline if flipped_a4 else build_booklets_pipeline
             if processing_mode == "combined":
-                separate_sources = bool(form.cleaned_data.get("watermark") and len(specs) > 1)
+                combined_watermark = bool(form.cleaned_data["watermark"])
                 pipeline_kwargs = {
-                    "specs": specs,
                     "max_pages_per_split": max_pages_per_split,
                     "final_output_dir": outputs_dir,
                     "preserve_file_parity": preserve_file_parity,
                     "generate_cover": generate_cover,
-                    "separate_sources": separate_sources,
                 }
                 if flipped_a4:
                     pipeline_kwargs["render_quality"] = flipped_a4_quality
@@ -301,16 +341,12 @@ def booklets_view(request):
                     pipeline_kwargs["prepare_for_a5_printing"] = flipped_a4_prepare_for_a5_printing
                 else:
                     pipeline_kwargs["prepare_for_portrait_printing"] = side_by_side_prepare_for_portrait_printing
-                result = pipeline(**pipeline_kwargs)
-                watermark_ranges = []
-                if separate_sources:
-                    for section_start, section_end in result.section_ranges:
-                        source_name = ""  # The optional index cover has no source filename.
-                        for item, (source_start, source_end) in zip(items, result.source_ranges):
-                            if source_start <= section_start and section_end <= source_end:
-                                source_name = item["name"]
-                                break
-                        watermark_ranges.append((section_start, section_end, source_name))
+                with _combined_source_specs(
+                    specs, items, watermark=combined_watermark,
+                    include_filename=bool(form.cleaned_data["watermark_filename"]),
+                    side_by_side=not flipped_a4,
+                ) as source_specs:
+                    result = pipeline(specs=source_specs, **pipeline_kwargs)
                 results.append(
                     {
                         "original_name": "Combined print file",
@@ -320,7 +356,7 @@ def booklets_view(request):
                 generated_outputs.append({
                     "name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path,
                     "section_marks": numbered_sections(result.section_ranges),
-                    "watermark_ranges": watermark_ranges,
+                    "watermark_preapplied": combined_watermark,
                 })
                 messages.success(request, "Combined booklet generated successfully.")
             else:

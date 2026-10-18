@@ -16,6 +16,8 @@ class SourcePdfSpec:
     same_page_parity: bool
     margin_cm: float
     add_watermark: bool
+    render_pdf_path: str | None = None
+    watermark_overlay_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,8 @@ class PreparedPage:
     height: float
     margin_cm: float
     add_watermark: bool = False
+    render_pdf_path: str | None = None
+    watermark_overlay_path: str | None = None
 
     @property
     def is_blank(self) -> bool:
@@ -37,7 +41,6 @@ class BookletJobResult:
     job_id: str
     output_pdf_path: str
     section_ranges: tuple[tuple[int, int], ...] = ()
-    source_ranges: tuple[tuple[int, int], ...] = ()
 
 
 def detect_content_bbox(page: fitz.Page, margin_pts: float) -> fitz.Rect:
@@ -120,8 +123,7 @@ def prepare_pdf_for_portrait_printing(input_pdf_path: str, output_pdf_path: str)
                 if "source page empty" not in str(exc):
                     raise
 
-        # Preserve page identity for later page-specific watermarks.
-        output_doc.save(output_pdf_path, garbage=3, deflate=True)
+        output_doc.save(output_pdf_path, garbage=4, deflate=True)
     finally:
         output_doc.close()
         source_doc.close()
@@ -199,6 +201,9 @@ def prepare_pages_for_specs(
                         height=page.rect.height,
                         margin_cm=spec.margin_cm,
                         add_watermark=spec.add_watermark and page_number == 0,
+                        render_pdf_path=spec.render_pdf_path,
+                        watermark_overlay_path=(spec.watermark_overlay_path
+                                                if page_number in (0, len(doc) - 1) else None),
                     )
                 )
 
@@ -253,10 +258,11 @@ def create_booklet(
                 assert prepared_page.source_pdf_path is not None
                 assert prepared_page.source_page_number is not None
 
-                doc_in = source_docs.get(prepared_page.source_pdf_path)
+                render_path = prepared_page.render_pdf_path or prepared_page.source_pdf_path
+                doc_in = source_docs.get(render_path)
                 if doc_in is None:
-                    doc_in = fitz.open(prepared_page.source_pdf_path)
-                    source_docs[prepared_page.source_pdf_path] = doc_in
+                    doc_in = fitz.open(render_path)
+                    source_docs[render_path] = doc_in
 
                 page_in = doc_in[prepared_page.source_page_number]
                 margin_pts = prepared_page.margin_cm * 72 / 2.54
@@ -297,6 +303,17 @@ def create_booklet(
                             fill=(1, 1, 1),
                         )
 
+                if prepared_page.watermark_overlay_path:
+                    overlay = source_docs.get(prepared_page.watermark_overlay_path)
+                    if overlay is None:
+                        overlay = fitz.open(prepared_page.watermark_overlay_path)
+                        source_docs[prepared_page.watermark_overlay_path] = overlay
+                    page_out.show_pdf_page(
+                        fitz.Rect(cell_x0 + margin_pts, cell_y0 + margin_pts,
+                                  cell_x1 - margin_pts, cell_y1 - margin_pts),
+                        overlay, prepared_page.source_page_number, rotate=rotation,
+                    )
+
             def get_rotation(prepared_page: PreparedPage) -> int:
                 if prepared_page.is_blank:
                     return 0
@@ -304,10 +321,11 @@ def create_booklet(
                 assert prepared_page.source_pdf_path is not None
                 assert prepared_page.source_page_number is not None
 
-                doc_in = source_docs.get(prepared_page.source_pdf_path)
+                render_path = prepared_page.render_pdf_path or prepared_page.source_pdf_path
+                doc_in = source_docs.get(render_path)
                 if doc_in is None:
-                    doc_in = fitz.open(prepared_page.source_pdf_path)
-                    source_docs[prepared_page.source_pdf_path] = doc_in
+                    doc_in = fitz.open(render_path)
+                    source_docs[render_path] = doc_in
 
                 page_in = doc_in[prepared_page.source_page_number]
                 return (page_in.rotation + 180) % 360 if sheet_number % 2 == 1 else page_in.rotation
@@ -346,7 +364,6 @@ def build_booklets_pipeline(
     preserve_file_parity: bool = True,
     generate_cover: bool = False,
     prepare_for_portrait_printing: bool = False,
-    separate_sources: bool = False,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -375,27 +392,19 @@ def build_booklets_pipeline(
                 ),
             )
 
-        if separate_sources:
-            groups = ([[specs_to_process[0]]] if generate_cover else []) + [[spec] for spec in specs]
-        else:
-            groups = [specs_to_process]
+        prepared_pages = prepare_pages_for_specs(specs_to_process, preserve_file_parity=preserve_file_parity)
+        split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
         split_outputs: list[str] = []
         section_ranges: list[tuple[int, int]] = []
-        source_ranges: list[tuple[int, int]] = []
         output_page_count = 0
 
-        for group_index, group in enumerate(groups):
-            first_page = output_page_count
-            prepared_pages = prepare_pages_for_specs(group, preserve_file_parity=preserve_file_parity)
-            for start_idx, end_idx in compute_split_ranges(len(prepared_pages), max_pages_per_split):
-                output_path = os.path.join(tmp, f"split{len(split_outputs) + 1:02}_booklet.pdf")
-                create_booklet(prepared_pages[start_idx:end_idx + 1], output_path)
-                split_outputs.append(output_path)
-                with fitz.open(output_path) as section_pdf:
-                    section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
-                    output_page_count += section_pdf.page_count
-            if separate_sources and (not generate_cover or group_index > 0):
-                source_ranges.append((first_page, output_page_count - 1))
+        for split_idx, (start_idx, end_idx) in enumerate(split_ranges, start=1):
+            output_path = os.path.join(tmp, f"split{split_idx:02}_booklet.pdf")
+            create_booklet(prepared_pages[start_idx:end_idx + 1], output_path)
+            split_outputs.append(output_path)
+            with fitz.open(output_path) as section_pdf:
+                section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
+                output_page_count += section_pdf.page_count
 
         if prepare_for_portrait_printing:
             merged_pdf = os.path.join(tmp, "merged_booklet.pdf")
@@ -404,5 +413,4 @@ def build_booklets_pipeline(
         else:
             merge_pdfs(split_outputs, final_pdf)
 
-    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf,
-                            section_ranges=tuple(section_ranges), source_ranges=tuple(source_ranges))
+    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf, section_ranges=tuple(section_ranges))

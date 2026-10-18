@@ -415,8 +415,7 @@ def prepare_pdf_for_a5_printing(input_pdf_path: str, output_pdf_path: str) -> No
                 if "source page empty" not in str(exc):
                     raise
 
-        # Preserve page identity for later page-specific watermarks.
-        output_doc.save(output_pdf_path, garbage=3, deflate=True)
+        output_doc.save(output_pdf_path, garbage=4, deflate=True)
     finally:
         output_doc.close()
         source_doc.close()
@@ -432,7 +431,6 @@ def build_flipped_a4_booklets_pipeline(
     center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
     split_mode: FlippedA4SplitMode = "vector",
     prepare_for_a5_printing: bool = False,
-    separate_sources: bool = False,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -442,35 +440,29 @@ def build_flipped_a4_booklets_pipeline(
     final_pdf = os.path.join(final_output_dir, f"{job_id}_flipped_a4_booklets_for_printing.pdf")
 
     with tempfile.TemporaryDirectory(prefix=f"pdf_manager_{job_id}_") as tmp:
-        groups = [[spec] for spec in specs] if separate_sources else [list(specs)]
+        prepared_pages = prepare_pages_for_specs(list(specs), preserve_file_parity=preserve_file_parity)
+        split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
         split_outputs: list[str] = []
         section_ranges: list[tuple[int, int]] = []
-        source_ranges: list[tuple[int, int]] = []
         output_page_count = 0
         cover_entries = collect_cover_entries([spec.input_pdf_path for spec in specs]) if generate_cover else None
 
-        for group in groups:
-            first_page = output_page_count
-            prepared_pages = prepare_pages_for_specs(group, preserve_file_parity=preserve_file_parity)
-            for start_idx, end_idx in compute_split_ranges(len(prepared_pages), max_pages_per_split):
-                split_idx = len(split_outputs) + 1
-                output_path = os.path.join(tmp, f"split{split_idx:02}_flipped_a4_booklet.pdf")
-                create_flipped_a4_booklet(
-                    prepared_pages[start_idx : end_idx + 1],
-                    output_path,
-                    render_quality=render_quality,
-                    center_gap_cm=center_gap_cm,
-                    split_mode=split_mode,
-                    rotate_even_half_pages=not prepare_for_a5_printing,
-                    swap_even_half_pages=prepare_for_a5_printing,
-                    cover_entries=cover_entries if split_idx == 1 else None,
-                )
-                split_outputs.append(output_path)
-                with fitz.open(output_path) as section_pdf:
-                    section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
-                    output_page_count += section_pdf.page_count
-            if separate_sources:
-                source_ranges.append((first_page, output_page_count - 1))
+        for split_idx, (start_idx, end_idx) in enumerate(split_ranges, start=1):
+            output_path = os.path.join(tmp, f"split{split_idx:02}_flipped_a4_booklet.pdf")
+            create_flipped_a4_booklet(
+                prepared_pages[start_idx : end_idx + 1],
+                output_path,
+                render_quality=render_quality,
+                center_gap_cm=center_gap_cm,
+                split_mode=split_mode,
+                rotate_even_half_pages=not prepare_for_a5_printing,
+                swap_even_half_pages=prepare_for_a5_printing,
+                cover_entries=cover_entries if split_idx == 1 else None,
+            )
+            split_outputs.append(output_path)
+            with fitz.open(output_path) as section_pdf:
+                section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
+                output_page_count += section_pdf.page_count
 
         if prepare_for_a5_printing:
             merged_pdf = os.path.join(tmp, "merged_flipped_a4_booklet.pdf")
@@ -479,5 +471,4 @@ def build_flipped_a4_booklets_pipeline(
         else:
             merge_pdfs(split_outputs, final_pdf)
 
-    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf,
-                            section_ranges=tuple(section_ranges), source_ranges=tuple(source_ranges))
+    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf, section_ranges=tuple(section_ranges))

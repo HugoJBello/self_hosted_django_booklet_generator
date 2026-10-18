@@ -357,69 +357,75 @@ class BookletsViewTests(TestCase):
         generated_files = [name for name in os.listdir(outputs_dir) if name.endswith(".pdf")]
         self.assertEqual(len(generated_files), 1)
 
-    def test_combined_watermark_uses_each_source_name_on_its_own_booklet_sections(self):
+    def test_combined_watermark_preserves_one_booklet_and_source_files(self):
         for layout in ("side_by_side", "flipped_a4"):
             with self.subTest(layout=layout):
                 self.client.get(reverse("booklets:clear"))
-                response = self.client.post(reverse("booklets:form"), data={
-                    "input_pdf": [
-                        SimpleUploadedFile("alpha.pdf", build_pdf_bytes(4), content_type="application/pdf"),
-                        SimpleUploadedFile("beta.pdf", build_pdf_bytes(4), content_type="application/pdf"),
-                    ],
+                options = {
                     "processing_mode": "combined", "booklet_layout": layout,
-                    "max_pages_per_split": "2", "flipped_a4_split_mode": "vector",
-                    "watermark": "on", "watermark_filename": "on",
-                    "file_add_watermark_0": "false", "file_add_watermark_1": "false",
-                })
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(len(response.context["results"]), 1)
-                artifact_id = response.context["results"][0]["artifact_id"]
-                with fitz.open(Artifact.objects.get(pk=artifact_id).path) as document:
-                    names = [
-                        ("alpha.pdf" in page.get_text(), "beta.pdf" in page.get_text())
-                        for page in document
-                    ]
-                    self.assertGreaterEqual(len(names), 4)
-                    self.assertFalse(any(first and second for first, second in names), names)
-                    marked_names = [name for name in names if any(name)]
-                    self.assertGreaterEqual(marked_names.count((True, False)), 2)
-                    self.assertGreaterEqual(marked_names.count((False, True)), 2)
-                    self.assertEqual(marked_names, sorted(marked_names, reverse=True))
-
-    def test_combined_watermark_keeps_source_names_with_cover_and_print_preparation(self):
-        for layout in ("side_by_side", "flipped_a4"):
-            with self.subTest(layout=layout):
-                self.client.get(reverse("booklets:clear"))
-                response = self.client.post(reverse("booklets:form"), data={
-                    "input_pdf": [
-                        SimpleUploadedFile("alpha.pdf", build_pdf_bytes(2), content_type="application/pdf"),
-                        SimpleUploadedFile("beta.pdf", build_pdf_bytes(2), content_type="application/pdf"),
-                    ],
-                    "processing_mode": "combined", "booklet_layout": layout,
-                    "generate_cover": "on", "watermark": "on", "watermark_filename": "on",
-                    "watermark_section_index": "on",
+                    "preserve_file_parity": "on", "flipped_a4_split_mode": "vector",
                     "side_by_side_prepare_for_portrait_printing": "on",
                     "flipped_a4_prepare_for_a5_printing": "on",
-                    "flipped_a4_split_mode": "vector",
+                    "file_add_watermark_0": "false", "file_add_watermark_1": "false",
+                }
+                baseline = self.client.post(reverse("booklets:form"), data={
+                    **options,
+                    "input_pdf": [
+                        SimpleUploadedFile("alpha.pdf", build_pdf_bytes(1), content_type="application/pdf"),
+                        SimpleUploadedFile("beta.pdf", build_pdf_bytes(1), content_type="application/pdf"),
+                    ],
+                })
+                self.assertEqual(baseline.status_code, 200)
+                baseline_path = Artifact.objects.get(pk=baseline.context["results"][0]["artifact_id"]).path
+
+                marked = self.client.post(reverse("booklets:form"), data={
+                    **options, "watermark": "on", "watermark_filename": "on",
+                    "watermark_section_index": "on",
+                })
+                self.assertEqual(marked.status_code, 200)
+                self.assertEqual(len(marked.context["results"]), 1)
+                marked_path = Artifact.objects.get(pk=marked.context["results"][0]["artifact_id"]).path
+                with fitz.open(baseline_path) as original, fitz.open(marked_path) as output:
+                    self.assertEqual(output.page_count, original.page_count)
+                    def source_boxes(document):
+                        return [
+                            [tuple(round(value, 1) for value in block[:4])
+                             for block in page.get_text("blocks") if "Page 1" in block[4]]
+                            for page in document
+                        ]
+                    self.assertEqual(source_boxes(output), source_boxes(original))
+                    self.assertEqual(
+                        [page.get_text().count("Page 1") for page in output],
+                        [page.get_text().count("Page 1") for page in original],
+                    )
+                    text = "".join(page.get_text() for page in output)
+                    self.assertIn("alpha.pdf", text)
+                    self.assertIn("beta.pdf", text)
+                    self.assertIn("s1", text)
+
+                for item in self.client.session["booklets_items"]:
+                    with fitz.open(item["path"]) as uploaded:
+                        self.assertNotIn(item["name"], uploaded[0].get_text())
+
+    def test_combined_watermark_marks_both_ends_of_each_multipage_source(self):
+        for layout in ("side_by_side", "flipped_a4"):
+            with self.subTest(layout=layout):
+                self.client.get(reverse("booklets:clear"))
+                response = self.client.post(reverse("booklets:form"), data={
+                    "input_pdf": [
+                        SimpleUploadedFile("alpha.pdf", build_pdf_bytes(3), content_type="application/pdf"),
+                        SimpleUploadedFile("beta.pdf", build_pdf_bytes(3), content_type="application/pdf"),
+                    ],
+                    "processing_mode": "combined", "booklet_layout": layout,
+                    "flipped_a4_split_mode": "vector", "watermark": "on", "watermark_filename": "on",
                     "file_add_watermark_0": "false", "file_add_watermark_1": "false",
                 })
                 self.assertEqual(response.status_code, 200)
-                artifact_id = response.context["results"][0]["artifact_id"]
-                with fitz.open(Artifact.objects.get(pk=artifact_id).path) as document:
-                    at_top = layout == "flipped_a4"
-                    marked_names = [
-                        (
-                            "alpha.pdf" in page.get_text(clip=fitz.Rect(0, 0 if at_top else page.rect.height - 30,
-                                                                         page.rect.width, 30 if at_top else page.rect.height)),
-                            "beta.pdf" in page.get_text(clip=fitz.Rect(0, 0 if at_top else page.rect.height - 30,
-                                                                        page.rect.width, 30 if at_top else page.rect.height)),
-                        )
-                        for page in document
-                    ]
-                    marked_names = [name for name in marked_names if any(name)]
-                    self.assertIn((True, False), marked_names)
-                    self.assertIn((False, True), marked_names)
-                    self.assertEqual(marked_names, sorted(marked_names, reverse=True))
+                path = Artifact.objects.get(pk=response.context["results"][0]["artifact_id"]).path
+                with fitz.open(path) as output:
+                    text = "".join(page.get_text() for page in output)
+                    self.assertEqual(text.count("alpha.pdf"), 2)
+                    self.assertEqual(text.count("beta.pdf"), 2)
 
     def test_uploaded_files_persist_for_regeneration(self):
         first_response = self.client.post(
