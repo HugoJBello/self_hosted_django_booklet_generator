@@ -37,6 +37,7 @@ class BookletJobResult:
     job_id: str
     output_pdf_path: str
     section_ranges: tuple[tuple[int, int], ...] = ()
+    source_ranges: tuple[tuple[int, int], ...] = ()
 
 
 def detect_content_bbox(page: fitz.Page, margin_pts: float) -> fitz.Rect:
@@ -119,7 +120,8 @@ def prepare_pdf_for_portrait_printing(input_pdf_path: str, output_pdf_path: str)
                 if "source page empty" not in str(exc):
                     raise
 
-        output_doc.save(output_pdf_path, garbage=4, deflate=True)
+        # Preserve page identity for later page-specific watermarks.
+        output_doc.save(output_pdf_path, garbage=3, deflate=True)
     finally:
         output_doc.close()
         source_doc.close()
@@ -344,6 +346,7 @@ def build_booklets_pipeline(
     preserve_file_parity: bool = True,
     generate_cover: bool = False,
     prepare_for_portrait_printing: bool = False,
+    separate_sources: bool = False,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -372,19 +375,27 @@ def build_booklets_pipeline(
                 ),
             )
 
-        prepared_pages = prepare_pages_for_specs(specs_to_process, preserve_file_parity=preserve_file_parity)
-        split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
+        if separate_sources:
+            groups = ([[specs_to_process[0]]] if generate_cover else []) + [[spec] for spec in specs]
+        else:
+            groups = [specs_to_process]
         split_outputs: list[str] = []
         section_ranges: list[tuple[int, int]] = []
+        source_ranges: list[tuple[int, int]] = []
         output_page_count = 0
 
-        for split_idx, (start_idx, end_idx) in enumerate(split_ranges, start=1):
-            output_path = os.path.join(tmp, f"split{split_idx:02}_booklet.pdf")
-            create_booklet(prepared_pages[start_idx:end_idx + 1], output_path)
-            split_outputs.append(output_path)
-            with fitz.open(output_path) as section_pdf:
-                section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
-                output_page_count += section_pdf.page_count
+        for group_index, group in enumerate(groups):
+            first_page = output_page_count
+            prepared_pages = prepare_pages_for_specs(group, preserve_file_parity=preserve_file_parity)
+            for start_idx, end_idx in compute_split_ranges(len(prepared_pages), max_pages_per_split):
+                output_path = os.path.join(tmp, f"split{len(split_outputs) + 1:02}_booklet.pdf")
+                create_booklet(prepared_pages[start_idx:end_idx + 1], output_path)
+                split_outputs.append(output_path)
+                with fitz.open(output_path) as section_pdf:
+                    section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
+                    output_page_count += section_pdf.page_count
+            if separate_sources and (not generate_cover or group_index > 0):
+                source_ranges.append((first_page, output_page_count - 1))
 
         if prepare_for_portrait_printing:
             merged_pdf = os.path.join(tmp, "merged_booklet.pdf")
@@ -393,4 +404,5 @@ def build_booklets_pipeline(
         else:
             merge_pdfs(split_outputs, final_pdf)
 
-    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf, section_ranges=tuple(section_ranges))
+    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf,
+                            section_ranges=tuple(section_ranges), source_ranges=tuple(source_ranges))

@@ -55,6 +55,8 @@ def record_activity(*, owner, tool, title, options, inputs=(), outputs=(), resto
             if kind == "output" and options.get("watermark") and str(entry.get("content_type") or "application/pdf") == "application/pdf":
                 stamp_pdf(path, filename=name if options.get("watermark_filename") else "",
                           section_marks=entry.get("section_marks", ()) if options.get("watermark_section_index") else (),
+                          watermark_ranges=[(first, last, source_name if options.get("watermark_filename") else "")
+                                            for first, last, source_name in entry.get("watermark_ranges", ())],
                           at_top=watermark_at_top(tool, options))
             artifacts.append(Artifact(activity=activity, kind=kind, name=name, path=path, content_type=str(entry.get("content_type") or "application/pdf"), size=os.path.getsize(path) if os.path.isfile(path) else 0))
     Artifact.objects.bulk_create(artifacts)

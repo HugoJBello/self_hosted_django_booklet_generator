@@ -285,12 +285,14 @@ def booklets_view(request):
         try:
             pipeline = build_flipped_a4_booklets_pipeline if flipped_a4 else build_booklets_pipeline
             if processing_mode == "combined":
+                separate_sources = bool(form.cleaned_data.get("watermark") and len(specs) > 1)
                 pipeline_kwargs = {
                     "specs": specs,
                     "max_pages_per_split": max_pages_per_split,
                     "final_output_dir": outputs_dir,
                     "preserve_file_parity": preserve_file_parity,
                     "generate_cover": generate_cover,
+                    "separate_sources": separate_sources,
                 }
                 if flipped_a4:
                     pipeline_kwargs["render_quality"] = flipped_a4_quality
@@ -300,6 +302,15 @@ def booklets_view(request):
                 else:
                     pipeline_kwargs["prepare_for_portrait_printing"] = side_by_side_prepare_for_portrait_printing
                 result = pipeline(**pipeline_kwargs)
+                watermark_ranges = []
+                if separate_sources:
+                    for section_start, section_end in result.section_ranges:
+                        source_name = ""  # The optional index cover has no source filename.
+                        for item, (source_start, source_end) in zip(items, result.source_ranges):
+                            if source_start <= section_start and section_end <= source_end:
+                                source_name = item["name"]
+                                break
+                        watermark_ranges.append((section_start, section_end, source_name))
                 results.append(
                     {
                         "original_name": "Combined print file",
@@ -309,6 +320,7 @@ def booklets_view(request):
                 generated_outputs.append({
                     "name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path,
                     "section_marks": numbered_sections(result.section_ranges),
+                    "watermark_ranges": watermark_ranges,
                 })
                 messages.success(request, "Combined booklet generated successfully.")
             else:

@@ -357,6 +357,70 @@ class BookletsViewTests(TestCase):
         generated_files = [name for name in os.listdir(outputs_dir) if name.endswith(".pdf")]
         self.assertEqual(len(generated_files), 1)
 
+    def test_combined_watermark_uses_each_source_name_on_its_own_booklet_sections(self):
+        for layout in ("side_by_side", "flipped_a4"):
+            with self.subTest(layout=layout):
+                self.client.get(reverse("booklets:clear"))
+                response = self.client.post(reverse("booklets:form"), data={
+                    "input_pdf": [
+                        SimpleUploadedFile("alpha.pdf", build_pdf_bytes(4), content_type="application/pdf"),
+                        SimpleUploadedFile("beta.pdf", build_pdf_bytes(4), content_type="application/pdf"),
+                    ],
+                    "processing_mode": "combined", "booklet_layout": layout,
+                    "max_pages_per_split": "2", "flipped_a4_split_mode": "vector",
+                    "watermark": "on", "watermark_filename": "on",
+                    "file_add_watermark_0": "false", "file_add_watermark_1": "false",
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(len(response.context["results"]), 1)
+                artifact_id = response.context["results"][0]["artifact_id"]
+                with fitz.open(Artifact.objects.get(pk=artifact_id).path) as document:
+                    names = [
+                        ("alpha.pdf" in page.get_text(), "beta.pdf" in page.get_text())
+                        for page in document
+                    ]
+                    self.assertGreaterEqual(len(names), 4)
+                    self.assertFalse(any(first and second for first, second in names), names)
+                    marked_names = [name for name in names if any(name)]
+                    self.assertGreaterEqual(marked_names.count((True, False)), 2)
+                    self.assertGreaterEqual(marked_names.count((False, True)), 2)
+                    self.assertEqual(marked_names, sorted(marked_names, reverse=True))
+
+    def test_combined_watermark_keeps_source_names_with_cover_and_print_preparation(self):
+        for layout in ("side_by_side", "flipped_a4"):
+            with self.subTest(layout=layout):
+                self.client.get(reverse("booklets:clear"))
+                response = self.client.post(reverse("booklets:form"), data={
+                    "input_pdf": [
+                        SimpleUploadedFile("alpha.pdf", build_pdf_bytes(2), content_type="application/pdf"),
+                        SimpleUploadedFile("beta.pdf", build_pdf_bytes(2), content_type="application/pdf"),
+                    ],
+                    "processing_mode": "combined", "booklet_layout": layout,
+                    "generate_cover": "on", "watermark": "on", "watermark_filename": "on",
+                    "watermark_section_index": "on",
+                    "side_by_side_prepare_for_portrait_printing": "on",
+                    "flipped_a4_prepare_for_a5_printing": "on",
+                    "flipped_a4_split_mode": "vector",
+                    "file_add_watermark_0": "false", "file_add_watermark_1": "false",
+                })
+                self.assertEqual(response.status_code, 200)
+                artifact_id = response.context["results"][0]["artifact_id"]
+                with fitz.open(Artifact.objects.get(pk=artifact_id).path) as document:
+                    at_top = layout == "flipped_a4"
+                    marked_names = [
+                        (
+                            "alpha.pdf" in page.get_text(clip=fitz.Rect(0, 0 if at_top else page.rect.height - 30,
+                                                                         page.rect.width, 30 if at_top else page.rect.height)),
+                            "beta.pdf" in page.get_text(clip=fitz.Rect(0, 0 if at_top else page.rect.height - 30,
+                                                                        page.rect.width, 30 if at_top else page.rect.height)),
+                        )
+                        for page in document
+                    ]
+                    marked_names = [name for name in marked_names if any(name)]
+                    self.assertIn((True, False), marked_names)
+                    self.assertIn((False, True), marked_names)
+                    self.assertEqual(marked_names, sorted(marked_names, reverse=True))
+
     def test_uploaded_files_persist_for_regeneration(self):
         first_response = self.client.post(
             reverse("booklets:form"),

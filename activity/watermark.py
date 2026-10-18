@@ -21,8 +21,9 @@ def numbered_sections(ranges: tuple[tuple[int, int], ...], *, parent: int | None
 
 def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
               section_marks: tuple[tuple[int, int, str], ...] | list[tuple[int, int, str]] = (),
+              watermark_ranges: tuple[tuple[int, int, str], ...] | list[tuple[int, int, str]] = (),
               at_top: bool = False) -> None:
-    """Overlay a footer on the first and last physical pages, without resizing pages."""
+    """Overlay footers on output pages or named ranges, without resizing pages."""
     generated_at = timezone.localtime(generated_at or timezone.now())
     label = generated_at.strftime("%d/%m/%y %H:%M")
     basename = os.path.basename(filename)
@@ -31,14 +32,15 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
             return
         font = fitz.Font(fontfile=str(FONT_PATH)) if FONT_PATH.exists() else fitz.Font("helv")
         font_name = "pdf_footer" if FONT_PATH.exists() else "helv"
-        footer_width = 0.0
-        for first, last, _ in section_marks:
+        corner_widths = {}
+        for first, last, _ in (*section_marks, *watermark_ranges):
             if first < 0 or last < first or last >= document.page_count:
                 raise ValueError("Invalid watermark section range.")
-        corners = (tuple(corner for first, last, _ in section_marks
-                         for corner in ((first, True), (last, False)))
-                   if section_marks else ((0, True), (document.page_count - 1, False)))
-        for page_number, right in corners:
+        ranges = watermark_ranges or tuple((first, last, basename) for first, last, _ in section_marks)
+        corners = (tuple(corner for first, last, name in ranges
+                         for corner in ((first, True, name), (last, False, name)))
+                   if ranges else ((0, True, basename), (document.page_count - 1, False, basename)))
+        for page_number, right, corner_name in corners:
             page = document[page_number]
             if font_name != "helv":
                 page.insert_font(fontname=font_name, fontfile=str(FONT_PATH))
@@ -49,8 +51,8 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
             baseline = inset + 9.5 if at_top else height - inset - 2.0
             available = min(width * 0.44, 220.0)
             lines = [label]
-            if basename:
-                name = basename
+            if corner_name:
+                name = os.path.basename(corner_name)
                 while name and font.text_length(name, fontsize=font_size) > available:
                     name = name[:-4] + "..." if len(name) > 4 else ""
                 lines.append(name)
@@ -71,7 +73,9 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
                             (symbol_x + symbol_width, symbol_y + 6.0), (symbol_x, symbol_y + 6.0))
             page.draw_polyline([fitz.Point(x, y) * page.derotation_matrix for x, y in vertices],
                                color=(0, 0, 0), fill=(0, 0, 0), closePath=True, overlay=True)
-            footer_width = symbol_width + 3 + max(font.text_length(line, fontsize=font_size) for line in lines)
+            corner_widths[(page_number, right)] = (
+                symbol_width + 3 + max(font.text_length(line, fontsize=font_size) for line in lines)
+            )
             if right:
                 text_right = symbol_x - 3
                 for line_index, line in enumerate(lines):
@@ -90,7 +94,8 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
                 label_width = font.text_length(section_label, fontsize=5.8)
                 # Keep the section index on the footer line, beside the general mark.
                 # This preserves the original footer's height and avoids added margins.
-                neighbor_width = footer_width + 8.0 if (page_number, right) in corners else 0.0
+                neighbor_width = (corner_widths[(page_number, right)] + 8.0
+                                  if (page_number, right) in corner_widths else 0.0)
                 visual_x = (page.rect.width - 14.0 - neighbor_width - label_width
                             if right else 14.0 + neighbor_width)
                 visual_y = 23.5 if at_top else page.rect.height - 16.0
