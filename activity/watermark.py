@@ -21,6 +21,7 @@ def numbered_sections(ranges: tuple[tuple[int, int], ...], *, parent: int | None
 
 def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
               section_marks: tuple[tuple[int, int, str], ...] | list[tuple[int, int, str]] = (),
+              corner_marks: tuple[tuple[int, bool, str, str], ...] | list[tuple[int, bool, str, str]] = (),
               at_top: bool = False, include_footer: bool = True) -> None:
     """Overlay a footer on the first and last physical pages, without resizing pages."""
     generated_at = timezone.localtime(generated_at or timezone.now())
@@ -31,14 +32,26 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
             return
         font = fitz.Font(fontfile=str(FONT_PATH)) if FONT_PATH.exists() else fitz.Font("helv")
         font_name = ("pdf_footer" if include_footer else "pdf_footer_index") if FONT_PATH.exists() else "helv"
-        footer_width = 0.0
+        corner_widths = {}
         for first, last, _ in section_marks:
             if first < 0 or last < first or last >= document.page_count:
                 raise ValueError("Invalid watermark section range.")
-        corners = (tuple(corner for first, last, _ in section_marks
-                         for corner in ((first, True), (last, False)))
-                   if section_marks else ((0, True), (document.page_count - 1, False))) if include_footer else ()
-        for page_number, right in corners:
+        for page_number, _, _, symbol in corner_marks:
+            if page_number < 0 or page_number >= document.page_count:
+                raise ValueError("Invalid watermark page.")
+            if symbol not in {"start", "end", "both"}:
+                raise ValueError("Invalid watermark symbol.")
+        if corner_marks:
+            corners = tuple(corner_marks)
+        elif include_footer:
+            corners = (tuple(corner for first, last, _ in section_marks
+                             for corner in ((first, True, basename, "start"),
+                                            (last, False, basename, "end")))
+                       if section_marks else ((0, True, basename, "start"),
+                                              (document.page_count - 1, False, basename, "end")))
+        else:
+            corners = ()
+        for page_number, right, corner_name, symbol in corners:
             page = document[page_number]
             if font_name != "helv":
                 page.insert_font(fontname=font_name, fontfile=str(FONT_PATH))
@@ -49,8 +62,8 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
             baseline = inset + 9.5 if at_top else height - inset - 2.0
             available = min(width * 0.44, 220.0)
             lines = [label]
-            if basename:
-                name = basename
+            if corner_name:
+                name = os.path.basename(corner_name)
                 while name and font.text_length(name, fontsize=font_size) > available:
                     name = name[:-4] + "..." if len(name) > 4 else ""
                 lines.append(name)
@@ -60,18 +73,22 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
                                  color=(0, 0, 0), rotate=(-page.rotation) % 360,
                                  overlay=True)
 
-            symbol_width = 6.0
+            symbol_width = 13.0 if symbol == "both" else 6.0
             symbol_x = width - inset - symbol_width if right else inset
             symbol_y = baseline - 6.0
-            if right:
-                vertices = ((symbol_x, symbol_y), (symbol_x + symbol_width, symbol_y + 3.0),
-                            (symbol_x, symbol_y + 6.0))
-            else:
-                vertices = ((symbol_x, symbol_y), (symbol_x + symbol_width, symbol_y),
-                            (symbol_x + symbol_width, symbol_y + 6.0), (symbol_x, symbol_y + 6.0))
-            page.draw_polyline([fitz.Point(x, y) * page.derotation_matrix for x, y in vertices],
-                               color=(0, 0, 0), fill=(0, 0, 0), closePath=True, overlay=True)
-            footer_width = symbol_width + 3 + max(font.text_length(line, fontsize=font_size) for line in lines)
+            symbols = (("start", symbol_x), ("end", symbol_x + 7.0)) if symbol == "both" else ((symbol, symbol_x),)
+            for shape, shape_x in symbols:
+                if shape == "start":
+                    vertices = ((shape_x, symbol_y), (shape_x + 6.0, symbol_y + 3.0),
+                                (shape_x, symbol_y + 6.0))
+                else:
+                    vertices = ((shape_x, symbol_y), (shape_x + 6.0, symbol_y),
+                                (shape_x + 6.0, symbol_y + 6.0), (shape_x, symbol_y + 6.0))
+                page.draw_polyline([fitz.Point(x, y) * page.derotation_matrix for x, y in vertices],
+                                   color=(0, 0, 0), fill=(0, 0, 0), closePath=True, overlay=True)
+            corner_widths[(page_number, right)] = (
+                symbol_width + 3 + max(font.text_length(line, fontsize=font_size) for line in lines)
+            )
             if right:
                 text_right = symbol_x - 3
                 for line_index, line in enumerate(lines):
@@ -90,7 +107,8 @@ def stamp_pdf(path: str, *, filename: str = "", generated_at=None,
                 label_width = font.text_length(section_label, fontsize=5.8)
                 # Keep the section index on the footer line, beside the general mark.
                 # This preserves the original footer's height and avoids added margins.
-                neighbor_width = footer_width + 8.0 if (page_number, right) in corners else 0.0
+                neighbor_width = (corner_widths[(page_number, right)] + 8.0
+                                  if (page_number, right) in corner_widths else 0.0)
                 visual_x = (page.rect.width - 14.0 - neighbor_width - label_width
                             if right else 14.0 + neighbor_width)
                 visual_y = 23.5 if at_top else page.rect.height - 16.0

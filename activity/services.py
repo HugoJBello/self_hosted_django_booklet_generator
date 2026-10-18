@@ -55,9 +55,11 @@ def record_activity(*, owner, tool, title, options, inputs=(), outputs=(), resto
             if kind == "output" and options.get("watermark") and str(entry.get("content_type") or "application/pdf") == "application/pdf":
                 section_marks = entry.get("section_marks", ()) if options.get("watermark_section_index") else ()
                 if entry.get("watermark_preapplied"):
-                    if section_marks:
-                        stamp_pdf(path, section_marks=section_marks,
-                                  at_top=watermark_at_top(tool, options), include_footer=False)
+                    corner_marks = entry.get("corner_marks", ())
+                    if section_marks or corner_marks:
+                        stamp_pdf(path, section_marks=section_marks, corner_marks=corner_marks,
+                                  at_top=bool(corner_marks) or watermark_at_top(tool, options),
+                                  include_footer=bool(corner_marks))
                 else:
                     stamp_pdf(path, filename=name if options.get("watermark_filename") else "",
                               section_marks=section_marks, at_top=watermark_at_top(tool, options))

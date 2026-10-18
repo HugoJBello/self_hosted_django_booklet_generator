@@ -17,7 +17,7 @@ class SourcePdfSpec:
     margin_cm: float
     add_watermark: bool
     render_pdf_path: str | None = None
-    watermark_overlay_path: str | None = None
+    watermark_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,9 @@ class PreparedPage:
     margin_cm: float
     add_watermark: bool = False
     render_pdf_path: str | None = None
-    watermark_overlay_path: str | None = None
+    watermark_name: str | None = None
+    watermark_start: bool = False
+    watermark_end: bool = False
 
     @property
     def is_blank(self) -> bool:
@@ -41,6 +43,7 @@ class BookletJobResult:
     job_id: str
     output_pdf_path: str
     section_ranges: tuple[tuple[int, int], ...] = ()
+    corner_marks: tuple[tuple[int, bool, str, str], ...] = ()
 
 
 def detect_content_bbox(page: fitz.Page, margin_pts: float) -> fitz.Rect:
@@ -202,8 +205,9 @@ def prepare_pages_for_specs(
                         margin_cm=spec.margin_cm,
                         add_watermark=spec.add_watermark and page_number == 0,
                         render_pdf_path=spec.render_pdf_path,
-                        watermark_overlay_path=(spec.watermark_overlay_path
-                                                if page_number in (0, len(doc) - 1) else None),
+                        watermark_name=spec.watermark_name,
+                        watermark_start=spec.watermark_name is not None and page_number == 0,
+                        watermark_end=spec.watermark_name is not None and page_number == len(doc) - 1,
                     )
                 )
 
@@ -213,9 +217,10 @@ def prepare_pages_for_specs(
 def create_booklet(
     prepared_pages: list[PreparedPage],
     output_pdf_path: str,
-) -> None:
+) -> tuple[tuple[int, bool, str, str], ...]:
     source_docs: dict[str, fitz.Document] = {}
     doc_out = fitz.open()
+    corner_marks: list[tuple[int, bool, str, str]] = []
 
     try:
         out_width = 842
@@ -303,17 +308,6 @@ def create_booklet(
                             fill=(1, 1, 1),
                         )
 
-                if prepared_page.watermark_overlay_path:
-                    overlay = source_docs.get(prepared_page.watermark_overlay_path)
-                    if overlay is None:
-                        overlay = fitz.open(prepared_page.watermark_overlay_path)
-                        source_docs[prepared_page.watermark_overlay_path] = overlay
-                    page_out.show_pdf_page(
-                        fitz.Rect(cell_x0 + margin_pts, cell_y0 + margin_pts,
-                                  cell_x1 - margin_pts, cell_y1 - margin_pts),
-                        overlay, prepared_page.source_page_number, rotate=rotation,
-                    )
-
             def get_rotation(prepared_page: PreparedPage) -> int:
                 if prepared_page.is_blank:
                     return 0
@@ -347,6 +341,24 @@ def create_booklet(
                 get_rotation(left_page),
             )
 
+            page_marks = []
+            for prepared_page, cell_right in ((left_page, False), (right_page, True)):
+                if prepared_page.watermark_start or prepared_page.watermark_end:
+                    symbol = ("both" if prepared_page.watermark_start and prepared_page.watermark_end
+                              else "start" if prepared_page.watermark_start else "end")
+                    preferred_right = True if symbol == "start" else False if symbol == "end" else cell_right
+                    page_marks.append((cell_right, preferred_right, prepared_page.watermark_name or "", symbol))
+            if len(page_marks) == 1 and page_marks[0][3] == "both":
+                name = page_marks[0][2]
+                corner_marks.extend(((page_out.number, True, name, "start"),
+                                     (page_out.number, False, name, "end")))
+            elif len(page_marks) == 2 and page_marks[0][1] == page_marks[1][1]:
+                corner_marks.extend((page_out.number, cell_right, name, symbol)
+                                    for cell_right, _, name, symbol in page_marks)
+            else:
+                corner_marks.extend((page_out.number, preferred_right, name, symbol)
+                                    for _, preferred_right, name, symbol in page_marks)
+
             if left_page.add_watermark or right_page.add_watermark:
                 add_watermark_to_page(page_out)
 
@@ -355,6 +367,8 @@ def create_booklet(
         doc_out.close()
         for doc in source_docs.values():
             doc.close()
+
+    return tuple(corner_marks)
 
 
 def build_booklets_pipeline(
@@ -396,11 +410,14 @@ def build_booklets_pipeline(
         split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
         split_outputs: list[str] = []
         section_ranges: list[tuple[int, int]] = []
+        corner_marks: list[tuple[int, bool, str, str]] = []
         output_page_count = 0
 
         for split_idx, (start_idx, end_idx) in enumerate(split_ranges, start=1):
             output_path = os.path.join(tmp, f"split{split_idx:02}_booklet.pdf")
-            create_booklet(prepared_pages[start_idx:end_idx + 1], output_path)
+            section_marks = create_booklet(prepared_pages[start_idx:end_idx + 1], output_path)
+            corner_marks.extend((output_page_count + page, right, name, symbol)
+                                for page, right, name, symbol in section_marks)
             split_outputs.append(output_path)
             with fitz.open(output_path) as section_pdf:
                 section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
@@ -413,4 +430,5 @@ def build_booklets_pipeline(
         else:
             merge_pdfs(split_outputs, final_pdf)
 
-    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf, section_ranges=tuple(section_ranges))
+    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf,
+                            section_ranges=tuple(section_ranges), corner_marks=tuple(corner_marks))
