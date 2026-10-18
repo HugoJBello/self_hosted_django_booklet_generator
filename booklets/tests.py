@@ -141,6 +141,24 @@ class BookletsViewTests(TestCase):
                     for page_number in range(1, document.page_count - 1):
                         self.assertNotIn("*", document[page_number].get_text())
 
+    def test_nested_section_numbers_survive_both_booklet_layouts(self):
+        for layout in ("side_by_side", "flipped_a4"):
+            with self.subTest(layout=layout):
+                self.client.get(reverse("booklets:clear"))
+                response = self.client.post(reverse("booklets:form"), data={
+                    "input_pdf": [SimpleUploadedFile("source.pdf", build_pdf_bytes(4), content_type="application/pdf")],
+                    "processing_mode": "separate", "booklet_layout": layout,
+                    "max_pages_per_split": "2", "watermark": "on", "watermark_section_index": "on",
+                    "flipped_a4_split_mode": "vector", "file_add_watermark_0": "true",
+                })
+                self.assertEqual(response.status_code, 200)
+                artifact_id = response.context["results"][0]["artifact_id"]
+                with fitz.open(Artifact.objects.get(pk=artifact_id).path) as document:
+                    content = "".join(page.get_text() for page in document)
+                    self.assertIn("s1.1", content)
+                    self.assertIn("s1.2", content)
+                    self.assertIn("*", content)  # Original source marker remains.
+
     def test_flipped_a4_quality_profiles_preserve_old_low_and_high_as_lower_options(self):
         form = BookletForm()
 

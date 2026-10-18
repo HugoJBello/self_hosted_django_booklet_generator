@@ -12,7 +12,7 @@ from django.urls import reverse
 from .models import Artifact
 from .services import record_activity
 from .filenames import generated_pdf_name, portable_stem
-from .watermark import stamp_pdf
+from .watermark import numbered_sections, stamp_pdf
 from booklets.forms import BookletForm
 from booklets.services import compute_split_ranges
 from diary.forms import DiaryForm
@@ -31,6 +31,12 @@ class BookletDefaultsTests(SimpleTestCase):
     def test_blank_limit_keeps_all_pages_in_one_booklet(self):
         self.assertEqual(compute_split_ranges(100, None), [(0, 99)])
         self.assertGreater(len(compute_split_ranges(100, 40)), 1)
+
+    def test_section_index_is_selected_by_default_in_booklets_and_split(self):
+        for form in (BookletForm(), SplitPdfForm()):
+            with self.subTest(form=type(form).__name__):
+                self.assertTrue(form.fields["watermark_section_index"].initial)
+                self.assertFalse(form.fields["watermark"].initial)
 
 
 class FooterWatermarkTests(TestCase):
@@ -55,7 +61,7 @@ class FooterWatermarkTests(TestCase):
             for page in document:
                 self.assertEqual(tuple(page.rect), (0, 0, 595, 842))
                 self.assertIn("Existing content", page.get_text())
-            self.assertNotIn("18/10/26", document[1].get_text())
+            self.assertNotIn("*", document[1].get_text())
             for page, right in ((document[0], True), (document[-1], False)):
                 footer = [line for block in page.get_text("dict")["blocks"] if "lines" in block
                           for line in block["lines"] if any("18/10/26" in span["text"] or "Revisión" in span["text"]
@@ -78,6 +84,31 @@ class FooterWatermarkTests(TestCase):
                     self.assertEqual(document[0].get_text().count("*"), 1)
                     self.assertEqual(document[1].get_text().count("*"), 0)
                     self.assertEqual(document[-1].get_text().count("*"), 1)
+
+    def test_section_numbers_are_separate_from_the_general_footer(self):
+        path = self._pdf(pages=4)
+        marks = numbered_sections(((0, 1), (2, 3)), parent=2)
+        self.assertEqual([mark[2] for mark in marks], ["s2.1", "s2.2"])
+        stamp_pdf(path, section_marks=marks)
+        with fitz.open(path) as document:
+            self.assertIn("s2.1", document[0].get_text())
+            self.assertIn("s2.1", document[1].get_text())
+            self.assertIn("s2.2", document[2].get_text())
+            self.assertIn("s2.2", document[3].get_text())
+            self.assertIn("*", document[1].get_text())
+            self.assertIn("*", document[2].get_text())
+
+    def test_section_numbers_can_be_disabled_independently(self):
+        owner = get_user_model().objects.create_user("section-toggle")
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled):
+                path = self._pdf()
+                record_activity(owner=owner, tool="splitpdf", title="Split", options={
+                    "watermark": True, "watermark_section_index": enabled,
+                }, outputs=[{"name": "split.pdf", "path": path, "section_marks": [(0, 2, "s1")]}])
+                with fitz.open(path) as document:
+                    self.assertEqual("s1" in document[0].get_text(), enabled)
+                    self.assertIn("*", document[0].get_text())
 
     def test_rotated_page_footer_remains_at_visual_bottom(self):
         path = self._pdf(pages=1)

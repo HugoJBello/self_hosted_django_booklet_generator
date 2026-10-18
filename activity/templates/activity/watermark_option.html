@@ -8,4 +8,11 @@
     {{ form.watermark_filename }}
     <label class="form-check-label" for="{{ form.watermark_filename.id_for_label }}">{{ form.watermark_filename.label }}</label>
   </div>
+  {% if form.watermark_section_index %}
+    <div class="form-check ms-3 mt-2">
+      {{ form.watermark_section_index }}
+      <label class="form-check-label" for="{{ form.watermark_section_index.id_for_label }}">{{ form.watermark_section_index.label }}</label>
+      <div class="form-text">Used with the watermark. Number each PDF; if a booklet is split, number its pieces as s1.1, s1.2, …</div>
+    </div>
+  {% endif %}
 </div>

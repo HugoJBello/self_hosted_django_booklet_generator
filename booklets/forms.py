@@ -91,6 +91,13 @@ class BookletForm(WatermarkFields):
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
+    watermark_section_index = forms.BooleanField(
+        label="Add section number (s1, s2, …)",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
     side_by_side_prepare_for_portrait_printing = forms.BooleanField(
         label="Prepare for portrait printing",
         required=False,

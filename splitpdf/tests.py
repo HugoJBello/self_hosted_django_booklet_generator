@@ -319,6 +319,44 @@ class SplitPdfViewTests(TestCase):
         self.assertContains(reopened, "Build your output PDFs")
         self.assertContains(reopened, 'value="1-2, 5"')
 
+    def test_watermarked_split_outputs_get_distinct_section_numbers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf_with_toc(source_path)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+        self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+        response = self.client.post(reverse("splitpdf:form"), {
+            "action": "generate", "split_mode": "ranges", "page_ranges": "1-2, 5",
+            "watermark": "on", "watermark_section_index": "on",
+        })
+        self.assertEqual(response.status_code, 200)
+        outputs = self.client.session["splitpdf_state"]["outputs"]
+        self.assertEqual(len(outputs), 2)
+        for index, output in enumerate(outputs, start=1):
+            with fitz.open(output["path"]) as document:
+                self.assertIn(f"s{index}", document[0].get_text())
+
+    def test_booklet_split_outputs_get_nested_section_numbers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = os.path.join(tmp, "source.pdf")
+            _create_pdf_with_toc(source_path)
+            with open(source_path, "rb") as source:
+                upload = SimpleUploadedFile("source.pdf", source.read(), content_type="application/pdf")
+        self.client.post(reverse("splitpdf:form"), {"input_pdf": upload})
+        response = self.client.post(reverse("splitpdf:form"), {
+            "action": "generate", "split_mode": "ranges", "page_ranges": "1-4",
+            "apply_booklets": "on", "booklet_layout": "side_by_side", "max_pages_per_split": "2",
+            "side_by_side_prepare_for_portrait_printing": "on",
+            "watermark": "on", "watermark_section_index": "on",
+        })
+        self.assertEqual(response.status_code, 200)
+        output = self.client.session["splitpdf_state"]["outputs"][0]
+        with fitz.open(output["path"]) as document:
+            content = "".join(page.get_text() for page in document)
+            self.assertIn("s1.1", content)
+            self.assertIn("s1.2", content)
+
     def test_loaded_pdf_thumbnail_is_available_for_live_range_preview(self):
         with tempfile.TemporaryDirectory() as tmp:
             source_path = os.path.join(tmp, "source.pdf")

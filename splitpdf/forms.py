@@ -43,6 +43,13 @@ class SplitPdfForm(WatermarkFields):
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
+    watermark_section_index = forms.BooleanField(
+        label="Add section number (s1, s2, …)",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
     booklet_layout = forms.ChoiceField(
         label="Booklet layout",
         required=False,

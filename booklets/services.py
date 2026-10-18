@@ -36,6 +36,7 @@ class PreparedPage:
 class BookletJobResult:
     job_id: str
     output_pdf_path: str
+    section_ranges: tuple[tuple[int, int], ...] = ()
 
 
 def detect_content_bbox(page: fitz.Page, margin_pts: float) -> fitz.Rect:
@@ -374,11 +375,16 @@ def build_booklets_pipeline(
         prepared_pages = prepare_pages_for_specs(specs_to_process, preserve_file_parity=preserve_file_parity)
         split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
         split_outputs: list[str] = []
+        section_ranges: list[tuple[int, int]] = []
+        output_page_count = 0
 
         for split_idx, (start_idx, end_idx) in enumerate(split_ranges, start=1):
             output_path = os.path.join(tmp, f"split{split_idx:02}_booklet.pdf")
             create_booklet(prepared_pages[start_idx:end_idx + 1], output_path)
             split_outputs.append(output_path)
+            with fitz.open(output_path) as section_pdf:
+                section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
+                output_page_count += section_pdf.page_count
 
         if prepare_for_portrait_printing:
             merged_pdf = os.path.join(tmp, "merged_booklet.pdf")
@@ -387,4 +393,4 @@ def build_booklets_pipeline(
         else:
             merge_pdfs(split_outputs, final_pdf)
 
-    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf)
+    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf, section_ranges=tuple(section_ranges))

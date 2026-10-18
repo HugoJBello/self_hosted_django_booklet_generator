@@ -80,6 +80,7 @@ class SplitOutput:
     end_page: int
     page_count: int
     booklet_applied: bool
+    section_ranges: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -360,9 +361,10 @@ def split_pdf_by_sections(
         final_path = section_pdf_path
         final_filename = os.path.basename(final_path)
         booklet_applied = False
+        section_ranges: tuple[tuple[int, int], ...] = ((0, section.page_count - 1),)
 
         if options.apply_booklets:
-            final_path = _apply_booklet(section_pdf_path, section, output_dir, options)
+            final_path, section_ranges = _apply_booklet(section_pdf_path, section, output_dir, options)
             final_filename = os.path.basename(final_path)
             booklet_applied = True
 
@@ -376,6 +378,7 @@ def split_pdf_by_sections(
                 end_page=section.end_page,
                 page_count=section.page_count,
                 booklet_applied=booklet_applied,
+                section_ranges=section_ranges,
             )
         )
 
@@ -392,7 +395,7 @@ def _apply_booklet(
     section: SplitSection,
     output_dir: str,
     options: SplitPdfJobOptions,
-) -> str:
+) -> tuple[str, tuple[tuple[int, int], ...]]:
     spec = SourcePdfSpec(
         input_pdf_path=section_pdf_path,
         same_page_parity=options.same_page_parity,
@@ -423,7 +426,7 @@ def _apply_booklet(
     result = pipeline(**pipeline_kwargs)
     target_path = _unique_path(output_dir, section_filename(section.index, f"{section.title}_booklet"))
     shutil.move(result.output_pdf_path, target_path)
-    return target_path
+    return target_path, getattr(result, "section_ranges", ())
 
 
 def _write_pdf_range(input_pdf_path: str, output_pdf_path: str, start_page: int, end_page: int) -> None:

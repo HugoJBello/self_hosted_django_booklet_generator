@@ -40,7 +40,8 @@ def record_activity(*, owner, tool, title, options, inputs=(), outputs=(), resto
             if generated_names and kind == "output" and str(entry.get("content_type") or "application/pdf") == "application/pdf":
                 name = generated_pdf_name(source_names=source_names, tool=tool, detail=name, index=index if len(entries) > 1 else None, used_names=used_names)
             if kind == "output" and options.get("watermark") and str(entry.get("content_type") or "application/pdf") == "application/pdf":
-                stamp_pdf(path, filename=name if options.get("watermark_filename") else "")
+                stamp_pdf(path, filename=name if options.get("watermark_filename") else "",
+                          section_marks=entry.get("section_marks", ()) if options.get("watermark_section_index") else ())
             artifacts.append(Artifact(activity=activity, kind=kind, name=name, path=path, content_type=str(entry.get("content_type") or "application/pdf"), size=os.path.getsize(path) if os.path.isfile(path) else 0))
     Artifact.objects.bulk_create(artifacts)
     return activity

@@ -13,6 +13,7 @@ from django.urls import reverse
 from activity.services import record_activity
 from activity.models import Artifact
 from activity.workspaces import prepare_workspace
+from activity.watermark import numbered_sections
 
 from .forms import BookletForm
 from .flipped_a4 import build_flipped_a4_booklets_pipeline
@@ -182,6 +183,7 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
             "generate_cover": form.cleaned_data.get("generate_cover", False),
             "watermark": form.cleaned_data.get("watermark", False),
             "watermark_filename": form.cleaned_data.get("watermark_filename", False),
+            "watermark_section_index": form.cleaned_data.get("watermark_section_index", True),
             "side_by_side_prepare_for_portrait_printing": form.cleaned_data.get(
                 "side_by_side_prepare_for_portrait_printing",
                 True,
@@ -271,10 +273,13 @@ def booklets_view(request):
                         "download_url": reverse("booklets:download", kwargs={"job_id": result.job_id}),
                     }
                 )
-                generated_outputs.append({"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path})
+                generated_outputs.append({
+                    "name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path,
+                    "section_marks": numbered_sections(result.section_ranges),
+                })
                 messages.success(request, "Combined booklet generated successfully.")
             else:
-                for item, spec in zip(items, specs):
+                for output_index, (item, spec) in enumerate(zip(items, specs), start=1):
                     pipeline_kwargs = {
                         "specs": [spec],
                         "max_pages_per_split": max_pages_per_split,
@@ -296,7 +301,10 @@ def booklets_view(request):
                             "download_url": reverse("booklets:download", kwargs={"job_id": result.job_id}),
                         }
                     )
-                    generated_outputs.append({"name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path})
+                    generated_outputs.append({
+                        "name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path,
+                        "section_marks": numbered_sections(result.section_ranges, parent=output_index),
+                    })
                 messages.success(request, f"Generated booklets for {len(results)} file(s).")
         except Exception as exc:
             messages.error(request, f"Error generating booklets: {exc}")

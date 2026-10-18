@@ -443,6 +443,8 @@ def build_flipped_a4_booklets_pipeline(
         prepared_pages = prepare_pages_for_specs(list(specs), preserve_file_parity=preserve_file_parity)
         split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
         split_outputs: list[str] = []
+        section_ranges: list[tuple[int, int]] = []
+        output_page_count = 0
         cover_entries = collect_cover_entries([spec.input_pdf_path for spec in specs]) if generate_cover else None
 
         for split_idx, (start_idx, end_idx) in enumerate(split_ranges, start=1):
@@ -458,6 +460,9 @@ def build_flipped_a4_booklets_pipeline(
                 cover_entries=cover_entries if split_idx == 1 else None,
             )
             split_outputs.append(output_path)
+            with fitz.open(output_path) as section_pdf:
+                section_ranges.append((output_page_count, output_page_count + section_pdf.page_count - 1))
+                output_page_count += section_pdf.page_count
 
         if prepare_for_a5_printing:
             merged_pdf = os.path.join(tmp, "merged_flipped_a4_booklet.pdf")
@@ -466,4 +471,4 @@ def build_flipped_a4_booklets_pipeline(
         else:
             merge_pdfs(split_outputs, final_pdf)
 
-    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf)
+    return BookletJobResult(job_id=job_id, output_pdf_path=final_pdf, section_ranges=tuple(section_ranges))

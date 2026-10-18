@@ -13,6 +13,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from activity.services import json_safe, record_activity
+from activity.watermark import numbered_sections
 from activity.workspaces import continue_workspace, prepare_workspace
 
 from .forms import SplitPdfForm
@@ -181,6 +182,7 @@ def _initial_from_state(state: dict[str, Any], selected_level: int | None = None
         "flipped_a4_prepare_for_a5_printing": state.get("flipped_a4_prepare_for_a5_printing", False),
         "watermark": state.get("watermark", False),
         "watermark_filename": state.get("watermark_filename", False),
+        "watermark_section_index": state.get("watermark_section_index", True),
     }
     return initial
 
@@ -319,6 +321,7 @@ def split_view(request):
                     "apply_booklets": bool(form.cleaned_data["apply_booklets"]),
                     "watermark": bool(form.cleaned_data["watermark"]),
                     "watermark_filename": bool(form.cleaned_data["watermark_filename"]),
+                    "watermark_section_index": bool(form.cleaned_data["watermark_section_index"]),
                     "booklet_layout": form.cleaned_data["booklet_layout"],
                     "max_pages_per_split": form.cleaned_data["max_pages_per_split"],
                     "margin_cm": form.cleaned_data["margin_cm"],
@@ -515,7 +518,10 @@ def split_view(request):
             activity = record_activity(
                 owner=request.user, tool="splitpdf", title=f"Split {state.get('pdf_name', 'PDF')} into {len(outputs)} file(s)",
                 options=options_data, inputs=[{"name": state.get("pdf_name"), "path": state["pdf_path"]}],
-                outputs=[{"name": output.filename, "path": output.path} for output in outputs],
+                outputs=[{
+                    "name": output.filename, "path": output.path,
+                    "section_marks": numbered_sections(output.section_ranges, parent=section.index),
+                } for output, section in zip(outputs, final_sections)],
                 restore_state={"session_key": SESSION_KEY, "session_value": state, "form_initial": options_data},
                 generated_names=True,
             )
