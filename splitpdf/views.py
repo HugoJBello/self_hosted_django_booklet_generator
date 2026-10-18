@@ -167,7 +167,7 @@ def _initial_from_state(state: dict[str, Any], selected_level: int | None = None
         "page_ranges": state.get("page_ranges", ""),
         "apply_booklets": state.get("apply_booklets", False),
         "booklet_layout": state.get("booklet_layout", "side_by_side"),
-        "max_pages_per_split": state.get("max_pages_per_split", 40),
+        "max_pages_per_split": state.get("max_pages_per_split"),
         "margin_cm": state.get("margin_cm", 1.0),
         "preserve_file_parity": state.get("preserve_file_parity", True),
         "same_page_parity": "true" if state.get("same_page_parity", True) else "false",

@@ -86,7 +86,7 @@ class SplitOutput:
 class SplitPdfJobOptions:
     apply_booklets: bool = False
     booklet_layout: BookletLayout = "side_by_side"
-    max_pages_per_split: int = 40
+    max_pages_per_split: int | None = None
     margin_cm: float = 1.0
     preserve_file_parity: bool = True
     same_page_parity: bool = True

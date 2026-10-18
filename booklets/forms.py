@@ -62,9 +62,9 @@ class BookletForm(WatermarkFields):
     )
 
     max_pages_per_split = forms.IntegerField(
-        label="Max pages per split",
-        required=True,
-        initial=40,
+        label="Max pages per split (optional)",
+        required=False,
+        initial=None,
         min_value=1,
         widget=forms.NumberInput(attrs={"class": "form-control"}),
     )

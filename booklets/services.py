@@ -124,7 +124,13 @@ def prepare_pdf_for_portrait_printing(input_pdf_path: str, output_pdf_path: str)
         source_doc.close()
 
 
-def compute_split_ranges(total_pages: int, max_pages_per_split: int) -> list[tuple[int, int]]:
+def compute_split_ranges(total_pages: int, max_pages_per_split: int | None) -> list[tuple[int, int]]:
+    if total_pages <= 0:
+        return []
+    if max_pages_per_split is None:
+        return [(0, total_pages - 1)]
+    if max_pages_per_split < 1:
+        raise ValueError("Max pages per split must be positive.")
     split_ranges: list[tuple[int, int]] = []
     split_count = 0
     current_index = 0
@@ -332,7 +338,7 @@ def create_booklet(
 
 def build_booklets_pipeline(
     specs: list[SourcePdfSpec],
-    max_pages_per_split: int,
+    max_pages_per_split: int | None,
     final_output_dir: str,
     preserve_file_parity: bool = True,
     generate_cover: bool = False,

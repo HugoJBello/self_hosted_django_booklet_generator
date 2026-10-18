@@ -85,8 +85,9 @@ class DiaryForm(SubjectFilterForm, WatermarkFields):
         widget=forms.RadioSelect,
     )
     max_pages_per_split = forms.IntegerField(
-        label="Max pages per split",
-        initial=40,
+        label="Max pages per split (optional)",
+        required=False,
+        initial=None,
         min_value=1,
         widget=forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     )

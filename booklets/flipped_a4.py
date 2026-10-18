@@ -423,7 +423,7 @@ def prepare_pdf_for_a5_printing(input_pdf_path: str, output_pdf_path: str) -> No
 
 def build_flipped_a4_booklets_pipeline(
     specs: list[SourcePdfSpec],
-    max_pages_per_split: int,
+    max_pages_per_split: int | None,
     final_output_dir: str,
     preserve_file_parity: bool = True,
     generate_cover: bool = False,

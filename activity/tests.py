@@ -13,9 +13,27 @@ from .models import Artifact
 from .services import record_activity
 from .filenames import generated_pdf_name, portable_stem
 from .watermark import stamp_pdf
+from booklets.forms import BookletForm
+from booklets.services import compute_split_ranges
+from diary.forms import DiaryForm
+from splitpdf.forms import SplitPdfForm
 
 
-class FooterWatermarkTests(SimpleTestCase):
+class BookletDefaultsTests(SimpleTestCase):
+    def test_all_booklet_forms_leave_split_blank_and_prepare_portrait_printing(self):
+        for form in (BookletForm(), SplitPdfForm(), DiaryForm()):
+            with self.subTest(form=type(form).__name__):
+                self.assertIsNone(form.fields["max_pages_per_split"].initial)
+                self.assertFalse(form.fields["max_pages_per_split"].required)
+                self.assertIsNone(form.fields["max_pages_per_split"].clean(""))
+                self.assertTrue(form.fields["side_by_side_prepare_for_portrait_printing"].initial)
+
+    def test_blank_limit_keeps_all_pages_in_one_booklet(self):
+        self.assertEqual(compute_split_ranges(100, None), [(0, 99)])
+        self.assertGreater(len(compute_split_ranges(100, 40)), 1)
+
+
+class FooterWatermarkTests(TestCase):
     def _pdf(self, pages=3):
         handle, path = tempfile.mkstemp(suffix=".pdf")
         os.close(handle)
@@ -48,36 +66,30 @@ class FooterWatermarkTests(SimpleTestCase):
                                 else all(line["bbox"][2] < 300 for line in footer))
                 self.assertTrue(all(line["bbox"][2] < 595 for line in footer))
 
-    def test_booklet_places_both_corners_on_first_physical_sheet(self):
-        path = self._pdf()
-        stamp_pdf(path, booklet=True)
-        with fitz.open(path) as document:
-            self.assertEqual(document[0].get_text().count("*"), 2)
-            self.assertEqual(document[-1].get_text().count("*"), 0)
+    def test_booklet_activity_uses_first_and_last_pages_like_other_pdfs(self):
+        owner = get_user_model().objects.create_user("footer-booklet")
+        for layout in ("side_by_side", "flipped_a4"):
+            with self.subTest(layout=layout):
+                path = self._pdf()
+                record_activity(owner=owner, tool="booklets", title="Booklet", options={
+                    "watermark": True, "booklet_layout": layout,
+                }, outputs=[{"name": "booklet.pdf", "path": path}])
+                with fitz.open(path) as document:
+                    self.assertEqual(document[0].get_text().count("*"), 1)
+                    self.assertEqual(document[1].get_text().count("*"), 0)
+                    self.assertEqual(document[-1].get_text().count("*"), 1)
 
     def test_rotated_page_footer_remains_at_visual_bottom(self):
         path = self._pdf(pages=1)
         with fitz.open(path) as document:
             document[0].set_rotation(90)
             document.saveIncr()
-        stamp_pdf(path, booklet=True)
+        stamp_pdf(path)
         with fitz.open(path) as document:
             page = document[0]
             self.assertEqual(page.rotation, 90)
             pixmap = page.get_pixmap(clip=fitz.Rect(0, page.rect.height - 28, page.rect.width, page.rect.height), alpha=False)
             self.assertTrue(any(channel < 180 for channel in pixmap.samples))
-
-    def test_flipped_booklet_marks_both_outer_edges_of_first_sheet(self):
-        path = self._pdf()
-        stamp_pdf(path, booklet=True, flipped=True)
-        with fitz.open(path) as document:
-            page = document[0]
-            top = page.get_pixmap(clip=fitz.Rect(300, 0, 595, 28), alpha=False)
-            bottom = page.get_pixmap(clip=fitz.Rect(0, 814, 295, 842), alpha=False)
-            self.assertTrue(any(channel < 180 for channel in top.samples))
-            self.assertTrue(any(channel < 180 for channel in bottom.samples))
-            self.assertNotIn("*", document[-1].get_text())
-
 
 class GeneratedFilenameTests(TestCase):
     def test_name_is_descriptive_portable_and_bounded(self):

@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from activity.models import Artifact
 
 from .forms import BookletForm
 from .flipped_a4 import (
@@ -119,6 +120,26 @@ class BookletsViewTests(TestCase):
         self.assertIn("Page split method", form.as_p())
         self.assertIn("Middle page separation", form.as_p())
         self.assertIn("Prepare for A5 printing", form.as_p())
+
+    def test_final_pdf_watermark_uses_first_and_last_pages_for_both_layouts(self):
+        for layout in ("side_by_side", "flipped_a4"):
+            with self.subTest(layout=layout):
+                self.client.get(reverse("booklets:clear"))
+                response = self.client.post(reverse("booklets:form"), data={
+                    "input_pdf": [SimpleUploadedFile("source.pdf", build_pdf_bytes(4), content_type="application/pdf")],
+                    "processing_mode": "separate", "booklet_layout": layout,
+                    "side_by_side_prepare_for_portrait_printing": "on",
+                    "flipped_a4_split_mode": "vector", "watermark": "on",
+                    "file_add_watermark_0": "false",
+                })
+                self.assertEqual(response.status_code, 200)
+                artifact_id = response.context["results"][0]["artifact_id"]
+                with fitz.open(Artifact.objects.get(pk=artifact_id).path) as document:
+                    self.assertGreater(document.page_count, 1)
+                    self.assertEqual(document[0].get_text().count("*"), 1)
+                    self.assertEqual(document[-1].get_text().count("*"), 1)
+                    for page_number in range(1, document.page_count - 1):
+                        self.assertNotIn("*", document[page_number].get_text())
 
     def test_flipped_a4_quality_profiles_preserve_old_low_and_high_as_lower_options(self):
         form = BookletForm()

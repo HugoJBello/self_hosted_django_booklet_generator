@@ -40,13 +40,7 @@ def record_activity(*, owner, tool, title, options, inputs=(), outputs=(), resto
             if generated_names and kind == "output" and str(entry.get("content_type") or "application/pdf") == "application/pdf":
                 name = generated_pdf_name(source_names=source_names, tool=tool, detail=name, index=index if len(entries) > 1 else None, used_names=used_names)
             if kind == "output" and options.get("watermark") and str(entry.get("content_type") or "application/pdf") == "application/pdf":
-                booklet = (tool == "booklets" or tool == "splitpdf" and options.get("apply_booklets")
-                           or tool == "diary" and options.get("output_mode") != "pdf")
-                flipped = booklet and (tool == "booklets" and options.get("booklet_layout") == "flipped_a4"
-                                       or tool == "splitpdf" and options.get("booklet_layout") == "flipped_a4"
-                                       or tool == "diary" and options.get("output_mode") == "flipped_a4")
-                stamp_pdf(path, filename=name if options.get("watermark_filename") else "",
-                          booklet=booklet, flipped=flipped)
+                stamp_pdf(path, filename=name if options.get("watermark_filename") else "")
             artifacts.append(Artifact(activity=activity, kind=kind, name=name, path=path, content_type=str(entry.get("content_type") or "application/pdf"), size=os.path.getsize(path) if os.path.isfile(path) else 0))
     Artifact.objects.bulk_create(artifacts)
     return activity

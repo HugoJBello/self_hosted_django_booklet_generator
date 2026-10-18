@@ -55,9 +55,9 @@ class SplitPdfForm(WatermarkFields):
     )
 
     max_pages_per_split = forms.IntegerField(
-        label="Max pages per booklet split",
+        label="Max pages per booklet split (optional)",
         required=False,
-        initial=40,
+        initial=None,
         min_value=1,
         widget=forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     )
@@ -150,7 +150,7 @@ class SplitPdfForm(WatermarkFields):
         return value if value in {"toc", "ranges"} else ""
 
     def clean_max_pages_per_split(self):
-        return self.cleaned_data.get("max_pages_per_split") or 40
+        return self.cleaned_data.get("max_pages_per_split")
 
     def clean_margin_cm(self):
         value = self.cleaned_data.get("margin_cm")

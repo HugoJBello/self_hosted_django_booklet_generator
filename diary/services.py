@@ -363,7 +363,7 @@ def build_diary_pipeline(
     include_constellation_map: bool,
     output_mode: str,
     final_output_dir: str,
-    max_pages_per_split: int = 40,
+    max_pages_per_split: int | None = None,
     content_margin_cm: float = 0.5,
     side_by_side_prepare_for_portrait_printing: bool = True,
     flipped_a4_prepare_for_a5_printing: bool = True,

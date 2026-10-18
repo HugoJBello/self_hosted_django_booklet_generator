@@ -176,7 +176,7 @@ def _build_initial_form(form: BookletForm) -> BookletForm:
         initial={
             "processing_mode": form.cleaned_data.get("processing_mode", "separate"),
             "booklet_layout": form.cleaned_data.get("booklet_layout", "side_by_side"),
-            "max_pages_per_split": form.cleaned_data.get("max_pages_per_split", 40),
+            "max_pages_per_split": form.cleaned_data.get("max_pages_per_split"),
             "margin_cm": form.cleaned_data.get("margin_cm", 1.0),
             "preserve_file_parity": form.cleaned_data.get("preserve_file_parity", True),
             "generate_cover": form.cleaned_data.get("generate_cover", False),

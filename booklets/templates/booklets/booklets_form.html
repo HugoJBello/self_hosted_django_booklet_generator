@@ -133,7 +133,7 @@
                   <div class="col-sm-6">
                     <label class="form-label" for="{{ form.max_pages_per_split.id_for_label }}">{{ form.max_pages_per_split.label }}</label>
                     {{ form.max_pages_per_split }}
-                    <div class="form-text">Maximum source pages per generated split.</div>
+                    <div class="form-text">Leave blank to keep each booklet whole. Enter a limit only if you want to split it.</div>
                     {% for e in form.max_pages_per_split.errors %}
                       <div class="text-danger small">{{ e }}</div>
                     {% endfor %}
