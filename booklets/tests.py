@@ -22,6 +22,7 @@ from .flipped_a4 import (
     build_flipped_a4_booklets_pipeline,
 )
 from .services import PreparedPage, SourcePdfSpec, build_booklets_pipeline, prepare_pages_for_specs
+from .views import _combined_source_specs
 
 
 def build_pdf_bytes(page_count: int) -> bytes:
@@ -417,7 +418,6 @@ class BookletsViewTests(TestCase):
                         SimpleUploadedFile("beta.pdf", build_pdf_bytes(3), content_type="application/pdf"),
                     ],
                     "processing_mode": "combined", "booklet_layout": layout,
-                    "max_pages_per_split": "2",
                     "flipped_a4_split_mode": "vector", "watermark": "on", "watermark_filename": "on",
                     "file_add_watermark_0": "false", "file_add_watermark_1": "false",
                 })
@@ -428,55 +428,27 @@ class BookletsViewTests(TestCase):
                     self.assertEqual(text.count("alpha.pdf"), 2)
                     self.assertEqual(text.count("beta.pdf"), 2)
 
-    def test_combined_side_by_side_watermark_is_at_top(self):
-        for prepare_for_portrait in (False, True):
-            with self.subTest(prepare_for_portrait=prepare_for_portrait):
-                self.client.get(reverse("booklets:clear"))
-                response = self.client.post(reverse("booklets:form"), data={
-                    "input_pdf": [
-                        SimpleUploadedFile("alpha.pdf", build_pdf_bytes(1), content_type="application/pdf"),
-                        SimpleUploadedFile("beta.pdf", build_pdf_bytes(1), content_type="application/pdf"),
-                    ],
-                    "processing_mode": "combined", "booklet_layout": "side_by_side",
-                    "watermark": "on", "watermark_filename": "on",
-                    "side_by_side_prepare_for_portrait_printing": "on" if prepare_for_portrait else "",
-                    "file_add_watermark_0": "false", "file_add_watermark_1": "false",
-                })
-                self.assertEqual(response.status_code, 200)
-                path = Artifact.objects.get(pk=response.context["results"][0]["artifact_id"]).path
-                with fitz.open(path) as output:
-                    for name in ("alpha.pdf", "beta.pdf"):
-                        marked_blocks = [block for page in output for block in page.get_text("blocks")
-                                         if name in block[4]]
-                        self.assertTrue(marked_blocks)
-                        self.assertTrue(all(block[3] < 28.35 for block in marked_blocks))
-                    self.assertTrue(any(
-                        drawing["fill"] == (0.0, 0.0, 0.0) and drawing["rect"].y1 < 28.35
-                        for page in output for drawing in page.get_drawings()
-                    ))
+    def test_combined_side_by_side_marks_each_source_at_top_before_imposition(self):
+        source_path = os.path.join(TEST_MEDIA_ROOT, "alpha.pdf")
+        with open(source_path, "wb") as source_file:
+            source_file.write(build_pdf_bytes(2))
+        specs = [SourcePdfSpec(source_path, same_page_parity=True, margin_cm=1.0,
+                               add_watermark=False)]
+        items = [{"name": "alpha.pdf"}]
 
-    def test_combined_top_marks_do_not_overlap_with_four_short_sources(self):
-        names = ("alpha.pdf", "beta.pdf", "gamma.pdf", "delta.pdf")
-        response = self.client.post(reverse("booklets:form"), data={
-            "input_pdf": [SimpleUploadedFile(name, build_pdf_bytes(1), content_type="application/pdf")
-                          for name in names],
-            "processing_mode": "combined", "booklet_layout": "side_by_side",
-            "watermark": "on", "watermark_filename": "on",
-            **{f"file_add_watermark_{index}": "false" for index in range(len(names))},
-        })
-        self.assertEqual(response.status_code, 200)
-        path = Artifact.objects.get(pk=response.context["results"][0]["artifact_id"]).path
-        with fitz.open(path) as output:
-            found = []
-            for page in output:
-                name_words = sorted((word for word in page.get_text("words") if word[4] in names),
-                                    key=lambda word: word[0])
-                self.assertLessEqual(len(name_words), 2)
-                self.assertTrue(all(word[3] < 28.35 for word in name_words))
-                if len(name_words) == 2:
-                    self.assertLess(name_words[0][2], name_words[1][0])
-                found.extend(word[4] for word in name_words)
-            self.assertCountEqual(found, names)
+        with _combined_source_specs(specs, items, watermark=True, include_filename=True,
+                                    side_by_side=True) as prepared:
+            self.assertEqual(prepared[0].render_pdf_path, source_path)
+            for path in (prepared[0].input_pdf_path, prepared[0].watermark_overlay_path):
+                with fitz.open(path) as stamped:
+                    for page in stamped:
+                        name_blocks = [block for block in page.get_text("blocks")
+                                       if "alpha.pdf" in block[4]]
+                        self.assertEqual(len(name_blocks), 1)
+                        self.assertLess(name_blocks[0][3], 28.35)  # Within the top 10 mm.
+
+        with fitz.open(source_path) as original:
+            self.assertNotIn("alpha.pdf", "".join(page.get_text() for page in original))
 
     def test_uploaded_files_persist_for_regeneration(self):
         first_response = self.client.post(

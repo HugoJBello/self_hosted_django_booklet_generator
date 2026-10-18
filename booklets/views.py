@@ -92,13 +92,21 @@ def _combined_source_specs(specs, items, *, watermark: bool, include_filename: b
             os.makedirs(source_dir)
             source_copy = os.path.join(source_dir, safe_name)
             shutil.copyfile(spec.input_pdf_path, source_copy)
-            stamp_pdf(source_copy, filename=source_name if include_filename else "", generated_at=generated_at)
+            stamp_pdf(source_copy, filename=source_name if include_filename else "",
+                      generated_at=generated_at, at_top=side_by_side)
             if side_by_side:
-                # Use unmarked content for page detection; the prepared source
-                # supplies the filename and endpoint metadata for final placement.
+                # Its content detector must see the original page bounds. Keep
+                # the prepared mark in a transparent layer for the same cell.
+                overlay_path = os.path.join(source_dir, "watermark_overlay.pdf")
+                with fitz.open(spec.input_pdf_path) as original, fitz.open() as overlay:
+                    for page in original:
+                        overlay.new_page(width=page.rect.width, height=page.rect.height)
+                    overlay.save(overlay_path)
+                stamp_pdf(overlay_path, filename=source_name if include_filename else "",
+                          generated_at=generated_at, at_top=True)
                 prepared_specs.append(replace(spec, input_pdf_path=source_copy,
                                               render_pdf_path=spec.input_pdf_path,
-                                              watermark_name=source_name if include_filename else ""))
+                                              watermark_overlay_path=overlay_path))
             else:
                 prepared_specs.append(replace(spec, input_pdf_path=source_copy))
         yield prepared_specs
@@ -350,7 +358,6 @@ def booklets_view(request):
                     "name": os.path.basename(result.output_pdf_path), "path": result.output_pdf_path,
                     "section_marks": numbered_sections(result.section_ranges),
                     "watermark_preapplied": combined_watermark,
-                    "corner_marks": result.corner_marks if not flipped_a4 else (),
                 })
                 messages.success(request, "Combined booklet generated successfully.")
             else:
