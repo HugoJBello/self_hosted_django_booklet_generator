@@ -13,8 +13,6 @@ from .models import Artifact
 from .services import record_activity
 from .filenames import generated_pdf_name, portable_stem
 from .watermark import stamp_pdf
-from booklets.flipped_a4 import build_flipped_a4_booklets_pipeline
-from booklets.services import SourcePdfSpec, build_booklets_pipeline
 
 
 class FooterWatermarkTests(SimpleTestCase):
@@ -50,33 +48,35 @@ class FooterWatermarkTests(SimpleTestCase):
                                 else all(line["bbox"][2] < 300 for line in footer))
                 self.assertTrue(all(line["bbox"][2] < 595 for line in footer))
 
+    def test_booklet_places_both_corners_on_first_physical_sheet(self):
+        path = self._pdf()
+        stamp_pdf(path, booklet=True)
+        with fitz.open(path) as document:
+            self.assertEqual(document[0].get_text().count("*"), 2)
+            self.assertEqual(document[-1].get_text().count("*"), 0)
+
     def test_rotated_page_footer_remains_at_visual_bottom(self):
         path = self._pdf(pages=1)
         with fitz.open(path) as document:
             document[0].set_rotation(90)
             document.saveIncr()
-        stamp_pdf(path)
+        stamp_pdf(path, booklet=True)
         with fitz.open(path) as document:
             page = document[0]
             self.assertEqual(page.rotation, 90)
             pixmap = page.get_pixmap(clip=fitz.Rect(0, page.rect.height - 28, page.rect.width, page.rect.height), alpha=False)
             self.assertTrue(any(channel < 180 for channel in pixmap.samples))
 
-    def test_both_booklet_layouts_transform_marked_source_without_mutating_upload(self):
-        source_path = self._pdf()
-        with tempfile.TemporaryDirectory() as directory:
-            spec = SourcePdfSpec(source_path, same_page_parity=True, margin_cm=0.5, add_watermark=False)
-            for pipeline in (build_booklets_pipeline, build_flipped_a4_booklets_pipeline):
-                result = pipeline(
-                    specs=[spec], max_pages_per_split=40, final_output_dir=directory,
-                    watermark=True, watermark_filename=True,
-                    watermark_source_names=["source-name.pdf"],
-                )
-                with fitz.open(result.output_pdf_path) as generated:
-                    output_text = "".join(page.get_text() for page in generated)
-                    self.assertIn("source-name.pdf", output_text)
-                with fitz.open(source_path) as original:
-                    self.assertNotIn("source-name.pdf", "".join(page.get_text() for page in original))
+    def test_flipped_booklet_marks_both_outer_edges_of_first_sheet(self):
+        path = self._pdf()
+        stamp_pdf(path, booklet=True, flipped=True)
+        with fitz.open(path) as document:
+            page = document[0]
+            top = page.get_pixmap(clip=fitz.Rect(300, 0, 595, 28), alpha=False)
+            bottom = page.get_pixmap(clip=fitz.Rect(0, 814, 295, 842), alpha=False)
+            self.assertTrue(any(channel < 180 for channel in top.samples))
+            self.assertTrue(any(channel < 180 for channel in bottom.samples))
+            self.assertNotIn("*", document[-1].get_text())
 
 
 class GeneratedFilenameTests(TestCase):

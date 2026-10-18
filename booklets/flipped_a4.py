@@ -18,7 +18,6 @@ from .services import (
     compute_split_ranges,
     merge_pdfs,
     prepare_pages_for_specs,
-    stamped_source_specs,
 )
 
 
@@ -432,9 +431,6 @@ def build_flipped_a4_booklets_pipeline(
     center_gap_cm: float = FLIPPED_A4_CENTER_GAP_CM,
     split_mode: FlippedA4SplitMode = "vector",
     prepare_for_a5_printing: bool = False,
-    watermark: bool = False,
-    watermark_filename: bool = False,
-    watermark_source_names: list[str] | None = None,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -444,9 +440,7 @@ def build_flipped_a4_booklets_pipeline(
     final_pdf = os.path.join(final_output_dir, f"{job_id}_flipped_a4_booklets_for_printing.pdf")
 
     with tempfile.TemporaryDirectory(prefix=f"pdf_manager_{job_id}_") as tmp:
-        specs_to_process = (stamped_source_specs(specs, tmp, include_filename=watermark_filename,
-                                                source_names=watermark_source_names) if watermark else list(specs))
-        prepared_pages = prepare_pages_for_specs(specs_to_process, preserve_file_parity=preserve_file_parity)
+        prepared_pages = prepare_pages_for_specs(list(specs), preserve_file_parity=preserve_file_parity)
         split_ranges = compute_split_ranges(len(prepared_pages), max_pages_per_split)
         split_outputs: list[str] = []
         cover_entries = collect_cover_entries([spec.input_pdf_path for spec in specs]) if generate_cover else None

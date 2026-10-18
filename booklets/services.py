@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import os
-import shutil
 import tempfile
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import fitz  # PyMuPDF
 from django.utils import timezone
 from pdf_manager_project.pdf_cover import collect_cover_entries, create_cover_pdf
-from activity.watermark import stamp_pdf
 
 
 @dataclass(frozen=True)
@@ -198,24 +196,6 @@ def prepare_pages_for_specs(
     return prepared_pages
 
 
-def stamped_source_specs(
-    specs: list[SourcePdfSpec], directory: str, *, include_filename: bool = False,
-    source_names: list[str] | None = None,
-) -> list[SourcePdfSpec]:
-    """Stamp private copies before booklet imposition; preserve original uploads."""
-    if source_names is not None and len(source_names) != len(specs):
-        raise ValueError("A name is required for each source PDF.")
-    prepared = []
-    generated_at = timezone.now()
-    for index, spec in enumerate(specs):
-        copied_path = os.path.join(directory, f"watermarked_source_{index + 1}.pdf")
-        shutil.copy2(spec.input_pdf_path, copied_path)
-        source_name = source_names[index] if source_names is not None else os.path.basename(spec.input_pdf_path)
-        stamp_pdf(copied_path, filename=source_name if include_filename else "", generated_at=generated_at)
-        prepared.append(replace(spec, input_pdf_path=copied_path))
-    return prepared
-
-
 def create_booklet(
     prepared_pages: list[PreparedPage],
     output_pdf_path: str,
@@ -357,9 +337,6 @@ def build_booklets_pipeline(
     preserve_file_parity: bool = True,
     generate_cover: bool = False,
     prepare_for_portrait_printing: bool = False,
-    watermark: bool = False,
-    watermark_filename: bool = False,
-    watermark_source_names: list[str] | None = None,
 ) -> BookletJobResult:
     if not specs:
         raise ValueError("There are no PDFs to process.")
@@ -369,8 +346,7 @@ def build_booklets_pipeline(
     final_pdf = os.path.join(final_output_dir, f"{job_id}_booklets_for_printing.pdf")
 
     with tempfile.TemporaryDirectory(prefix=f"pdf_manager_{job_id}_") as tmp:
-        specs_to_process = (stamped_source_specs(specs, tmp, include_filename=watermark_filename,
-                                                source_names=watermark_source_names) if watermark else list(specs))
+        specs_to_process = list(specs)
         if generate_cover:
             cover_path = os.path.join(tmp, "cover.pdf")
             create_cover_pdf(

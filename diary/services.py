@@ -374,8 +374,6 @@ def build_diary_pipeline(
     latitude: float | None = None,
     longitude: float | None = None,
     class_events: set[Event] | None = None,
-    watermark: bool = False,
-    watermark_filename: bool = False,
 ) -> DiaryJobResult:
     diary = generate_diary_pdf(
         start_date=start_date,
@@ -410,9 +408,6 @@ def build_diary_pipeline(
             preserve_file_parity=True,
             generate_cover=False,
             prepare_for_portrait_printing=side_by_side_prepare_for_portrait_printing,
-            watermark=watermark,
-            watermark_filename=watermark_filename,
-            watermark_source_names=["diary.pdf"],
         )
     elif output_mode == "flipped_a4":
         result = build_flipped_a4_booklets_pipeline(
@@ -425,9 +420,6 @@ def build_diary_pipeline(
             center_gap_cm=flipped_a4_center_gap_cm,
             split_mode=flipped_a4_split_mode,
             prepare_for_a5_printing=flipped_a4_prepare_for_a5_printing,
-            watermark=watermark,
-            watermark_filename=watermark_filename,
-            watermark_source_names=["diary.pdf"],
         )
     else:
         raise ValueError(f"Unsupported diary output mode: {output_mode}")

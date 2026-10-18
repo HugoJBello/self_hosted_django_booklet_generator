@@ -471,8 +471,6 @@ def split_view(request):
 
             options = SplitPdfJobOptions(
                 apply_booklets=bool(form.cleaned_data["apply_booklets"]),
-                watermark=bool(form.cleaned_data["watermark"]),
-                watermark_filename=bool(form.cleaned_data["watermark_filename"]),
                 booklet_layout=form.cleaned_data["booklet_layout"],
                 max_pages_per_split=form.cleaned_data["max_pages_per_split"],
                 margin_cm=form.cleaned_data["margin_cm"],

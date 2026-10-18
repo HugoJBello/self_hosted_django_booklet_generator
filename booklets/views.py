@@ -256,9 +256,6 @@ def booklets_view(request):
                     "final_output_dir": outputs_dir,
                     "preserve_file_parity": preserve_file_parity,
                     "generate_cover": generate_cover,
-                    "watermark": bool(form.cleaned_data["watermark"]),
-                    "watermark_filename": bool(form.cleaned_data["watermark_filename"]),
-                    "watermark_source_names": [item["name"] for item in items],
                 }
                 if flipped_a4:
                     pipeline_kwargs["render_quality"] = flipped_a4_quality
@@ -284,9 +281,6 @@ def booklets_view(request):
                         "final_output_dir": outputs_dir,
                         "preserve_file_parity": True,
                         "generate_cover": generate_cover if flipped_a4 else False,
-                        "watermark": bool(form.cleaned_data["watermark"]),
-                        "watermark_filename": bool(form.cleaned_data["watermark_filename"]),
-                        "watermark_source_names": [item["name"]],
                     }
                     if flipped_a4:
                         pipeline_kwargs["render_quality"] = flipped_a4_quality

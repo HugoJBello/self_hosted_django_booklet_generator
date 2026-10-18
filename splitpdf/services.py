@@ -85,8 +85,6 @@ class SplitOutput:
 @dataclass(frozen=True)
 class SplitPdfJobOptions:
     apply_booklets: bool = False
-    watermark: bool = False
-    watermark_filename: bool = False
     booklet_layout: BookletLayout = "side_by_side"
     max_pages_per_split: int = 40
     margin_cm: float = 1.0
@@ -408,9 +406,6 @@ def _apply_booklet(
         "final_output_dir": output_dir,
         "preserve_file_parity": options.preserve_file_parity,
         "generate_cover": False,
-        "watermark": options.watermark,
-        "watermark_filename": options.watermark_filename,
-        "watermark_source_names": [section.filename],
     }
 
     if options.booklet_layout == "flipped_a4":
