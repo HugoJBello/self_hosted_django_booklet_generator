@@ -97,6 +97,8 @@ def diary_view(request):
                         flipped_a4_center_gap_cm=form.cleaned_data["flipped_a4_center_gap_cm"],
                         flipped_a4_split_mode=form.cleaned_data["flipped_a4_split_mode"],
                         flipped_a4_quality=form.cleaned_data["flipped_a4_quality"],
+                        watermark=bool(form.cleaned_data["watermark"]),
+                        watermark_filename=bool(form.cleaned_data["watermark_filename"]),
                         class_events=class_events,
                     )
                 except FileNotFoundError as exc:

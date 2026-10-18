@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from activity.models import Artifact
 
 from .forms import BookletForm
 from .flipped_a4 import (
@@ -206,6 +207,26 @@ class BookletsViewTests(TestCase):
             with fitz.open(os.path.join(outputs_dir, filename)) as generated:
                 self.assertIn("Booklet index", generated[0].get_text())
 
+    def test_date_watermark_is_imposed_from_source_in_both_layouts(self):
+        for layout in ("side_by_side", "flipped_a4"):
+            with self.subTest(layout=layout):
+                self.client.get(reverse("booklets:clear"))
+                response = self.client.post(reverse("booklets:form"), data={
+                    "input_pdf": [SimpleUploadedFile("source-name.pdf", build_pdf_bytes(2), content_type="application/pdf")],
+                    "processing_mode": "separate", "booklet_layout": layout,
+                    "max_pages_per_split": "40", "flipped_a4_split_mode": "vector",
+                    "watermark": "on", "watermark_filename": "on",
+                    "file_add_watermark_0": "true",
+                })
+                self.assertEqual(response.status_code, 200)
+                outputs = list(response.context["results"])
+                self.assertEqual(len(outputs), 1)
+                output_artifact = response.context["results"][0]["artifact_id"]
+                with fitz.open(Artifact.objects.get(pk=output_artifact).path) as document:
+                    text = "".join(page.get_text() for page in document)
+                    self.assertIn("source-name.pdf", text)
+                    self.assertNotIn("booklets_for_printing.pdf", text)
+                    self.assertIn("*", text)  # Existing per-file marker remains.
     def test_combined_mode_generates_single_result(self):
         response = self.client.post(
             reverse("booklets:form"),
