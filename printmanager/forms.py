@@ -35,7 +35,7 @@ class PrinterForm(forms.ModelForm):
 
     class Meta:
         model = Printer
-        fields = ("name", "description", "location", "device_uri", "driver", "is_enabled", "is_shared", "is_default")
+        fields = ("name", "description", "location", "device_uri", "driver", "document_format_override", "is_enabled", "is_shared", "is_default")
         widgets = {"device_uri": forms.TextInput(attrs={"placeholder": "ipp://printer.local/ipp/print"}), "driver": forms.TextInput(attrs={"placeholder": "everywhere"})}
 
     def __init__(self, *args, **kwargs):

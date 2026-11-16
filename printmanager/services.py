@@ -345,11 +345,10 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
             # Driverless monochrome printers commonly advertise only sGray_8.
             # Ghostscript otherwise emits Black_1, which some firmware accepts
             # as a job but renders as blank pages.
-            raster_setup = "<</cupsColorSpace 18 /cupsBitsPerColor 8 /cupsBitsPerPixel 8 /cupsColorOrder 0>>setpagedevice"
-            args += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
+            args += ["-dcupsColorSpace=18", "-dcupsBitsPerColor=8", "-dcupsColorOrder=0",
+                     "-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
         else:
-            raster_setup = "<</cupsColorSpace 19 /cupsBitsPerColor 8 /cupsBitsPerPixel 24 /cupsColorOrder 0>>setpagedevice"
-        args += ["-c", raster_setup, "-f"]
+            args += ["-dcupsColorSpace=19", "-dcupsBitsPerColor=8", "-dcupsColorOrder=0"]
     if page_ranges:
         args.append(f"-sPageList={page_ranges}")
     args.append(str(path))
@@ -504,10 +503,15 @@ def _pdf_contains_images(path) -> bool:
 def _select_document_format(printer, path=None):
     formats = list(printer.document_formats or [])
     preferred = printer.preferred_document_format
+    override = getattr(printer, "document_format_override", "")
     if not formats:
         identity = inspect_ipp_printer(printer.device_uri)
         formats = identity.get("document_formats", [])
         preferred = identity.get("preferred_document_format", "")
+    if override:
+        if override not in formats:
+            raise CupsError(f"The selected document format {override} is not advertised by the printer.")
+        return override
     # Preserve the original PDF whenever the printer accepts it.  This keeps
     # text and vector graphics intact and also avoids printers which advertise
     # URF/PWG support but abort those jobs later with document-format-error.

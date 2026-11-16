@@ -180,6 +180,17 @@ class CupsParsingTests(TestCase):
         finally:
             os.unlink(handle.name)
 
+    def test_document_format_override_takes_priority_and_must_be_supported(self):
+        printer = type("Printer", (), {
+            "document_formats": ["image/urf", "image/pwg-raster"],
+            "preferred_document_format": "image/urf",
+            "document_format_override": "image/pwg-raster",
+        })()
+        self.assertEqual(_select_document_format(printer), "image/pwg-raster")
+        printer.document_format_override = "application/pdf"
+        with self.assertRaisesRegex(CupsError, "not advertised"):
+            _select_document_format(printer)
+
     def test_image_pdf_prefers_original_pdf_when_supported(self):
         handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         handle.close()
@@ -273,12 +284,13 @@ class CupsParsingTests(TestCase):
 
         def create_output(args, **_kwargs):
             output = next(item.split("=", 1)[1] for item in args if item.startswith("-sOutputFile="))
+            mono = "-dcupsColorSpace=18" in args
             header = bytearray(408)
             header[:4] = b"RaS2"
             import struct
             struct.pack_into(">II", header, 376, 4961, 7016)
-            struct.pack_into(">II", header, 388, 8, 8)
-            struct.pack_into(">I", header, 404, 18)
+            struct.pack_into(">II", header, 388, 8, 8 if mono else 24)
+            struct.pack_into(">I", header, 404, 18 if mono else 19)
             Path(output).write_bytes(header)
             return ""
 
@@ -294,7 +306,20 @@ class CupsParsingTests(TestCase):
             self.assertIn("-dPDFFitPage", args)
             self.assertIn("-dDEVICEWIDTHPOINTS=595.28", args)
             self.assertIn("-dDEVICEHEIGHTPOINTS=841.89", args)
-            self.assertIn("<</cupsColorSpace 18 /cupsBitsPerColor 8 /cupsBitsPerPixel 8 /cupsColorOrder 0>>setpagedevice", args)
+            self.assertIn("-dcupsColorSpace=18", args)
+            self.assertIn("-dcupsBitsPerColor=8", args)
+            self.assertIn("-dcupsColorOrder=0", args)
+            self.assertNotIn("-c", args)
+            output.unlink(missing_ok=True)
+            output = _convert_pdf(Path(source.name), "image/pwg-raster", {
+                "media": "iso_a4_210x297mm", "printer-resolution": "600dpi",
+                "print-color-mode": "color",
+            })
+            args = run.call_args.args[0]
+            self.assertIn("-dcupsColorSpace=19", args)
+            self.assertIn("-dcupsBitsPerColor=8", args)
+            self.assertIn("-dcupsColorOrder=0", args)
+            self.assertNotIn("-c", args)
             output.unlink(missing_ok=True)
         finally:
             os.unlink(source.name)

@@ -15,6 +15,13 @@ class Printer(models.Model):
     supported_options = models.JSONField(default=dict, blank=True)
     document_formats = models.JSONField(default=list, blank=True)
     preferred_document_format = models.CharField(max_length=127, blank=True)
+    document_format_override = models.CharField(
+        max_length=127, blank=True, choices=(
+            ("application/pdf", "PDF"),
+            ("image/pwg-raster", "PWG Raster"),
+            ("image/urf", "URF"),
+        ), help_text="Optional. Use when a printer rejects its advertised preferred format.",
+    )
     capability_validation = models.JSONField(default=dict, blank=True)
     certified_at = models.DateTimeField(null=True, blank=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
