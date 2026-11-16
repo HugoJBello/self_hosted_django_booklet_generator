@@ -307,7 +307,7 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
         device, suffix = "pwgraster", ".pwg"
     elif document_format == "image/urf":
         is_mono = options.get("print-color-mode") == "monochrome"
-        device, suffix = ("urfgray" if is_mono else "urf"), ".urf"
+        device, suffix = ("urfgray" if is_mono else "urfrgb"), ".urf"
     else:
         raise CupsError(f"No PDF conversion is available for {document_format}.")
 
@@ -359,6 +359,8 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
             raise CupsError("PDF conversion produced an empty print document.")
         if document_format == "image/urf" and options.get("print-color-mode") == "monochrome":
             _normalize_urf_luminance(output_path)
+        if document_format == "image/urf":
+            _validate_urf_header(output_path, options)
         if document_format == "image/pwg-raster":
             _validate_pwg_header(output_path, options)
         return output_path
@@ -451,6 +453,24 @@ def _normalize_urf_luminance(path):
     if not pages:
         raise CupsError("PDF conversion produced an empty URF document.")
     Path(path).write_bytes(output)
+
+
+def _validate_urf_header(path, options):
+    """Check that Ghostscript produced an AirPrint color model and sheet size."""
+    with Path(path).open("rb") as document:
+        header = document.read(44)
+    if len(header) < 44 or header[:8] != b"UNIRAST\0":
+        raise CupsError("PDF conversion produced an invalid URF document.")
+    depth, color_space = header[12:14]
+    expected = (8, 0) if options.get("print-color-mode") == "monochrome" else (24, 5)
+    if (depth, color_space) != expected:
+        raise CupsError("PDF conversion produced an unsupported URF color format.")
+    page_size = MEDIA_POINTS.get(str(options.get("media", "")).lower())
+    if page_size:
+        width, height, dpi = struct.unpack_from(">III", header, 24)
+        expected_pixels = tuple(round(points * min(_resolution_dpi(options), 600) / 72) for points in page_size)
+        if (width, height) != expected_pixels or dpi != min(_resolution_dpi(options), 600):
+            raise CupsError("PDF conversion produced URF dimensions that do not match the physical paper.")
 
 
 def _validate_pwg_header(path, options):

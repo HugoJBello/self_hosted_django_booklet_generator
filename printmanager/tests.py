@@ -139,6 +139,28 @@ class CupsParsingTests(TestCase):
         finally:
             os.unlink(handle.name)
 
+    def test_color_urf_conversion_uses_printer_supported_rgb24(self):
+        source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        source.close()
+        document = fitz.open()
+        page = document.new_page(width=595.28, height=841.89)
+        page.draw_rect(fitz.Rect(50, 50, 150, 150), color=(1, 0, 0), fill=(1, 0, 0))
+        document.save(source.name)
+        document.close()
+        output = None
+        try:
+            output = _convert_pdf(Path(source.name), "image/urf", {
+                "media": "iso_a4_210x297mm", "printer-resolution": "300dpi",
+                "print-color-mode": "color",
+            })
+            header = output.read_bytes()[:44]
+            self.assertEqual(header[:8], b"UNIRAST\0")
+            self.assertEqual(header[12:14], bytes((24, 5)))
+        finally:
+            if output:
+                output.unlink(missing_ok=True)
+            os.unlink(source.name)
+
     def test_image_pdf_uses_printer_preferred_raster_format(self):
         handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         handle.close()
