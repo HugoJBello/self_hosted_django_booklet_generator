@@ -660,11 +660,14 @@ def certify_printer(printer):
     report = {"transport": "ipp-create-send", "document_format": document_format, "sides": {}}
     for mode in modes:
         options = {**printer.default_options, "sides": mode}
+        if document_format in {"image/pwg-raster", "image/urf"} and _resolution_dpi(options) > 600:
+            options["printer-resolution"] = "600dpi"
+        options = _transport_options(options, document_format)
         job_uri = ""
         try:
-            _direct_ipp_request(
+            options = _validate_transport_options(
                 printer=printer, source_path="", title=f"Certification {mode}", copies=1,
-                document_format=document_format, options=options, operation="Validate-Job",
+                document_format=document_format, options=options,
             )
             created = _direct_ipp_request(
                 printer=printer, source_path="", title=f"Certification {mode}", copies=1,
@@ -697,6 +700,43 @@ def _transport_options(options, document_format):
     return prepared
 
 
+def _validate_transport_options(*, printer, source_path, title, copies, document_format, options):
+    """Retry only the IPP options the device explicitly rejects."""
+    prepared = dict(options)
+    for _ in range(3):
+        try:
+            _direct_ipp_request(
+                printer=printer, source_path=source_path, title=title, copies=copies,
+                document_format=document_format, options=prepared, operation="Validate-Job",
+            )
+            return prepared
+        except CupsError as exc:
+            error = str(exc)
+            if (
+                "client-error-attributes-or-values-not-supported" in error
+                and "media-source (unsupported)" in error
+                and "media-source" in prepared
+            ):
+                source = prepared["media-source"]
+                default_source = printer.supported_options.get("media-source", {}).get("selected")
+                if source not in {"auto", default_source}:
+                    raise CupsError(
+                        f"The printer cannot select the {source} tray with a direct IPP "
+                        "media-source option. Choose the printer's default tray."
+                    ) from exc
+                prepared.pop("media-source")
+            elif (
+                "client-error-conflicting-attributes" in error
+                and "printer-resolution (resolution)" in error
+                and prepared.get("print-quality") == "high"
+                and "printer-resolution" in prepared
+            ):
+                prepared.pop("printer-resolution")
+            else:
+                raise
+    raise CupsError("The printer rejected the print options after validation retries.")
+
+
 def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
     _validate_name(printer.name, "printer name")
     if not Path(path).is_file():
@@ -717,9 +757,9 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
         # imageable area on otherwise successful driverless jobs.
         # Validate directly against the printer. The classic CUPS IPP backend
         # silently replaced duplex with one-sided for pass-through URF jobs.
-        _direct_ipp_request(
+        transport_options = _validate_transport_options(
             printer=printer, source_path=source_path, title=title, copies=copies,
-            document_format=document_format, options=transport_options, operation="Validate-Job",
+            document_format=document_format, options=transport_options,
         )
         created = _direct_ipp_request(
             printer=printer, source_path=source_path, title=title, copies=copies,

@@ -18,14 +18,79 @@ from .models import Printer, PrintJob
 from .image_documents import PAPER_SIZES, image_layout
 from .services import (
     CupsError, _convert_pdf, _normalize_urf_luminance, _select_document_format,
-    _transport_options, parse_devices,
-    parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
+    _transport_options, _validate_transport_options, parse_devices,
+    certify_printer, parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
     submit_pdf,
 )
 from .tasks import refresh_print_job, submit_print_job
 
 
 class CupsParsingTests(TestCase):
+    @patch("printmanager.services._ipp_job_operation")
+    @patch("printmanager.services._direct_ipp_request")
+    @patch("printmanager.services._validate_transport_options")
+    def test_certification_uses_validated_transport_options(self, validate, request, operation):
+        printer = type("Printer", (), {
+            "name": "office", "device_uri": "ipp://printer/ipp/print",
+            "default_options": {"media-source": "auto", "printer-resolution": "4800x1200dpi",
+                                "print-quality": "high", "orientation-requested": "3"},
+            "supported_options": {"sides": {"choices": ["two-sided-long-edge"]}},
+            "document_formats": ["image/urf"], "preferred_document_format": "image/urf",
+        })()
+        validate.return_value = {"sides": "two-sided-long-edge", "print-quality": "high"}
+        request.return_value = "job-uri (uri) = ipp://printer/jobs/42"
+        operation.side_effect = ["sides (keyword) = two-sided-long-edge", ""]
+        report = certify_printer(printer)
+        self.assertTrue(report["sides"]["two-sided-long-edge"]["verified"])
+        self.assertEqual(validate.call_args.kwargs["options"]["printer-resolution"], "600dpi")
+        self.assertNotIn("orientation-requested", validate.call_args.kwargs["options"])
+        self.assertEqual(request.call_args.kwargs["options"], validate.return_value)
+
+    @patch("printmanager.services._direct_ipp_request")
+    def test_ipp_validation_retries_only_rejected_epson_options(self, request):
+        printer = type("Printer", (), {
+            "supported_options": {"media-source": {"selected": "main"}},
+        })()
+        request.side_effect = [
+            CupsError("client-error-attributes-or-values-not-supported\nmedia-source (unsupported)"),
+            CupsError("client-error-conflicting-attributes\nprinter-resolution (resolution) = 600dpi"),
+            "successful-ok",
+        ]
+        options = {"media-source": "auto", "printer-resolution": "600dpi",
+                   "print-quality": "high", "sides": "two-sided-long-edge"}
+        prepared = _validate_transport_options(
+            printer=printer, source_path="", title="test", copies=1,
+            document_format="image/urf", options=options,
+        )
+        self.assertEqual(prepared, {"print-quality": "high", "sides": "two-sided-long-edge"})
+        self.assertEqual(options["media-source"], "auto")
+        self.assertEqual(request.call_count, 3)
+
+    @patch("printmanager.services._direct_ipp_request")
+    def test_ipp_validation_keeps_options_other_printers_accept(self, request):
+        printer = object()
+        options = {"media-source": "tray-2", "printer-resolution": "600dpi"}
+        self.assertEqual(_validate_transport_options(
+            printer=printer, source_path="", title="test", copies=1,
+            document_format="image/urf", options=options,
+        ), options)
+        request.assert_called_once()
+
+    @patch("printmanager.services._direct_ipp_request")
+    def test_ipp_validation_does_not_discard_explicit_tray(self, request):
+        printer = type("Printer", (), {
+            "supported_options": {"media-source": {"selected": "main"}},
+        })()
+        request.side_effect = CupsError(
+            "client-error-attributes-or-values-not-supported\nmedia-source (unsupported)"
+        )
+        with self.assertRaisesRegex(CupsError, "cannot select the alternate tray"):
+            _validate_transport_options(
+                printer=printer, source_path="", title="test", copies=1,
+                document_format="image/urf", options={"media-source": "alternate"},
+            )
+        request.assert_called_once()
+
     def test_raster_transport_does_not_reapply_layout(self):
         requested = {
             "media": "iso_a4_210x297mm", "orientation-requested": "4",
