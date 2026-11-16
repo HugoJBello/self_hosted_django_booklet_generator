@@ -562,8 +562,8 @@ def _ipp_job_operation(*, printer, job_uri, operation, source_path=None, documen
     body = [
         "{", f'NAME "{operation}"', f"OPERATION {operation}",
         "GROUP operation-attributes-tag", "ATTR charset attributes-charset utf-8",
-        "ATTR language attributes-natural-language en", f"ATTR uri printer-uri {printer.device_uri}",
-        f"ATTR uri job-uri {job_uri}", "ATTR name requesting-user-name pdf-manager",
+        "ATTR language attributes-natural-language en", f"ATTR uri job-uri {job_uri}",
+        "ATTR name requesting-user-name pdf-manager",
     ]
     if operation == "Send-Document":
         body += [

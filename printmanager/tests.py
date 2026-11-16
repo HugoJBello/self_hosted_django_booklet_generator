@@ -18,7 +18,7 @@ from .models import Printer, PrintJob
 from .image_documents import PAPER_SIZES, image_layout
 from .services import (
     CupsError, _convert_pdf, _normalize_urf_luminance, _select_document_format,
-    _transport_options, _validate_transport_options, parse_devices,
+    _ipp_job_operation, _transport_options, _validate_transport_options, parse_devices,
     certify_printer, parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
     submit_pdf,
 )
@@ -26,6 +26,22 @@ from .tasks import refresh_print_job, submit_print_job
 
 
 class CupsParsingTests(TestCase):
+    @patch("printmanager.services._run")
+    def test_job_operations_use_job_uri_without_printer_uri(self, run):
+        printer = type("Printer", (), {"device_uri": "ipp://printer/ipp/print"})()
+        job_uri = "ipp://printer/jobs/8"
+        requests = []
+        run.side_effect = lambda args, **kwargs: requests.append(Path(args[-1]).read_text()) or ""
+        for operation in ("Get-Job-Attributes", "Send-Document", "Cancel-Job"):
+            with self.subTest(operation=operation):
+                _ipp_job_operation(
+                    printer=printer, job_uri=job_uri, operation=operation,
+                    source_path="/tmp/document.urf", document_format="image/urf",
+                )
+                request = requests[-1]
+                self.assertIn(f"ATTR uri job-uri {job_uri}", request)
+                self.assertNotIn("ATTR uri printer-uri", request)
+
     @patch("printmanager.services._ipp_job_operation")
     @patch("printmanager.services._direct_ipp_request")
     @patch("printmanager.services._validate_transport_options")
