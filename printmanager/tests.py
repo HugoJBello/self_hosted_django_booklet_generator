@@ -17,7 +17,8 @@ from activity.models import Activity, Artifact
 from .models import Printer, PrintJob
 from .image_documents import PAPER_SIZES, image_layout
 from .services import (
-    CupsError, _convert_pdf, _normalize_urf_luminance, _select_document_format,
+    CupsError, _convert_pdf, _normalize_urf_luminance, _pwg_raster_options,
+    _select_document_format,
     _ipp_job_operation, _transport_options, _validate_transport_options, parse_devices,
     certify_printer, parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
     submit_pdf,
@@ -26,6 +27,23 @@ from .tasks import refresh_print_job, submit_print_job
 
 
 class CupsParsingTests(TestCase):
+    def test_long_pwg_document_uses_advertised_lower_raster_resolution(self):
+        source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        source.close()
+        document = fitz.open()
+        for _ in range(17):
+            document.new_page()
+        document.save(source.name)
+        document.close()
+        requested = {"printer-resolution": "600dpi", "sides": "two-sided-long-edge"}
+        try:
+            rendered = _pwg_raster_options(source.name, requested, ["300dpi", "600dpi"])
+            self.assertEqual(rendered["printer-resolution"], "300dpi")
+            self.assertEqual(requested["printer-resolution"], "600dpi")
+            self.assertIs(_pwg_raster_options(source.name, requested, ["600dpi"]), requested)
+        finally:
+            os.unlink(source.name)
+
     @patch("printmanager.services._run")
     def test_job_operations_use_job_uri_without_printer_uri(self, run):
         printer = type("Printer", (), {"device_uri": "ipp://printer/ipp/print"})()

@@ -179,6 +179,7 @@ def parse_ipp_attributes(output, uri=""):
         "document_formats": values("document-format-supported"),
         "preferred_document_format": raw.get("document-format-preferred", ""),
         "pwg_sheet_back": raw.get("pwg-raster-document-sheet-back", ""),
+        "pwg_resolutions": values("pwg-raster-document-resolution-supported"),
         "supplies": _parse_supplies(raw),
         "state_reasons": values("printer-state-reasons"),
         "alerts": _printer_alerts(values("printer-state-reasons"), raw),
@@ -296,6 +297,18 @@ def sync_options(printer):
 def _resolution_dpi(options):
     match = re.match(r"^(\d+)", str(options.get("printer-resolution", "600")))
     return min(max(int(match.group(1)) if match else 600, 72), 1200)
+
+
+def _pwg_raster_options(path, options, supported_resolutions):
+    """Keep long PWG jobs small enough for printers with limited job memory."""
+    if _resolution_dpi(options) <= 300 or "300dpi" not in supported_resolutions:
+        return options
+    with fitz.open(path) as document:
+        if len(document) <= 16:
+            return options
+    # IPP printer-resolution still describes the printer's output quality;
+    # the PWG document may use a separately advertised raster resolution.
+    return {**options, "printer-resolution": "300dpi"}
 
 
 def _convert_pdf(path, document_format, options, page_ranges="", pwg_sheet_back=""):
@@ -815,8 +828,12 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
     if document_format in {"image/pwg-raster", "image/urf"} and _resolution_dpi(merged) > 600:
         merged["printer-resolution"] = "600dpi"
     pwg_sheet_back = ""
+    render_options = merged
+    if document_format == "image/pwg-raster":
+        identity = inspect_ipp_printer(printer.device_uri)
+        render_options = _pwg_raster_options(path, merged, identity["pwg_resolutions"])
+        pwg_sheet_back = identity["pwg_sheet_back"]
     if document_format == "image/pwg-raster" and merged.get("sides", "").startswith("two-sided-"):
-        pwg_sheet_back = inspect_ipp_printer(printer.device_uri)["pwg_sheet_back"]
         if pwg_sheet_back.lower() not in {"normal", "rotated", "flipped", "manual-tumble"}:
             raise CupsError("The printer did not report a supported PWG Raster back-side orientation.")
     converted_path = None
@@ -824,7 +841,7 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
         source_path = Path(path)
         transport_options = _transport_options(merged, document_format)
         if document_format != "application/pdf":
-            converted_path = _convert_pdf(source_path, document_format, merged, page_ranges, pwg_sheet_back)
+            converted_path = _convert_pdf(source_path, document_format, render_options, page_ranges, pwg_sheet_back)
             source_path = converted_path
         # Orientation and scaling have already been baked into raster formats.
         # Reapplying them in IPP can rotate the bitmap outside the physical
