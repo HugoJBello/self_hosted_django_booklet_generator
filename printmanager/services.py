@@ -1,6 +1,8 @@
+import gzip
 import mmap
 import os
 import re
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -19,6 +21,7 @@ class CupsError(RuntimeError):
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
 SAFE_OPTION = re.compile(r"^[A-Za-z0-9_.-]+$")
 SAFE_PAGE_RANGES = re.compile(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$")
+PWG_GZIP_MIN_BYTES = 64 * 1024 * 1024
 MEDIA_POINTS = {
     "a3": (841.89, 1190.55),
     "iso_a3_297x420mm": (841.89, 1190.55),
@@ -180,6 +183,7 @@ def parse_ipp_attributes(output, uri=""):
         "preferred_document_format": raw.get("document-format-preferred", ""),
         "pwg_sheet_back": raw.get("pwg-raster-document-sheet-back", ""),
         "pwg_resolutions": values("pwg-raster-document-resolution-supported"),
+        "compressions": values("compression-supported"),
         "supplies": _parse_supplies(raw),
         "state_reasons": values("printer-state-reasons"),
         "alerts": _printer_alerts(values("printer-state-reasons"), raw),
@@ -297,18 +301,6 @@ def sync_options(printer):
 def _resolution_dpi(options):
     match = re.match(r"^(\d+)", str(options.get("printer-resolution", "600")))
     return min(max(int(match.group(1)) if match else 600, 72), 1200)
-
-
-def _pwg_raster_options(path, options, supported_resolutions):
-    """Keep long PWG jobs small enough for printers with limited job memory."""
-    if _resolution_dpi(options) <= 300 or "300dpi" not in supported_resolutions:
-        return options
-    with fitz.open(path) as document:
-        if len(document) <= 16:
-            return options
-    # IPP printer-resolution still describes the printer's output quality;
-    # the PWG document may use a separately advertised raster resolution.
-    return {**options, "printer-resolution": "300dpi"}
 
 
 def _convert_pdf(path, document_format, options, page_ranges="", pwg_sheet_back=""):
@@ -640,7 +632,7 @@ def _direct_ipp_request(*, printer, source_path, title, copies, document_format,
 
 
 def _ipp_job_operation(*, printer, job_uri, operation, source_path=None, document_format=None,
-                       timeout=None):
+                       compression=None, timeout=None):
     body = [
         "{", f'NAME "{operation}"', f"OPERATION {operation}",
         "GROUP operation-attributes-tag", "ATTR charset attributes-charset utf-8",
@@ -650,6 +642,7 @@ def _ipp_job_operation(*, printer, job_uri, operation, source_path=None, documen
     if operation == "Send-Document":
         body += [
             f"ATTR mimeMediaType document-format {_ipp_value(document_format, 'document format')}",
+            *([f"ATTR keyword compression {_ipp_value(compression, 'compression')}"] if compression else []),
             "ATTR boolean last-document true",
         ]
         escaped_path = str(source_path).replace("\\", "\\\\").replace('"', '\\"')
@@ -828,21 +821,29 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
     if document_format in {"image/pwg-raster", "image/urf"} and _resolution_dpi(merged) > 600:
         merged["printer-resolution"] = "600dpi"
     pwg_sheet_back = ""
-    render_options = merged
+    use_gzip = False
     if document_format == "image/pwg-raster":
         identity = inspect_ipp_printer(printer.device_uri)
-        render_options = _pwg_raster_options(path, merged, identity["pwg_resolutions"])
         pwg_sheet_back = identity["pwg_sheet_back"]
+        use_gzip = "gzip" in identity["compressions"]
     if document_format == "image/pwg-raster" and merged.get("sides", "").startswith("two-sided-"):
         if pwg_sheet_back.lower() not in {"normal", "rotated", "flipped", "manual-tumble"}:
             raise CupsError("The printer did not report a supported PWG Raster back-side orientation.")
     converted_path = None
+    compressed_path = None
     try:
         source_path = Path(path)
         transport_options = _transport_options(merged, document_format)
         if document_format != "application/pdf":
-            converted_path = _convert_pdf(source_path, document_format, render_options, page_ranges, pwg_sheet_back)
+            converted_path = _convert_pdf(source_path, document_format, merged, page_ranges, pwg_sheet_back)
             source_path = converted_path
+            if use_gzip and converted_path.stat().st_size > PWG_GZIP_MIN_BYTES:
+                compressed = tempfile.NamedTemporaryFile(prefix="print-", suffix=".pwg.gz", delete=False)
+                compressed_path = Path(compressed.name)
+                compressed.close()
+                with converted_path.open("rb") as original, gzip.open(compressed_path, "wb", compresslevel=1) as packed:
+                    shutil.copyfileobj(original, packed, length=1024 * 1024)
+                source_path = compressed_path
         # Orientation and scaling have already been baked into raster formats.
         # Reapplying them in IPP can rotate the bitmap outside the physical
         # imageable area on otherwise successful driverless jobs.
@@ -867,6 +868,7 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
             _ipp_job_operation(
                 printer=printer, job_uri=job_uri.group(1), operation="Send-Document",
                 source_path=source_path, document_format=document_format,
+                compression="gzip" if compressed_path else None,
             )
         except Exception:
             try:
@@ -877,5 +879,7 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
         accepted = f"IPP job {job_id.group(1)} accepted by {printer.name}"
         return accepted, merged, effective, job_uri.group(1)
     finally:
+        if compressed_path:
+            compressed_path.unlink(missing_ok=True)
         if converted_path:
             converted_path.unlink(missing_ok=True)

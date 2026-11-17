@@ -1,3 +1,4 @@
+import gzip
 import io
 import os
 import json
@@ -17,7 +18,7 @@ from activity.models import Activity, Artifact
 from .models import Printer, PrintJob
 from .image_documents import PAPER_SIZES, image_layout
 from .services import (
-    CupsError, _convert_pdf, _normalize_urf_luminance, _pwg_raster_options,
+    CupsError, _convert_pdf, _normalize_urf_luminance,
     _select_document_format,
     _ipp_job_operation, _transport_options, _validate_transport_options, parse_devices,
     certify_printer, parse_ipp_attributes, parse_option_lines, probe_printer, read_job_status,
@@ -27,22 +28,18 @@ from .tasks import refresh_print_job, submit_print_job
 
 
 class CupsParsingTests(TestCase):
-    def test_long_pwg_document_uses_advertised_lower_raster_resolution(self):
-        source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-        source.close()
-        document = fitz.open()
-        for _ in range(17):
-            document.new_page()
-        document.save(source.name)
-        document.close()
-        requested = {"printer-resolution": "600dpi", "sides": "two-sided-long-edge"}
-        try:
-            rendered = _pwg_raster_options(source.name, requested, ["300dpi", "600dpi"])
-            self.assertEqual(rendered["printer-resolution"], "300dpi")
-            self.assertEqual(requested["printer-resolution"], "600dpi")
-            self.assertIs(_pwg_raster_options(source.name, requested, ["600dpi"]), requested)
-        finally:
-            os.unlink(source.name)
+    @patch("printmanager.services._run")
+    def test_ipp_send_document_declares_lossless_compression(self, run):
+        templates = []
+        run.side_effect = lambda args, **kwargs: templates.append(Path(args[-1]).read_text()) or ""
+        printer = type("Printer", (), {"device_uri": "ipp://printer/ipp/print"})()
+        _ipp_job_operation(
+            printer=printer, job_uri="ipp://printer/jobs/1", operation="Send-Document",
+            source_path="/tmp/document.pwg.gz", document_format="image/pwg-raster",
+            compression="gzip",
+        )
+        self.assertIn("ATTR keyword compression gzip", templates[0])
+        self.assertIn("ATTR mimeMediaType document-format image/pwg-raster", templates[0])
 
     @patch("printmanager.services._run")
     def test_job_operations_use_job_uri_without_printer_uri(self, run):
@@ -260,6 +257,55 @@ class CupsParsingTests(TestCase):
             self.assertEqual(sent["source_path"], Path(handle.name))
         finally:
             os.unlink(handle.name)
+
+    @patch("printmanager.services.PWG_GZIP_MIN_BYTES", 10)
+    @patch("printmanager.services.inspect_ipp_printer")
+    @patch("printmanager.services._convert_pdf")
+    @patch("printmanager.services._validate_transport_options")
+    @patch("printmanager.services._direct_ipp_request")
+    @patch("printmanager.services._ipp_job_operation")
+    def test_large_pwg_uses_gzip_only_when_supported(self, operation, direct, validate,
+                                                      convert, inspect):
+        printer = type("Printer", (), {
+            "name": "office", "device_uri": "ipp://printer/ipp/print",
+            "default_options": {"sides": "two-sided-long-edge", "printer-resolution": "600dpi"},
+            "document_formats": ["image/pwg-raster"],
+            "preferred_document_format": "image/pwg-raster",
+            "document_format_override": "",
+        })()
+        source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        source.close()
+        Path(source.name).write_bytes(b"source")
+        validate.side_effect = lambda **kwargs: kwargs["options"]
+        direct.return_value = "job-id (integer) = 42\njob-uri (uri) = ipp://printer/jobs/42"
+        sent = []
+
+        def record_operation(**kwargs):
+            if kwargs["operation"] == "Send-Document":
+                sent.append((kwargs["compression"], Path(kwargs["source_path"]).read_bytes()))
+            return "sides (keyword) = two-sided-long-edge"
+
+        operation.side_effect = record_operation
+        try:
+            for compressions, payload, expected_gzip in (
+                (["none", "gzip"], b"PwgRaster" * 4, True),
+                (["none", "gzip"], b"small", False),
+                (["none"], b"PwgRaster" * 4, False),
+            ):
+                with self.subTest(compressions=compressions, payload=payload):
+                    converted = tempfile.NamedTemporaryFile(suffix=".pwg", delete=False)
+                    converted.write(payload)
+                    converted.close()
+                    convert.return_value = Path(converted.name)
+                    inspect.return_value = {"pwg_sheet_back": "rotated", "compressions": compressions}
+                    _, merged, _, _ = submit_pdf(printer=printer, path=source.name, title="booklet.pdf")
+                    compression, transmitted = sent[-1]
+                    self.assertEqual(compression, "gzip" if expected_gzip else None)
+                    self.assertEqual(gzip.decompress(transmitted) if expected_gzip else transmitted, payload)
+                    self.assertEqual(merged["printer-resolution"], "600dpi")
+                    self.assertEqual(convert.call_args.args[2]["printer-resolution"], "600dpi")
+        finally:
+            os.unlink(source.name)
 
     @patch("printmanager.services._run")
     def test_pdf_only_printer_gets_raster_backed_normalized_pdf(self, run):
