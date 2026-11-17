@@ -126,6 +126,7 @@ IPP_ATTRIBUTES = (
     "copies-supported", "output-bin-default", "output-bin-supported",
     "finishings-default", "finishings-supported", "media-col-default",
     "document-format-default", "document-format-preferred", "document-format-supported",
+    "printer-device-id",
     "printer-state-reasons", "printer-state-message", "printer-alert", "printer-alert-description",
     "marker-names", "marker-colors", "marker-types",
     "marker-levels", "marker-low-levels", "marker-high-levels",
@@ -181,6 +182,9 @@ def parse_ipp_attributes(output, uri=""):
         "defaults": {name: spec["selected"] for name, spec in options.items() if spec.get("selected")},
         "document_formats": values("document-format-supported"),
         "preferred_document_format": raw.get("document-format-preferred", ""),
+        "postscript_supported": "POSTSCRIPT" in re.split(
+            r"[,\s]+", (re.search(r"(?:^|;)CMD:([^;]*)", raw.get("printer-device-id", "")) or ["", ""])[1].upper()
+        ),
         "pwg_sheet_back": raw.get("pwg-raster-document-sheet-back", ""),
         "pwg_resolutions": values("pwg-raster-document-resolution-supported"),
         "compressions": values("compression-supported"),
@@ -310,6 +314,9 @@ def _convert_pdf(path, document_format, options, page_ranges="", pwg_sheet_back=
     if document_format == "application/pdf":
         is_mono = options.get("print-color-mode") == "monochrome"
         device, suffix = ("pdfimage8" if is_mono else "pdfimage24"), ".pdf"
+    elif document_format == "application/octet-stream":
+        # IPP auto-sensing: the printer identifies the PostScript payload.
+        device, suffix = "ps2write", ".ps"
     elif document_format == "image/pwg-raster":
         device, suffix = "pwgraster", ".pwg"
     elif document_format == "image/urf":
@@ -332,7 +339,7 @@ def _convert_pdf(path, document_format, options, page_ranges="", pwg_sheet_back=
         "gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE", f"-sDEVICE={device}",
         f"-r{resolution}", f"-sOutputFile={output_path}",
     ]
-    page_size = MEDIA_POINTS.get(str(options.get("media", "")).lower())
+    page_size = MEDIA_POINTS.get(str(options.get("media", "")).lower()) if device != "ps2write" else None
     if page_size:
         width, height = page_size
         # Raster dimensions describe the physical sheet as it moves through the
@@ -375,6 +382,8 @@ def _convert_pdf(path, document_format, options, page_ranges="", pwg_sheet_back=
         _run(args, timeout=settings.CUPS_CONVERSION_TIMEOUT)
         if not output_path.is_file() or output_path.stat().st_size == 0:
             raise CupsError("PDF conversion produced an empty print document.")
+        if device == "ps2write":
+            _set_postscript_duplex(output_path, options.get("sides"))
         if document_format == "image/urf" and options.get("print-color-mode") == "monochrome":
             _normalize_urf_luminance(output_path)
         if document_format == "image/urf":
@@ -386,6 +395,31 @@ def _convert_pdf(path, document_format, options, page_ranges="", pwg_sheet_back=
     except Exception:
         output_path.unlink(missing_ok=True)
         raise
+
+
+def _set_postscript_duplex(path, sides):
+    """Set hardware duplex in the PDL as well as the IPP job ticket."""
+    if sides not in {"one-sided", "two-sided-long-edge", "two-sided-short-edge"}:
+        return
+    duplex = "false" if sides == "one-sided" else "true"
+    tumble = "true" if sides == "two-sided-short-edge" else "false"
+    setup = (f"%%BeginSetup\n<< /Duplex {duplex} /Tumble {tumble} >> setpagedevice\n"
+             "%%EndSetup\n").encode("ascii")
+    temporary = tempfile.NamedTemporaryFile(prefix="print-", suffix=".ps", delete=False)
+    temporary_path = Path(temporary.name)
+    try:
+        with temporary, path.open("rb") as original:
+            found = False
+            for line in original:
+                temporary.write(line)
+                if not found and line.strip() == b"%%EndProlog":
+                    temporary.write(setup)
+                    found = True
+            if not found:
+                raise CupsError("PostScript conversion produced no prolog boundary.")
+        os.replace(temporary_path, path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def _encode_urf_row(row):
@@ -554,6 +588,7 @@ def _select_document_format(printer, path=None):
     formats = list(printer.document_formats or [])
     preferred = printer.preferred_document_format
     override = getattr(printer, "document_format_override", "")
+    identity = None
     if not formats:
         identity = inspect_ipp_printer(printer.device_uri)
         formats = identity.get("document_formats", [])
@@ -562,11 +597,15 @@ def _select_document_format(printer, path=None):
         if override not in formats:
             raise CupsError(f"The selected document format {override} is not advertised by the printer.")
         return override
+    if "application/pdf" not in formats and "application/octet-stream" in formats:
+        identity = identity or inspect_ipp_printer(printer.device_uri)
+        if identity.get("postscript_supported"):
+            return "application/octet-stream"
     # Preserve the original PDF whenever the printer accepts it.  This keeps
     # text and vector graphics intact and also avoids printers which advertise
     # URF/PWG support but abort those jobs later with document-format-error.
     # Raster conversion remains available only for printers without PDF input.
-    candidates = ("application/pdf", preferred, "image/urf", "image/pwg-raster")
+    candidates = ("application/pdf", preferred if preferred != "application/octet-stream" else "", "image/urf", "image/pwg-raster")
     for candidate in candidates:
         if candidate in formats:
             return candidate

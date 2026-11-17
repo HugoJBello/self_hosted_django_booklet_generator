@@ -206,6 +206,48 @@ class CupsParsingTests(TestCase):
         with self.assertRaisesRegex(CupsError, "not advertised"):
             _select_document_format(printer)
 
+    @patch("printmanager.services.inspect_ipp_printer")
+    def test_postscript_auto_sensing_requires_device_language(self, inspect):
+        printer = type("Printer", (), {
+            "device_uri": "ipp://printer/ipp/print",
+            "document_formats": ["application/octet-stream", "image/urf"],
+            "preferred_document_format": "image/urf",
+            "document_format_override": "",
+        })()
+        inspect.return_value = {"postscript_supported": True}
+        self.assertEqual(_select_document_format(printer), "application/octet-stream")
+        inspect.return_value = {"postscript_supported": False}
+        self.assertEqual(_select_document_format(printer), "image/urf")
+        printer.document_formats.append("application/pdf")
+        self.assertEqual(_select_document_format(printer), "application/pdf")
+
+    def test_ipp_device_id_identifies_postscript_only_in_cmd(self):
+        prefix = "document-format-supported (1setOf mimeMediaType) = application/octet-stream,image/urf\n"
+        self.assertTrue(parse_ipp_attributes(prefix + "printer-device-id (textWithoutLanguage) = MFG:EPSON;CMD:PCL,POSTSCRIPT,URF;MDL:Test;")["postscript_supported"])
+        self.assertFalse(parse_ipp_attributes(prefix + "printer-device-id (textWithoutLanguage) = MFG:EPSON;CMD:PCL,URF;MDL:POSTSCRIPT;")["postscript_supported"])
+
+    def test_postscript_conversion_preserves_vectors_and_sets_long_edge_duplex(self):
+        source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        source.close()
+        document = fitz.open()
+        document.new_page().insert_text((72, 72), "Vector text")
+        document.save(source.name)
+        document.close()
+        output = None
+        try:
+            output = _convert_pdf(Path(source.name), "application/octet-stream", {
+                "sides": "two-sided-long-edge", "printer-resolution": "600dpi",
+            })
+            content = output.read_bytes()
+            self.assertTrue(content.startswith(b"%!PS-Adobe"))
+            self.assertIn(b"<< /Duplex true /Tumble false >> setpagedevice", content)
+            self.assertIn(b"%%Page:", content)
+            self.assertNotIn(b"image/pwg-raster", content)
+        finally:
+            if output:
+                output.unlink(missing_ok=True)
+            os.unlink(source.name)
+
     def test_image_pdf_prefers_original_pdf_when_supported(self):
         handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         handle.close()
