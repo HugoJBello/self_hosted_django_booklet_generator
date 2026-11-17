@@ -285,8 +285,9 @@ class CupsParsingTests(TestCase):
         def create_output(args, **_kwargs):
             output = next(item.split("=", 1)[1] for item in args if item.startswith("-sOutputFile="))
             mono = "-dcupsColorSpace=18" in args
-            header = bytearray(408)
+            header = bytearray(1800)
             header[:4] = b"RaS2"
+            header[4:14] = b"PwgRaster\0"
             import struct
             struct.pack_into(">II", header, 376, 4961, 7016)
             struct.pack_into(">II", header, 388, 8, 8 if mono else 24)
@@ -328,7 +329,9 @@ class CupsParsingTests(TestCase):
         source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         source.close()
         document = fitz.open()
-        document.new_page(width=595.28, height=841.89)
+        for _ in range(2):
+            page = document.new_page(width=595.28, height=841.89)
+            page.draw_rect(fitz.Rect(20, 20, 70, 70), fill=(0, 0, 0))
         document.save(source.name)
         document.close()
         import struct
@@ -342,13 +345,25 @@ class CupsParsingTests(TestCase):
                     output = _convert_pdf(Path(source.name), "image/pwg-raster", {
                         "media": "iso_a4_210x297mm", "printer-resolution": "300dpi",
                         "print-color-mode": "color", "sides": sides,
-                    })
+                    }, pwg_sheet_back="rotated")
                     try:
-                        header = output.open("rb").read(408)
+                        raster = output.read_bytes()
+                        headers = [position for position in range(len(raster))
+                                   if raster.startswith(b"PwgRaster", position)]
+                        self.assertEqual(len(headers), 2)
+                        header = raster[:408]
                         self.assertEqual((
                             struct.unpack_from(">I", header, 276)[0],
                             struct.unpack_from(">I", header, 372)[0],
                         ), expected)
+                        back_transform = (-1, -1) if sides == "two-sided-long-edge" else (1, 1)
+                        self.assertEqual(struct.unpack_from(">ii", raster, headers[1] + 456), back_transform)
+                        front_pixels = raster[headers[0] + 1796:headers[1]]
+                        back_pixels = raster[headers[1] + 1796:]
+                        if sides == "two-sided-long-edge":
+                            self.assertNotEqual(front_pixels, back_pixels)
+                        else:
+                            self.assertEqual(front_pixels, back_pixels)
                     finally:
                         output.unlink(missing_ok=True)
         finally:

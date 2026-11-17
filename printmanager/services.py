@@ -1,3 +1,4 @@
+import mmap
 import os
 import re
 import struct
@@ -177,6 +178,7 @@ def parse_ipp_attributes(output, uri=""):
         "defaults": {name: spec["selected"] for name, spec in options.items() if spec.get("selected")},
         "document_formats": values("document-format-supported"),
         "preferred_document_format": raw.get("document-format-preferred", ""),
+        "pwg_sheet_back": raw.get("pwg-raster-document-sheet-back", ""),
         "supplies": _parse_supplies(raw),
         "state_reasons": values("printer-state-reasons"),
         "alerts": _printer_alerts(values("printer-state-reasons"), raw),
@@ -296,7 +298,7 @@ def _resolution_dpi(options):
     return min(max(int(match.group(1)) if match else 600, 72), 1200)
 
 
-def _convert_pdf(path, document_format, options, page_ranges=""):
+def _convert_pdf(path, document_format, options, page_ranges="", pwg_sheet_back=""):
     """Render a PDF to a format accepted natively by a driverless printer."""
     if page_ranges and not SAFE_PAGE_RANGES.fullmatch(page_ranges):
         raise CupsError("Invalid page range.")
@@ -341,6 +343,12 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
             f"-dDEVICEWIDTHPOINTS={width}", f"-dDEVICEHEIGHTPOINTS={height}",
         ]
     if device == "pwgraster":
+        # Ghostscript must render the back pages in the printer's native
+        # coordinate system, not just mark Duplex/Tumble in the page header.
+        sheet_back = {"normal": "Normal", "rotated": "Rotated",
+                      "flipped": "Flipped", "manual-tumble": "ManualTumble"}.get(pwg_sheet_back.lower())
+        if sheet_back:
+            args.append(f"-scupsBackSideOrientation={sheet_back}")
         if options.get("print-color-mode") == "monochrome":
             # Driverless monochrome printers commonly advertise only sGray_8.
             # Ghostscript otherwise emits Black_1, which some firmware accepts
@@ -367,6 +375,7 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
         if document_format == "image/urf":
             _validate_urf_header(output_path, options)
         if document_format == "image/pwg-raster":
+            _set_pwg_backside_transforms(output_path, options.get("sides"), pwg_sheet_back)
             _validate_pwg_header(output_path, options)
         return output_path
     except Exception:
@@ -504,6 +513,28 @@ def _validate_pwg_header(path, options):
         expected_pixels = tuple(round(points * dpi / 72) for points in page_size)
         if (width, height) != expected_pixels:
             raise CupsError("PDF conversion produced PWG Raster dimensions that do not match the physical paper.")
+
+
+def _set_pwg_backside_transforms(path, sides, sheet_back):
+    """Fill the PWG coordinate fields that Ghostscript leaves unset."""
+    backside = {
+        ("two-sided-long-edge", "rotated"): (-1, -1),
+        ("two-sided-short-edge", "manual-tumble"): (-1, -1),
+        ("two-sided-long-edge", "flipped"): (1, -1),
+        ("two-sided-short-edge", "flipped"): (-1, 1),
+    }.get((sides, sheet_back.lower()), (1, 1))
+    with Path(path).open("r+b") as document, mmap.mmap(document.fileno(), 0) as raster:
+        position = 0
+        page = 0
+        while (position := raster.find(b"PwgRaster\0", position)) != -1:
+            if position + 1796 > len(raster):
+                raise CupsError("PDF conversion produced a truncated PWG Raster page header.")
+            transform = (1, 1) if page % 2 == 0 or sides == "one-sided" else backside
+            struct.pack_into(">ii", raster, position + 456, *transform)
+            page += 1
+            position += 1796
+        if not page:
+            raise CupsError("PDF conversion produced no PWG Raster pages.")
 
 
 def _pdf_contains_images(path) -> bool:
@@ -783,12 +814,17 @@ def submit_pdf(*, printer, path, title, copies=1, page_ranges="", options=None):
     document_format = _select_document_format(printer, Path(path))
     if document_format in {"image/pwg-raster", "image/urf"} and _resolution_dpi(merged) > 600:
         merged["printer-resolution"] = "600dpi"
+    pwg_sheet_back = ""
+    if document_format == "image/pwg-raster" and merged.get("sides", "").startswith("two-sided-"):
+        pwg_sheet_back = inspect_ipp_printer(printer.device_uri)["pwg_sheet_back"]
+        if pwg_sheet_back.lower() not in {"normal", "rotated", "flipped", "manual-tumble"}:
+            raise CupsError("The printer did not report a supported PWG Raster back-side orientation.")
     converted_path = None
     try:
         source_path = Path(path)
         transport_options = _transport_options(merged, document_format)
         if document_format != "application/pdf":
-            converted_path = _convert_pdf(source_path, document_format, merged, page_ranges)
+            converted_path = _convert_pdf(source_path, document_format, merged, page_ranges, pwg_sheet_back)
             source_path = converted_path
         # Orientation and scaling have already been baked into raster formats.
         # Reapplying them in IPP can rotate the bitmap outside the physical
