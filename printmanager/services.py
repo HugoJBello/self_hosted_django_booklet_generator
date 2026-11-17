@@ -349,6 +349,12 @@ def _convert_pdf(path, document_format, options, page_ranges=""):
                      "-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
         else:
             args += ["-dcupsColorSpace=19", "-dcupsBitsPerColor=8", "-dcupsColorOrder=0"]
+        sides = options.get("sides")
+        if sides in {"one-sided", "two-sided-long-edge", "two-sided-short-edge"}:
+            args += [
+                f"-dDuplex={'false' if sides == 'one-sided' else 'true'}",
+                f"-dTumble={'true' if sides == 'two-sided-short-edge' else 'false'}",
+            ]
     if page_ranges:
         args.append(f"-sPageList={page_ranges}")
     args.append(str(path))
@@ -483,6 +489,14 @@ def _validate_pwg_header(path, options):
     expected = (8, 8, 18) if options.get("print-color-mode") == "monochrome" else (8, 24, 19)
     if (bits_per_color, bits_per_pixel, color_space) != expected:
         raise CupsError("PDF conversion produced an unsupported PWG Raster color format.")
+    sides = options.get("sides")
+    if sides in {"one-sided", "two-sided-long-edge", "two-sided-short-edge"}:
+        duplex = struct.unpack_from(">I", header, 276)[0]
+        tumble = struct.unpack_from(">I", header, 372)[0]
+        expected_duplex = int(sides != "one-sided")
+        expected_tumble = int(sides == "two-sided-short-edge")
+        if (duplex, tumble) != (expected_duplex, expected_tumble):
+            raise CupsError("PDF conversion produced PWG Raster duplex settings that do not match the print job.")
     page_size = MEDIA_POINTS.get(str(options.get("media", "")).lower())
     if page_size:
         width, height = struct.unpack_from(">II", header, 376)

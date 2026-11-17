@@ -324,6 +324,36 @@ class CupsParsingTests(TestCase):
         finally:
             os.unlink(source.name)
 
+    def test_pwg_duplex_header_matches_requested_binding_edge(self):
+        source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        source.close()
+        document = fitz.open()
+        document.new_page(width=595.28, height=841.89)
+        document.save(source.name)
+        document.close()
+        import struct
+        try:
+            for sides, expected in (
+                ("one-sided", (0, 0)),
+                ("two-sided-long-edge", (1, 0)),
+                ("two-sided-short-edge", (1, 1)),
+            ):
+                with self.subTest(sides=sides):
+                    output = _convert_pdf(Path(source.name), "image/pwg-raster", {
+                        "media": "iso_a4_210x297mm", "printer-resolution": "300dpi",
+                        "print-color-mode": "color", "sides": sides,
+                    })
+                    try:
+                        header = output.open("rb").read(408)
+                        self.assertEqual((
+                            struct.unpack_from(">I", header, 276)[0],
+                            struct.unpack_from(">I", header, 372)[0],
+                        ), expected)
+                    finally:
+                        output.unlink(missing_ok=True)
+        finally:
+            os.unlink(source.name)
+
     @override_settings(CUPS_STATUS_TIMEOUT=7)
     @patch("printmanager.services._ipp_job_operation", return_value="job-state (enum) = processing")
     def test_job_status_uses_short_status_timeout(self, operation):
